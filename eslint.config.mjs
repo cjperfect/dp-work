@@ -12,6 +12,8 @@ export default defineConfig([
     "**/build/**",
     "**/dist/**",
     "**/coverage/**",
+    "**/routeTree.gen.ts",
+    "**/public/pdf/pdf.worker*.mjs",
   ]),
   js.configs.recommended,
   ...nextVitals,

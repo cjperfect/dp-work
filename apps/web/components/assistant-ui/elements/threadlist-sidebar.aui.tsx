@@ -1,8 +1,8 @@
 "use client";
 
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link, useLocation, useRouter } from "@tanstack/react-router";
 import type * as React from "react";
-import { BookOpen, Bot, Boxes, Package, Plug, Sparkles, Video } from "lucide-react";
+import { BookOpen, Bot, Boxes, Package, Plug, Sparkles, Video, LogOut } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -20,6 +20,8 @@ import { ThreadList } from "@/components/assistant-ui/elements/thread-list.aui";
 import { SKILLS } from "@/features/skills/constants/skills";
 import { CONNECTORS } from "@/features/connectors/constants/connectors";
 import type { AgentId } from "@/interfaces/app";
+import { signOut, useAuthStore } from "@/features/auth/lib/auth";
+import { Button } from "@/components/ui/button";
 
 const SPACE_NAV: {
   key: string;
@@ -54,6 +56,8 @@ const AGENT_NAV: { id: AgentId; label: string; path: "/" | "/product"; icon: typ
 
 export function ThreadListSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { pathname } = useLocation();
+  const router = useRouter();
+  const user = useAuthStore((state) => state.user);
 
   return (
     <Sidebar {...props}>
@@ -130,6 +134,25 @@ export function ThreadListSidebar({ ...props }: React.ComponentProps<typeof Side
       </SidebarContent>
       {props.collapsible !== "none" && <SidebarRail />}
       <SidebarFooter className="aui-sidebar-footer border-t">
+        {user && (
+          <div className="flex items-center gap-2 px-2 py-1">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-xs font-medium">
+              {user.username.slice(0, 1).toUpperCase()}
+            </div>
+            <span className="min-w-0 flex-1 truncate text-sm">{user.display_name}</span>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="退出登录"
+              onClick={async () => {
+                await router.navigate({ to: "/sign-in", search: { redirect: "/" } });
+                if (router.state.location.pathname === "/sign-in") signOut();
+              }}
+            >
+              <LogOut className="size-4" />
+            </Button>
+          </div>
+        )}
         <SidebarMenu>
           <SidebarMenuItem>
             <div className="flex items-center gap-2 px-2 py-2 text-xs text-sidebar-foreground/50">

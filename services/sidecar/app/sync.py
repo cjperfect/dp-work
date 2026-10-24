@@ -6,17 +6,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 
 import httpx
 
 from . import store
+from .config import SYNC_API_BASE as API_BASE
+from .config import SYNC_BATCH_SIZE as BATCH_SIZE
+from .config import SYNC_INTERVAL_SEC as INTERVAL
 
 log = logging.getLogger("sidecar.sync")
-
-API_BASE = os.environ.get("SYNC_API_BASE", "http://localhost:8000").rstrip("/")
-INTERVAL = float(os.environ.get("SYNC_INTERVAL_SEC", "5"))
-BATCH_SIZE = int(os.environ.get("SYNC_BATCH_SIZE", "200"))
 
 
 def _sync_once(meeting_id: str) -> None:

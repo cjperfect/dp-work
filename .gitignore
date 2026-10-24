@@ -48,3 +48,6 @@ services/**/__pycache__/
 
 # 构建产物（tsup）
 packages/**/dist/
+
+# TanStack Router generator temporary files
+.tanstack/

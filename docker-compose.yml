@@ -19,8 +19,8 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # 首次启动时自动执行：启用 vector 扩展 + 初始化基础表/索引
-      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+      # 首次启动仅启用 vector 扩展，业务表通过 API 的 Alembic 迁移创建
+      - ./infra/postgres/bootstrap:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dp -d dp_work"]
       interval: 5s

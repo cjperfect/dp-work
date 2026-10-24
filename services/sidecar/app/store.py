@@ -6,14 +6,13 @@
 """
 from __future__ import annotations
 
-import os
 import sqlite3
 import threading
 from pathlib import Path
 from typing import Any
 
-_DP_DATA_DIR = os.environ.get("DP_DATA_DIR")
-DATA_DIR = Path(_DP_DATA_DIR) if _DP_DATA_DIR else Path(__file__).resolve().parents[2] / ".dp-work" / "data"
+from .config import DATA_DIR
+
 DB_PATH = DATA_DIR / "dp.db"
 
 _LOCK = threading.Lock()

@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from "./routes/__root";
 import { Route as AppRouteRouteImport } from "./routes/_app/route";
+import { Route as authSignInRouteImport } from "./routes/(auth)/sign-in";
+import { Route as authSignUpRouteImport } from "./routes/(auth)/sign-up";
 import { Route as AppIndexRouteImport } from "./routes/_app/index";
 import { Route as AppProductRouteImport } from "./routes/_app/product";
 import { Route as AppConnectorsIndexRouteImport } from "./routes/_app/connectors/index";
@@ -23,6 +25,16 @@ import { Route as AppKnowledgeKbIdFilesFileIdRouteImport } from "./routes/_app/k
 
 const AppRouteRoute = AppRouteRouteImport.update({
   id: "/_app",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const authSignInRoute = authSignInRouteImport.update({
+  id: "/(auth)/sign-in",
+  path: "/sign-in",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const authSignUpRoute = authSignUpRouteImport.update({
+  id: "/(auth)/sign-up",
+  path: "/sign-up",
   getParentRoute: () => rootRouteImport,
 } as any);
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -79,6 +91,8 @@ const AppKnowledgeKbIdFilesFileIdRoute =
 
 export interface FileRoutesByFullPath {
   "/": typeof AppIndexRoute;
+  "/sign-in": typeof authSignInRoute;
+  "/sign-up": typeof authSignUpRoute;
   "/product": typeof AppProductRoute;
   "/meetings/active": typeof AppMeetingsActiveRoute;
   "/meetings/minutes": typeof AppMeetingsMinutesRoute;
@@ -90,6 +104,8 @@ export interface FileRoutesByFullPath {
   "/knowledge/$kbId/files/$fileId": typeof AppKnowledgeKbIdFilesFileIdRoute;
 }
 export interface FileRoutesByTo {
+  "/sign-in": typeof authSignInRoute;
+  "/sign-up": typeof authSignUpRoute;
   "/product": typeof AppProductRoute;
   "/": typeof AppIndexRoute;
   "/meetings/active": typeof AppMeetingsActiveRoute;
@@ -104,6 +120,8 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   "/_app": typeof AppRouteRouteWithChildren;
+  "/(auth)/sign-in": typeof authSignInRoute;
+  "/(auth)/sign-up": typeof authSignUpRoute;
   "/_app/product": typeof AppProductRoute;
   "/_app/": typeof AppIndexRoute;
   "/_app/meetings/active": typeof AppMeetingsActiveRoute;
@@ -119,6 +137,8 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
     | "/"
+    | "/sign-in"
+    | "/sign-up"
     | "/product"
     | "/meetings/active"
     | "/meetings/minutes"
@@ -130,6 +150,8 @@ export interface FileRouteTypes {
     | "/knowledge/$kbId/files/$fileId";
   fileRoutesByTo: FileRoutesByTo;
   to:
+    | "/sign-in"
+    | "/sign-up"
     | "/product"
     | "/"
     | "/meetings/active"
@@ -143,6 +165,8 @@ export interface FileRouteTypes {
   id:
     | "__root__"
     | "/_app"
+    | "/(auth)/sign-in"
+    | "/(auth)/sign-up"
     | "/_app/product"
     | "/_app/"
     | "/_app/meetings/active"
@@ -157,6 +181,8 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AppRouteRoute: typeof AppRouteRouteWithChildren;
+  authSignInRoute: typeof authSignInRoute;
+  authSignUpRoute: typeof authSignUpRoute;
 }
 
 declare module "@tanstack/react-router" {
@@ -166,6 +192,20 @@ declare module "@tanstack/react-router" {
       path: "";
       fullPath: "/";
       preLoaderRoute: typeof AppRouteRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/(auth)/sign-in": {
+      id: "/(auth)/sign-in";
+      path: "/sign-in";
+      fullPath: "/sign-in";
+      preLoaderRoute: typeof authSignInRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/(auth)/sign-up": {
+      id: "/(auth)/sign-up";
+      path: "/sign-up";
+      fullPath: "/sign-up";
+      preLoaderRoute: typeof authSignUpRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/_app/": {
@@ -273,6 +313,8 @@ const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   AppRouteRoute: AppRouteRouteWithChildren,
+  authSignInRoute: authSignInRoute,
+  authSignUpRoute: authSignUpRoute,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from . import asr as asr_mod
 from . import mock as mock_mod
 from . import store, sync
+from .config import MOCK_ASR, PORT
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("sidecar")
@@ -42,7 +42,7 @@ async def health() -> dict:
 
 
 def _mock_enabled() -> bool:
-    return os.environ.get("MOCK_ASR", "1") == "1"
+    return MOCK_ASR
 
 
 @app.websocket("/ws")
@@ -96,4 +96,4 @@ async def ws(websocket: WebSocket) -> None:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8001")))
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
