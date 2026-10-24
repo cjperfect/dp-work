@@ -1,3 +1,11 @@
 fastapi>=0.110
 uvicorn[standard]>=0.29
 asyncpg>=0.29
+sqlalchemy[asyncio]<3,>=2.0
+alembic<2,>=1.13
+pyjwt>=2.8
+python-dotenv>=1.0
+
+[test]
+pytest>=8
+httpx>=0.27
