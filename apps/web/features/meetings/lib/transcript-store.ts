@@ -7,6 +7,9 @@
  */
 "use client";
 
+import { DB_NAME, DB_VERSION, STORE } from "@/features/meetings/constants/storage";
+import { segmentId } from "@/features/meetings/utils/transcript";
+
 export type TranscriptSegment = {
   /** 分句 id = 幂等键（meetingId + seq 派生） */
   id: string;
@@ -20,10 +23,6 @@ export type TranscriptSegment = {
   attempt: number;
   createdAt: number;
 };
-
-const DB_NAME = "dp-work-local";
-const DB_VERSION = 1;
-const STORE = "transcript_segments";
 
 const openDb = (): Promise<IDBDatabase> =>
   new Promise((resolve, reject) => {
@@ -45,8 +44,6 @@ const idbRequest = <T>(req: IDBRequest<T>): Promise<T> =>
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
-
-export const segmentId = (meetingId: string, seq: number) => `${meetingId}#${seq}`;
 
 /** 追加保存新分句（append-only：只增不覆盖；同 id 已存在则跳过） */
 export async function saveSegments(

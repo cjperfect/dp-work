@@ -2,7 +2,7 @@
 
 import { Link, useLocation } from "@tanstack/react-router";
 import type * as React from "react";
-import { BookOpen, Bot, Boxes, Package, Sparkles, Video } from "lucide-react";
+import { BookOpen, Bot, Boxes, Package, Plug, Sparkles, Video } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -17,16 +17,37 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { ThreadList } from "@/components/assistant-ui/elements/thread-list.aui";
+import { SKILLS } from "@/features/skills/constants/skills";
+import { CONNECTORS } from "@/features/connectors/constants/connectors";
 import type { AgentId } from "@/interfaces/app";
 
-const SPACE_NAV: { key: string; label: string; path: string; icon: typeof Video }[] = [
+const SPACE_NAV: {
+  key: string;
+  label: string;
+  path: "/meetings" | "/skills" | "/knowledge" | "/connectors";
+  icon: typeof Video;
+  count?: number;
+}[] = [
   { key: "meetings", label: "开始会议", path: "/meetings", icon: Video },
-  { key: "skills", label: "技能安装", path: "/skills", icon: Package },
+  {
+    key: "skills",
+    label: "技能安装",
+    path: "/skills",
+    icon: Package,
+    count: SKILLS.filter((s) => s.status === "installed").length,
+  },
   { key: "knowledge", label: "知识库", path: "/knowledge", icon: BookOpen },
+  {
+    key: "connectors",
+    label: "连接器",
+    path: "/connectors",
+    icon: Plug,
+    count: CONNECTORS.filter((c) => c.status === "connected").length,
+  },
 ];
 
 // Agent 列表实际由当前用户所属部门动态生成（示例：通用 + 产品）；默认路由即通用 Agent
-const AGENT_NAV: { id: AgentId; label: string; path: string; icon: typeof Bot }[] = [
+const AGENT_NAV: { id: AgentId; label: string; path: "/" | "/product"; icon: typeof Bot }[] = [
   { id: "general", label: "通用 Agent", path: "/", icon: Bot },
   { id: "product", label: "产品 Agent", path: "/product", icon: Boxes },
 ];
@@ -62,11 +83,16 @@ export function ThreadListSidebar({ ...props }: React.ComponentProps<typeof Side
                 return (
                   <SidebarMenuItem key={item.key}>
                     <SidebarMenuButton
-                      isActive={pathname === item.path}
+                      isActive={pathname === item.path || pathname.startsWith(`${item.path}/`)}
                       render={<Link to={item.path} />}
                     >
                       <Icon />
                       <span>{item.label}</span>
+                      {typeof item.count === "number" && item.count > 0 && (
+                        <span className="bg-sidebar-primary text-sidebar-primary-foreground ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-medium">
+                          {item.count}
+                        </span>
+                      )}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );

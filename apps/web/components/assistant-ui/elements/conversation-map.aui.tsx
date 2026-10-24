@@ -375,7 +375,7 @@ export function ConversationMapAui({
   return (
     <div
       data-slot="conversation-map-rail"
-      className={cn("pointer-events-none sticky top-0 z-10 h-0 w-full", className)}
+      className={cn("pointer-events-none absolute top-0 z-10 h-full w-full", className)}
     >
       <div
         className={cn(

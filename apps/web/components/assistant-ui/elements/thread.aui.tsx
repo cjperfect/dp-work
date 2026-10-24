@@ -209,12 +209,13 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({ isEmpty, aut
       <ThreadPrimitive.Viewport
         turnAnchor="top"
         data-slot="aui_thread-viewport"
-        className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
+        className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth"
       >
         <div
           className={cn(
-            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-8 pt-4",
-            isEmpty && "justify-center",
+            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-8",
+            // 空态：问候语 + 输入框整组垂直居中；非空态保留顶部间距
+            isEmpty ? "justify-center gap-6 pt-0" : "pt-4",
           )}
         >
           <AuiIf condition={isNewChatView}>
@@ -233,6 +234,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({ isEmpty, aut
           <ThreadPrimitive.ViewportFooter
             className={cn(
               "aui-thread-viewport-footer bg-background flex flex-col gap-4 overflow-visible pb-4 md:pb-6",
+              // 空态：输入框参与正常文档流，与欢迎语整组居中；非空态 sticky 贴底随消息滚动
               !isEmpty && "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
             )}
           >
@@ -454,7 +456,7 @@ const ThreadWelcome: FC = () => {
   const message = view === "agent" ? AGENT_WELCOME[agentId] : "今天想让我帮你做点什么？";
 
   return (
-    <div className="aui-thread-welcome-root mb-6 flex flex-col px-2">
+    <div className="aui-thread-welcome-root flex flex-col px-2">
       <p className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
         {message}
       </p>

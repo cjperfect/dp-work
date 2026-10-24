@@ -8,8 +8,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClientToSidecar, SidecarToClient } from "@dp-work/contracts";
-
-const SIDECAR_WS = process.env.NEXT_PUBLIC_SIDECAR_WS ?? "ws://localhost:8001/ws";
+import { SIDECAR_WS } from "@/features/meetings/constants/meeting";
+import { arrayBufferToBase64 } from "@/features/meetings/utils/transcript";
 
 export type AsrStatus = "idle" | "connecting" | "live" | "stopped";
 
@@ -60,15 +60,24 @@ export function useMeetingAsr(
   /** 发送 16kHz 单声道 PCM（ArrayBuffer）音频块 */
   const sendAudio = useCallback(
     (pcm: ArrayBuffer) => {
-      const bytes = new Uint8Array(pcm);
-      let bin = "";
-      for (let i = 0; i < bytes.length; i += 1) bin += String.fromCharCode(bytes[i]);
-      send({ type: "audio", payload: btoa(bin) });
+      send({ type: "audio", payload: arrayBufferToBase64(pcm) });
     },
     [send],
   );
 
-  const stop = useCallback(() => send({ type: "asr.stop", meetingId }), [meetingId, send]);
+  /** 停止转写：通知 sidecar + 立即断开 WS + 同步置状态（不等待 sidecar 关闭） */
+  const stop = useCallback(() => {
+    send({ type: "asr.stop", meetingId });
+    wsRef.current?.close();
+    wsRef.current = null;
+    setStatus("stopped");
+  }, [meetingId, send]);
+
+  /** 硬关闭：立即断开 WS（页面卸载兜底） */
+  const close = useCallback(() => {
+    wsRef.current?.close();
+    wsRef.current = null;
+  }, []);
 
   // 卸载时关闭连接；同步置空 wsRef，避免 StrictMode 双挂载复用已死连接
   useEffect(
@@ -79,5 +88,5 @@ export function useMeetingAsr(
     [],
   );
 
-  return { status, start, stop, sendAudio };
+  return { status, start, stop, close, sendAudio };
 }

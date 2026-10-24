@@ -1,60 +1,34 @@
 "use client";
 
-import "@blocknote/core/fonts/inter.css";
-import "@blocknote/mantine/style.css";
-
-import { useCreateBlockNote } from "@blocknote/react";
-import { BlockNoteView } from "@blocknote/mantine";
-import { ArrowLeft, Pause, Play, Square } from "lucide-react";
+import { ArrowLeft, Pause, Play, Sparkles, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useBlocker } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/app-store";
-import { zh } from "@blocknote/core/locales";
-import type { PartialBlock } from "@blocknote/core";
-import {
-  clearMeeting,
-  maxSeq,
-  pendingSegments,
-  saveSegments,
-} from "@/features/meetings/lib/transcript-store";
+import type { BlockNoteEditor as Editor, PartialBlock } from "@blocknote/core";
+import { BlockNoteEditor } from "@/features/editor/components/blocknote-editor";
+import { maxSeq, pendingSegments, saveSegments } from "@/features/meetings/lib/transcript-store";
 import { useMeetingAsr } from "@/features/meetings/lib/use-meeting-asr";
+import { formatDuration, formatStartTime } from "@/features/meetings/utils/format";
+import {
+  clearSession,
+  loadSession,
+  saveSession,
+  type MeetingSession,
+} from "@/features/meetings/utils/session";
+import { parseSpeakerLine } from "@/features/meetings/utils/transcript";
 import type { SidecarToClient } from "@dp-work/contracts";
-
-const formatDuration = (total: number) =>
-  [Math.floor(total / 3600), Math.floor(total / 60) % 60, total % 60]
-    .map((n) => String(n).padStart(2, "0"))
-    .join(":");
-
-/** 会议会话状态：持久化到 sessionStorage，页面意外重挂载 / 刷新后完整恢复 */
-type MeetingSession = {
-  startTs: number;
-  pausedSec: number;
-  isPaused: boolean;
-  /** BlockNote 文档 blocks（JSON 序列化） */
-  transcript: Record<string, unknown>[] | null;
-};
-
-const SESSION_KEY = "dp-meeting-session-v1";
-
-const loadSession = (): MeetingSession => {
-  try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as MeetingSession;
-      if (typeof parsed.startTs === "number") return parsed;
-    }
-  } catch {
-    // 忽略损坏数据，按新会议处理
-  }
-  return { startTs: Date.now(), pausedSec: 0, isPaused: false, transcript: null };
-};
 
 export function MeetingSessionPage() {
   const meetingTitle = useAppStore((s) => s.meetingTitle);
   const setMeetingStatus = useAppStore((s) => s.setMeetingStatus);
   const navigate = useNavigate();
+  const [generating, setGenerating] = useState(false);
+  const [endDialogOpen, setEndDialogOpen] = useState(false);
+  // 结束会议时冻结的会议时长（秒）
+  const [endedElapsed, setEndedElapsed] = useState<number | null>(null);
 
   // 会话状态：挂载时从 sessionStorage 恢复（重挂载不丢计时与转写）
   const [session, setSession] = useState<MeetingSession>(loadSession);
@@ -69,28 +43,14 @@ export function MeetingSessionPage() {
 
   // 持久化会话状态
   useEffect(() => {
-    try {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    } catch {
-      // 存储不可用时忽略
-    }
+    saveSession(session);
   }, [session]);
 
-  const editor = useCreateBlockNote({
-    dictionary: zh,
-    // 从持久化状态恢复转写内容；无内容时保留一个空段落作为 ASR 待定行
-    initialContent: (session.transcript as PartialBlock[] | undefined) ?? [
-      { type: "paragraph", content: [] },
-    ],
-    // 扩展文字颜色样式（默认样式仅含背景色，无前景色）
-    styleSchema: {
-      color: {
-        type: "string",
-        default: "#000000",
-        propSchema: "string",
-      },
-    },
-  });
+  // 富文本编辑器实例：供 ASR 程序化插入 / 更新分句行
+  const editorRef = useRef<Editor | null>(null);
+  const onEditorReady = useCallback((e: Editor) => {
+    editorRef.current = e;
+  }, []);
 
   // ===== 本地实时保存（一分句一行，append-only；definite=true 事件统一走 saveSegments）=====
   const meetingId = meetingTitle ?? "unnamed";
@@ -121,6 +81,8 @@ export function MeetingSessionPage() {
 
   const handleUtterance = useCallback(
     (u: Extract<SidecarToClient, { type: "utterance" }>) => {
+      const editor = editorRef.current;
+      if (!editor) return;
       if (u.definite) {
         // 定型分句：插入正式行（"发言人：内容"）+ 落本地库（pending）
         const text = u.speaker ? `${u.speaker}：${u.text}` : u.text;
@@ -167,7 +129,7 @@ export function MeetingSessionPage() {
         });
       }
     },
-    [editor, meetingId],
+    [meetingId],
   );
 
   const {
@@ -178,12 +140,13 @@ export function MeetingSessionPage() {
 
   // 进入会议页：建立 WS 连接并登记 asr.start（编辑器就绪后取末尾段落作为待定行）
   useEffect(() => {
-    const doc = editor.document;
+    const doc = editorRef.current?.document;
+    if (!doc) return;
     const last = doc[doc.length - 1];
     if (last?.type === "paragraph") pendingBlockIdRef.current = last.id;
     if (asrStatus === "idle") startAsr();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, meetingId]);
+  }, [editorRef, meetingId, asrStatus]);
 
   // 解析编辑器行 → 分句（"发言人：内容" 或纯内容），防抖追加保存
   // 注：ASR 连接期间转写由 definite=true 事件统一落库，手动输入不再重复写入
@@ -191,13 +154,7 @@ export function MeetingSessionPage() {
     if (asrStatus === "live") return;
     const rows = (doc as { type?: string; content?: { text?: string }[] }[])
       .filter((b) => b.type === "paragraph" || b.type === "heading")
-      .map((b) => {
-        const raw = (b.content?.[0]?.text ?? "").trim();
-        const m = raw.match(/^([^：:]{1,12})[：:]\s*(.+)/);
-        return m
-          ? { speaker: m[1], text: m[2], startMs: Date.now() }
-          : { speaker: null, text: raw, startMs: Date.now() };
-      })
+      .map((b) => parseSpeakerLine(b.content?.[0]?.text ?? "", Date.now()))
       .filter((r) => r.text.length > 0);
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
@@ -210,12 +167,11 @@ export function MeetingSessionPage() {
     }, 800);
   };
 
-  const startTime = new Date(session.startTs).toLocaleTimeString("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const startTime = formatStartTime(session.startTs);
   const elapsed =
     session.pausedSec + (session.isPaused ? 0 : Math.floor((now - session.startTs) / 1000));
+  // 会议结束后时长冻结在结束时刻
+  const displayElapsed = asrStatus === "stopped" && endedElapsed !== null ? endedElapsed : elapsed;
 
   // 会议进行中阻止刷新 / 关闭 / 离开页面（F5、Ctrl+R、关闭标签页、切换路由等），防止转写内容丢失
   const allowLeaveRef = useRef(false);
@@ -252,7 +208,7 @@ export function MeetingSessionPage() {
             <p className="text-muted-foreground text-xs">
               {startTime} 开始 · 已进行{" "}
               <span className="text-foreground font-medium tabular-nums">
-                {formatDuration(elapsed)}
+                {formatDuration(displayElapsed)}
               </span>
               {saveInfo.saved > 0 && (
                 <span className="ml-2">
@@ -283,7 +239,13 @@ export function MeetingSessionPage() {
           <Button
             variant="ghost"
             size="icon"
-            aria-label={session.isPaused ? "继续转写" : "暂停转写"}
+            aria-label={
+              asrStatus === "stopped" ? "开始转写" : session.isPaused ? "继续转写" : "暂停转写"
+            }
+            disabled={asrStatus === "stopped"}
+            title={
+              asrStatus === "stopped" ? "会议已结束" : session.isPaused ? "继续转写" : "暂停转写"
+            }
             onClick={() =>
               setSession((s) => ({
                 ...s,
@@ -294,42 +256,102 @@ export function MeetingSessionPage() {
               }))
             }
           >
-            {session.isPaused ? <Play className="size-4" /> : <Pause className="size-4" />}
+            {session.isPaused || asrStatus === "stopped" ? (
+              <Play className="size-4" />
+            ) : (
+              <Pause className="size-4" />
+            )}
           </Button>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            // 结束会议：先通知 sidecar 停止转写并 flush 队列，再清除会话、标记生成中、回列表
-            stopAsr();
-            try {
-              sessionStorage.removeItem(SESSION_KEY);
-            } catch {
-              // 忽略
-            }
-            allowLeaveRef.current = true;
-            setMeetingStatus("generating");
-            navigate({ to: "/meetings" });
-          }}
-        >
-          <Square className="size-3.5" />
-          结束会议
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            size="sm"
+            className="bg-black text-white hover:bg-black/90"
+            disabled={asrStatus !== "stopped" || generating}
+            title={asrStatus !== "stopped" ? "会议结束后才能生成会议纪要" : undefined}
+            onClick={() => {
+              // 生成会议纪要：调用占位接口，成功后回列表（列表展示「AI 会议纪要生成中」）
+              setGenerating(true);
+              const meetingId = meetingTitle ?? "unnamed";
+              void fetch(
+                `http://localhost:8000/api/v1/meetings/${encodeURIComponent(meetingId)}/minutes/generate`,
+                {
+                  method: "POST",
+                  signal: AbortSignal.timeout(15000),
+                },
+              )
+                .then(async (res) => {
+                  if (!res.ok) throw new Error(`api 返回 ${res.status}`);
+                  await res.json();
+                  setMeetingStatus("generating");
+                  navigate({ to: "/meetings" });
+                })
+                .catch(() => {
+                  setGenerating(false);
+                });
+            }}
+          >
+            <Sparkles className="size-3.5" />
+            {generating ? "正在生成…" : "生成会议纪要"}
+          </Button>
+          <Popover open={endDialogOpen} onOpenChange={(open) => setEndDialogOpen(open)}>
+            <PopoverTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={asrStatus === "stopped" || generating}
+                  title={asrStatus === "stopped" ? "会议已结束" : undefined}
+                >
+                  <Square className="size-3.5" />
+                  {asrStatus === "stopped" ? "已结束" : "结束会议"}
+                </Button>
+              }
+            />
+            <PopoverContent align="end" className="w-64 p-3">
+              <p className="text-sm font-medium">结束会议</p>
+              <p className="text-muted-foreground mt-1 text-xs">
+                结束将停止转写并清除本次会话内容，确定结束吗？
+              </p>
+              <div className="mt-3 flex justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setEndDialogOpen(false)}>
+                  取消
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    setEndDialogOpen(false);
+                    // 结束会议：冻结时长 + 直接停止转写并清除会话，停留在当前页
+                    setEndedElapsed(
+                      session.pausedSec + Math.floor((Date.now() - session.startTs) / 1000),
+                    );
+                    stopAsr();
+                    clearSession();
+                    allowLeaveRef.current = true;
+                  }}
+                >
+                  确定结束
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
       {/* 转写富文本（占满剩余区域），内容实时持久化 */}
       <section className="bg-card flex min-h-0 flex-1 flex-col rounded-xl border">
         <div className="min-h-0 flex-1 overflow-auto px-3 py-3">
-          <BlockNoteView
-            editor={editor}
-            theme="light"
-            onChange={(ed) => {
-              setSession((s) => ({
-                ...s,
-                transcript: ed.document as unknown as Record<string, unknown>[],
-              }));
-              persistToLocal(ed.document as unknown as Record<string, unknown>[]);
+          <BlockNoteEditor
+            initialContent={
+              (session.transcript as PartialBlock[] | undefined) ?? [
+                { type: "paragraph", content: [] },
+              ]
+            }
+            onEditorReady={onEditorReady}
+            onChange={(blocks) => {
+              setSession((s) => ({ ...s, transcript: blocks }));
+              persistToLocal(blocks);
             }}
           />
         </div>

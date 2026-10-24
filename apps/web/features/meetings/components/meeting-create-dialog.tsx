@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAppStore } from "@/stores/app-store";
 import { clearMeeting } from "@/features/meetings/lib/transcript-store";
+import { clearSession } from "@/features/meetings/utils/session";
 
 /** 新建会议弹窗：输入会议标题后开始（实时转写待接入 Python Sidecar） */
 export function MeetingCreateDialog({
@@ -32,11 +33,7 @@ export function MeetingCreateDialog({
   const handleStart = () => {
     if (!title.trim()) return;
     // 新会议：清除上一场会议的会话持久化与本地转写库
-    try {
-      sessionStorage.removeItem("dp-meeting-session-v1");
-    } catch {
-      // 忽略
-    }
+    clearSession();
     void clearMeeting(title.trim());
     setMeetingTitle(title.trim());
     setMeetingStatus("live");
@@ -60,6 +57,7 @@ export function MeetingCreateDialog({
             onKeyDown={(e) => {
               if (e.key === "Enter" && title.trim()) handleStart();
             }}
+            style={{ borderRadius: 4 }}
             aria-label="会议标题"
           />
         </div>

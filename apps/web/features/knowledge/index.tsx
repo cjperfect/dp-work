@@ -1,3 +1,7 @@
-export { KnowledgePage } from "./components/knowledge-page";
-export { FILE_TYPE_META, KNOWLEDGE_BASES } from "./data/knowledge-data";
-export type { KnowledgeBase } from "./data/knowledge-data";
+export {
+  KnowledgePage,
+  KnowledgeBaseDetailPage,
+  KnowledgeFilePage,
+} from "./components/knowledge-page";
+export { FILE_TYPE_META, KNOWLEDGE_BASES } from "./constants/knowledge-data";
+export type { KnowledgeBase, KbFile } from "./constants/knowledge-data";

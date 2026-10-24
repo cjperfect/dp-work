@@ -3,69 +3,61 @@
 import { useState } from "react";
 import { CheckCircle2, Download, Package, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { AGENT_OPTIONS, SKILLS, type AgentTarget } from "@/features/skills/constants/skills";
 
-type SkillStatus = "installed" | "available";
+/** 判断技能是否已安装给当前目标 Agent */
+function matchesTarget(installedFor: AgentTarget[], target: AgentTarget): boolean {
+  return installedFor.includes(target);
+}
 
-type SkillItem = {
-  id: string;
-  name: string;
-  department: string;
-  description: string;
-  status: SkillStatus;
-};
-
-// 静态示例数据：仅用于搭建页面结构，后续接入真实技能市场 / 安装接口
-const SKILLS: SkillItem[] = [
-  {
-    id: "s-001",
-    name: "SOP 规范化",
-    department: "产研中心",
-    description: "按部门 SOP 自动规范输出格式与审批口径，保证对外文档符合规范",
-    status: "installed",
-  },
-  {
-    id: "s-002",
-    name: "会议纪要生成",
-    department: "管理后台",
-    description: "从会议转写内容提炼决议、待办与风险项，生成结构化会议纪要",
-    status: "installed",
-  },
-  {
-    id: "s-003",
-    name: "知识库问答",
-    department: "全员",
-    description: "基于已授权知识库检索上下文，回答问题时自动附带来源引用",
-    status: "installed",
-  },
-  {
-    id: "s-004",
-    name: "合同审查",
-    department: "法务部",
-    description: "审查合同风险条款，输出修改建议与风险等级标注",
-    status: "available",
-  },
-  {
-    id: "s-005",
-    name: "财报分析",
-    department: "财务部",
-    description: "读取财报数据生成经营分析与异常项归因",
-    status: "available",
-  },
-  {
-    id: "s-006",
-    name: "招聘初筛",
-    department: "人力部",
-    description: "按 JD 要求初筛简历，输出候选人匹配度评分与面试建议",
-    status: "available",
-  },
-];
+const targetLabel = (t: AgentTarget) => AGENT_OPTIONS.find((o) => o.value === t)?.label ?? t;
 
 export function SkillsPage() {
   const [tab, setTab] = useState<"installed" | "available">("installed");
+  const [target, setTarget] = useState<AgentTarget>("general");
+  // 本地技能状态：卸载/安装先在前端流转（后端待接入）
+  const [skills, setSkills] = useState(SKILLS);
+  const [uninstallTarget, setUninstallTarget] = useState<string | null>(null);
 
-  const installed = SKILLS.filter((s) => s.status === "installed");
-  const available = SKILLS.filter((s) => s.status === "available");
+  const installed = skills.filter(
+    (s) => s.status === "installed" && matchesTarget(s.installedFor, target),
+  );
+  const available = skills.filter((s) => s.status === "available");
   const visible = tab === "installed" ? installed : available;
+
+  const handleUninstall = () => {
+    if (!uninstallTarget) return;
+    setSkills((prev) =>
+      prev.map((s) => {
+        if (s.id !== uninstallTarget) return s;
+        const next = s.installedFor.filter((t) => t !== target);
+        return {
+          ...s,
+          installedFor: next,
+          status: next.length === 0 ? ("available" as const) : ("installed" as const),
+        };
+      }),
+    );
+    setUninstallTarget(null);
+  };
+
+  const handleInstall = (id: string) => {
+    setSkills((prev) =>
+      prev.map((s) => {
+        if (s.id !== id) return s;
+        const next = [...new Set([...s.installedFor, target])] as ("general" | "product")[];
+        return { ...s, installedFor: next, status: "installed" as const };
+      }),
+    );
+  };
 
   return (
     <div className="flex w-full flex-1 flex-col gap-6 px-6 py-8 md:px-10">
@@ -76,34 +68,55 @@ export function SkillsPage() {
         </p>
       </header>
 
-      <div className="flex items-center gap-1 border-b">
-        <button
-          type="button"
-          onClick={() => setTab("installed")}
-          className={`flex items-center gap-1.5 rounded-t-lg border-b-2 px-3 py-2 text-sm transition-colors ${
-            tab === "installed"
-              ? "border-primary text-foreground font-medium"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <CheckCircle2 className="size-4" />
-          已安装
-          <span className="text-muted-foreground/60 text-xs">{installed.length}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("available")}
-          className={`flex items-center gap-1.5 rounded-t-lg border-b-2 px-3 py-2 text-sm transition-colors ${
-            tab === "available"
-              ? "border-primary text-foreground font-medium"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Package className="size-4" />
-          未安装
-          <span className="text-muted-foreground/60 text-xs">{available.length}</span>
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-1 border-b">
+          <button
+            type="button"
+            onClick={() => setTab("installed")}
+            className={`flex items-center gap-1.5 rounded-t-lg border-b-2 px-3 py-2 text-sm transition-colors ${
+              tab === "installed"
+                ? "border-primary text-foreground font-medium"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <CheckCircle2 className="size-4" />
+            已安装
+            <span className="text-muted-foreground/60 text-xs">{installed.length}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("available")}
+            className={`flex items-center gap-1.5 rounded-t-lg border-b-2 px-3 py-2 text-sm transition-colors ${
+              tab === "available"
+                ? "border-primary text-foreground font-medium"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Package className="size-4" />
+            未安装
+            <span className="text-muted-foreground/60 text-xs">{available.length}</span>
+          </button>
+        </div>
+
+        <Select value={target} onValueChange={(v) => setTarget(v as AgentTarget)}>
+          <SelectTrigger className="min-w-36" aria-label="选择目标 Agent">
+            <SelectValue placeholder="选择目标 Agent">
+              {(v: string | null) => targetLabel(v as AgentTarget)}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent align="end">
+            {AGENT_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+
+      {tab === "installed" && (
+        <p className="text-muted-foreground -mt-3 text-xs">当前展示：{targetLabel(target)}</p>
+      )}
 
       <ul className="flex flex-col gap-3">
         {visible.map((skill) => (
@@ -119,6 +132,19 @@ export function SkillsPage() {
                 </span>
               </div>
               <p className="text-muted-foreground text-sm">{skill.description}</p>
+              {tab === "installed" && skill.installedFor.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-muted-foreground text-xs">已安装给</span>
+                  {skill.installedFor.map((t) => (
+                    <span
+                      key={t}
+                      className="bg-emerald-500/10 text-emerald-700 rounded px-1.5 py-0.5 text-xs font-medium"
+                    >
+                      {targetLabel(t)}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             {skill.status === "installed" ? (
               <div className="flex shrink-0 items-center gap-2">
@@ -126,9 +152,32 @@ export function SkillsPage() {
                   <CheckCircle2 className="size-3" />
                   已安装
                 </span>
-                <Button variant="outline" size="sm" disabled>
-                  卸载
-                </Button>
+                <Popover
+                  open={uninstallTarget === skill.id}
+                  onOpenChange={(open) => setUninstallTarget(open ? skill.id : null)}
+                >
+                  <PopoverTrigger
+                    render={
+                      <Button variant="outline" size="sm">
+                        卸载
+                      </Button>
+                    }
+                  />
+                  <PopoverContent align="end" className="w-64 p-3">
+                    <p className="text-sm font-medium">卸载技能</p>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      将「{skill.name}」从{targetLabel(target)}卸载，确定卸载吗？
+                    </p>
+                    <div className="mt-3 flex justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => setUninstallTarget(null)}>
+                        取消
+                      </Button>
+                      <Button variant="destructive" size="sm" onClick={handleUninstall}>
+                        卸载
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             ) : (
               <div className="flex shrink-0 items-center gap-2">
@@ -136,9 +185,9 @@ export function SkillsPage() {
                   <XCircle className="size-3" />
                   未安装
                 </span>
-                <Button size="sm">
+                <Button size="sm" onClick={() => handleInstall(skill.id)}>
                   <Download className="size-3.5" />
-                  安装
+                  安装到{targetLabel(target)}
                 </Button>
               </div>
             )}
@@ -146,7 +195,7 @@ export function SkillsPage() {
         ))}
         {visible.length === 0 && (
           <li className="text-muted-foreground rounded-xl border border-dashed p-6 text-center text-sm">
-            暂无{tab === "installed" ? "已安装" : "可安装"}技能
+            {tab === "installed" ? `暂无已安装到${targetLabel(target)}的技能` : "暂无可安装技能"}
           </li>
         )}
       </ul>

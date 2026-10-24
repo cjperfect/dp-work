@@ -1,40 +1,34 @@
 "use client";
 
-import { Clock, History, Loader2, Video } from "lucide-react";
+import { Clock, FileQuestion, History, Loader2, Video } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/stores/app-store";
 import { MeetingCreateDialog } from "./meeting-create-dialog";
-
-const HISTORY_MEETINGS = [
-  {
-    id: "m-002",
-    title: "RAG 知识库架构讨论",
-    date: "2026-10-21",
-    summary: "已生成纪要 · 8 项待办",
-  },
-  {
-    id: "m-003",
-    title: "倍轻松小程序需求对齐",
-    date: "2026-10-18",
-    summary: "已生成纪要 · 3 项待办",
-  },
-];
+import { saveSession } from "@/features/meetings/utils/session";
+import {
+  GENERATING_DEMO_MEETING,
+  HISTORY_MEETINGS,
+  UNGENERATED_MEETINGS,
+} from "@/features/meetings/constants/meeting";
 
 export function MeetingsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const navigate = useNavigate();
   const meetingTitle = useAppStore((s) => s.meetingTitle);
+  const setMeetingTitle = useAppStore((s) => s.setMeetingTitle);
   const meetingStatus = useAppStore((s) => s.meetingStatus);
 
   // 刚结束的会议：处于 AI 纪要生成中状态时在此展示；无动态数据时展示一条测试数据
   const generatingMeetings = [
-    ...(meetingTitle && meetingStatus === "generating"
-      ? [{ id: "m-live", title: meetingTitle, startedAt: "刚刚" }]
+    ...(meetingStatus === "generating"
+      ? [{ id: "m-live", title: meetingTitle ?? "未命名会议", startedAt: "刚刚" }]
       : []),
-    { id: "m-demo", title: "Q4 产品规划评审（测试数据）", startedAt: "刚刚" },
+    GENERATING_DEMO_MEETING,
   ];
+
+  const ungeneratedMeetings = UNGENERATED_MEETINGS;
 
   return (
     <div className="flex w-full flex-1 flex-col gap-6 px-6 py-8 md:px-10">
@@ -81,6 +75,53 @@ export function MeetingsPage() {
                   <Loader2 className="size-3 animate-spin" />
                   AI 会议纪要生成中
                 </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-medium">
+          <FileQuestion className="text-muted-foreground size-4" />
+          未生成
+        </h2>
+        {ungeneratedMeetings.length === 0 ? (
+          <div className="text-muted-foreground rounded-xl border border-dashed p-6 text-center text-sm">
+            暂无未生成纪要的会议
+          </div>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {ungeneratedMeetings.map((m) => (
+              <li
+                key={m.id}
+                className="flex items-center justify-between rounded-xl border bg-card px-4 py-3"
+              >
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="truncate text-sm font-medium">{m.title}</span>
+                  <span className="text-muted-foreground text-xs">
+                    {m.date} · {m.summary}
+                  </span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // 查看并调整：载入该会议转写内容到纪要编辑页
+                    setMeetingTitle(m.title);
+                    if (m.transcript) {
+                      saveSession({
+                        startTs: Date.now(),
+                        pausedSec: 0,
+                        isPaused: false,
+                        transcript: m.transcript,
+                      });
+                    }
+                    navigate({ to: "/meetings/minutes" });
+                  }}
+                >
+                  查看
+                </Button>
               </li>
             ))}
           </ul>
