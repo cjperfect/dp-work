@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dp-work-api"
+version = "0.1.0"
+description = "dp-work 后端 API：转写片段定稿写入（PostgreSQL 幂等 upsert）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "asyncpg>=0.29",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]

@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: dp-work-api
+Version: 0.1.0
+Summary: dp-work 后端 API：转写片段定稿写入（PostgreSQL 幂等 upsert）
+Requires-Python: >=3.11
+Requires-Dist: fastapi>=0.110
+Requires-Dist: uvicorn[standard]>=0.29
+Requires-Dist: asyncpg>=0.29

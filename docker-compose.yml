@@ -1,0 +1,32 @@
+# 企业 Agent 平台 · 基础设施
+# PostgreSQL（含 pgvector 扩展）— 服务端事实源 + 语义检索向量库
+#
+# 启动：docker compose up -d
+# 停止：docker compose down
+# 清空数据（含 volume）：docker compose down -v
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: dp-postgres
+    restart: unless-stopped
+    environment:
+      # 按需修改（生产环境务必使用强密码）
+      POSTGRES_USER: dp
+      POSTGRES_PASSWORD: dp_dev_password
+      POSTGRES_DB: dp_work
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # 首次启动时自动执行：启用 vector 扩展 + 初始化基础表/索引
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dp -d dp_work"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  pgdata:

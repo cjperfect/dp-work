@@ -1,0 +1,228 @@
+<html style="margin: 0; padding: 0">
+  <title>数据库分工与同步方向</title>
+  <div
+    style="
+      font-family: -apple-system, &quot;PingFang SC&quot;, sans-serif;
+      background: #f6f7f9;
+      min-height: 100%;
+      padding: 24px 20px;
+      box-sizing: border-box;
+    "
+  >
+    <div style="max-width: 1100px; margin: 0 auto">
+      <h1 style="font-size: 20px; margin: 0 0 4px; color: #111">数据库分工与同步方向</h1>
+      <p style="font-size: 13px; margin: 0 0 18px; color: #666">
+        PostgreSQL = 服务端事实源 · SQLite = 桌面离线层 · pgvector = 语义检索
+      </p>
+
+      <div style="display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap">
+        <!-- PostgreSQL -->
+        <div
+          style="
+            flex: 1 1 300px;
+            background: #fff;
+            border: 1px solid #e3e6ea;
+            border-radius: 12px;
+            padding: 14px;
+            box-sizing: border-box;
+          "
+        >
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px">
+            <span
+              style="
+                background: #eef4ff;
+                color: #1a4fd8;
+                font-weight: 600;
+                font-size: 12px;
+                border-radius: 6px;
+                padding: 3px 8px;
+              "
+              >服务端</span
+            >
+            <span style="font-weight: 600; font-size: 14px">PostgreSQL</span>
+          </div>
+          <div style="font-size: 12px; color: #555; line-height: 1.9">
+            <div>· 用户 / 部门 / 权限</div>
+            <div>· Agent / Skill 版本</div>
+            <div>· 聊天记录</div>
+            <div>· 会议 / 转写片段（定稿）</div>
+            <div>· 会议纪要</div>
+            <div>· 知识库资料（元数据）</div>
+          </div>
+          <div
+            style="
+              margin-top: 10px;
+              background: #f3f6ff;
+              border-radius: 6px;
+              padding: 6px 8px;
+              font-size: 11px;
+              color: #4a6dd0;
+            "
+          >
+            权限模型只在服务端强制
+          </div>
+        </div>
+
+        <!-- SQLite -->
+        <div
+          style="
+            flex: 1 1 300px;
+            background: #fff;
+            border: 1px solid #e3e6ea;
+            border-radius: 12px;
+            padding: 14px;
+            box-sizing: border-box;
+          "
+        >
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px">
+            <span
+              style="
+                background: #f0fdf4;
+                color: #1a7f37;
+                font-weight: 600;
+                font-size: 12px;
+                border-radius: 6px;
+                padding: 3px 8px;
+              "
+              >桌面端</span
+            >
+            <span style="font-weight: 600; font-size: 14px">SQLite</span>
+          </div>
+          <div style="font-size: 12px; color: #555; line-height: 1.9">
+            <div>· 实时转写（definite=true 落库 pending）</div>
+            <div>· 待同步队列（outbox）</div>
+            <div>· 草稿（纪要草稿 / 会话草稿）</div>
+            <div>· 本地缓存（配置 / 只读资料）</div>
+          </div>
+          <div
+            style="
+              margin-top: 10px;
+              background: #eefbf3;
+              border-radius: 6px;
+              padding: 6px 8px;
+              font-size: 11px;
+              color: #2a7a4a;
+            "
+          >
+            离线可用 · 断网不丢 · 恢复后自动同步
+          </div>
+        </div>
+
+        <!-- pgvector -->
+        <div
+          style="
+            flex: 1 1 300px;
+            background: #fff;
+            border: 1px solid #e3e6ea;
+            border-radius: 12px;
+            padding: 14px;
+            box-sizing: border-box;
+          "
+        >
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px">
+            <span
+              style="
+                background: #fff8ed;
+                color: #b76e00;
+                font-weight: 600;
+                font-size: 12px;
+                border-radius: 6px;
+                padding: 3px 8px;
+              "
+              >检索层</span
+            >
+            <span style="font-weight: 600; font-size: 14px">pgvector</span>
+          </div>
+          <div style="font-size: 12px; color: #555; line-height: 1.9">
+            <div>· 知识库资料 → 切分 chunk</div>
+            <div>· 文本向量（embedding）</div>
+            <div>· 语义检索（RAG 召回）</div>
+            <div>· 附：资料元数据在 PostgreSQL</div>
+          </div>
+          <div
+            style="
+              margin-top: 10px;
+              background: #fdf6ea;
+              border-radius: 6px;
+              padding: 6px 8px;
+              font-size: 11px;
+              color: #9a6a1a;
+            "
+          >
+            向量在服务端 · 桌面语义检索走 API
+          </div>
+        </div>
+      </div>
+
+      <!-- 同步方向 -->
+      <div
+        style="
+          margin-top: 14px;
+          background: #fff;
+          border: 1px solid #e3e6ea;
+          border-radius: 12px;
+          padding: 14px;
+        "
+      >
+        <div style="font-weight: 600; font-size: 14px; margin-bottom: 10px">同步方向</div>
+        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: #333">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+            <span
+              style="
+                background: #eef4ff;
+                color: #1a4fd8;
+                border-radius: 6px;
+                padding: 2px 8px;
+                font-weight: 600;
+              "
+              >只读下行</span
+            ><span>用户 / 部门 / 权限 / Agent / Skill 版本 / 知识库资料元数据</span
+            ><span style="color: #999">→ 桌面本地缓存</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+            <span
+              style="
+                background: #f0fdf4;
+                color: #1a7f37;
+                border-radius: 6px;
+                padding: 2px 8px;
+                font-weight: 600;
+              "
+              >上行</span
+            ><span>转写片段（outbox → Postgres 定稿） / 会议 / 纪要</span
+            ><span style="color: #999">SQLite pending → 幂等同步</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+            <span
+              style="
+                background: #f8f0ff;
+                color: #7c3aed;
+                border-radius: 6px;
+                padding: 2px 8px;
+                font-weight: 600;
+              "
+              >双向往来</span
+            ><span>聊天（本地草稿上行 / 服务端历史下行）</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+            <span
+              style="
+                background: #fff8ed;
+                color: #b76e00;
+                border-radius: 6px;
+                padding: 2px 8px;
+                font-weight: 600;
+              "
+              >仅本地</span
+            ><span>草稿 / 待同步队列 / 临时文本（不跨端）</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 14px; font-size: 11px; color: #999; line-height: 1.7">
+        示意：主键统一 UUID（离线生成的片段 / 纪要 id 先落 SQLite，上行后与 Postgres
+        幂等对应）；权限检查在上行时由服务端执行；pgvector 随资料入库在服务端切分并生成向量。
+      </div>
+    </div>
+  </div>
+</html>

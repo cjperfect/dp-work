@@ -38,3 +38,13 @@ next-env.d.ts
 
 # turbo
 .turbo
+
+# 本地数据（SQLite 实时保存 / 待同步队列 / 草稿）
+.dp-work/
+
+# Python 服务虚拟环境
+services/**/.venv/
+services/**/__pycache__/
+
+# 构建产物（tsup）
+packages/**/dist/

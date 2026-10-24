@@ -6,18 +6,21 @@ import "@blocknote/mantine/style.css";
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { ArrowLeft, Pause, Play, Square } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useBlocker } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/app-store";
 import { zh } from "@blocknote/core/locales";
+import type { PartialBlock } from "@blocknote/core";
 import {
   clearMeeting,
   maxSeq,
   pendingSegments,
   saveSegments,
 } from "@/features/meetings/lib/transcript-store";
+import { useMeetingAsr } from "@/features/meetings/lib/use-meeting-asr";
+import type { SidecarToClient } from "@dp-work/contracts";
 
 const formatDuration = (total: number) =>
   [Math.floor(total / 3600), Math.floor(total / 60) % 60, total % 60]
@@ -75,8 +78,10 @@ export function MeetingSessionPage() {
 
   const editor = useCreateBlockNote({
     dictionary: zh,
-    // 从持久化状态恢复转写内容
-    ...(session.transcript ? { initialContent: session.transcript } : {}),
+    // 从持久化状态恢复转写内容；无内容时保留一个空段落作为 ASR 待定行
+    initialContent: (session.transcript as PartialBlock[] | undefined) ?? [
+      { type: "paragraph", content: [] },
+    ],
     // 扩展文字颜色样式（默认样式仅含背景色，无前景色）
     styleSchema: {
       color: {
@@ -87,10 +92,9 @@ export function MeetingSessionPage() {
     },
   });
 
-  // ===== 本地实时保存（一分句一行，append-only；未来 definite=true 事件直接走 saveSegments）=====
+  // ===== 本地实时保存（一分句一行，append-only；definite=true 事件统一走 saveSegments）=====
   const meetingId = meetingTitle ?? "unnamed";
   const seqRef = useRef(-1);
-  const savedCountRef = useRef(0);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [saveInfo, setSaveInfo] = useState({ saved: 0, pending: 0 });
 
@@ -100,6 +104,7 @@ export function MeetingSessionPage() {
     maxSeq(meetingId).then((m) => {
       if (!alive) return;
       seqRef.current = m;
+      if (m >= 0) setSaveInfo((s) => ({ ...s, saved: m + 1 }));
     });
     pendingSegments(meetingId).then((rows) => {
       if (!alive) return;
@@ -110,24 +115,97 @@ export function MeetingSessionPage() {
     };
   }, [meetingId]);
 
+  // ===== Sidecar ASR 对接：模拟分句流（definite=false 更新待定行 / definite=true 定型落库）=====
+  // 待定行：文档末尾保留一个段落，ASR 中间结果实时填充；定型后在其上方插入正式行
+  const pendingBlockIdRef = useRef<string | null>(null);
+
+  const handleUtterance = useCallback(
+    (u: Extract<SidecarToClient, { type: "utterance" }>) => {
+      if (u.definite) {
+        // 定型分句：插入正式行（"发言人：内容"）+ 落本地库（pending）
+        const text = u.speaker ? `${u.speaker}：${u.text}` : u.text;
+        if (pendingBlockIdRef.current) {
+          void editor.insertBlocks(
+            [{ type: "paragraph", content: [{ type: "text", text, styles: {} }] }],
+            pendingBlockIdRef.current,
+            "before",
+          );
+          void editor.updateBlock(pendingBlockIdRef.current, { content: [] });
+        } else {
+          // 无待定行时追加到文档末尾（BlockNote 始终保留至少一个段落）
+          const doc = editor.document;
+          const anchor = doc[doc.length - 1]?.id ?? "";
+          if (anchor) {
+            void editor.insertBlocks(
+              [{ type: "paragraph", content: [{ type: "text", text, styles: {} }] }],
+              anchor,
+              "after",
+            );
+          }
+        }
+        const seq = seqRef.current + 1;
+        void saveSegments(
+          meetingId,
+          [
+            {
+              speaker: u.speaker ?? null,
+              text: u.text,
+              startMs: u.startMs ?? Date.now(),
+            },
+          ],
+          seq,
+        ).then((n) => {
+          if (n > 0) {
+            seqRef.current = seq;
+            setSaveInfo((s) => ({ ...s, saved: s.saved + 1, pending: s.pending + 1 }));
+          }
+        });
+      } else if (pendingBlockIdRef.current) {
+        // 中间结果：更新待定行文本
+        void editor.updateBlock(pendingBlockIdRef.current, {
+          content: u.text ? [{ type: "text", text: u.text, styles: {} }] : [],
+        });
+      }
+    },
+    [editor, meetingId],
+  );
+
+  const {
+    status: asrStatus,
+    start: startAsr,
+    stop: stopAsr,
+  } = useMeetingAsr(meetingId, handleUtterance);
+
+  // 进入会议页：建立 WS 连接并登记 asr.start（编辑器就绪后取末尾段落作为待定行）
+  useEffect(() => {
+    const doc = editor.document;
+    const last = doc[doc.length - 1];
+    if (last?.type === "paragraph") pendingBlockIdRef.current = last.id;
+    if (asrStatus === "idle") startAsr();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, meetingId]);
+
   // 解析编辑器行 → 分句（"发言人：内容" 或纯内容），防抖追加保存
+  // 注：ASR 连接期间转写由 definite=true 事件统一落库，手动输入不再重复写入
   const persistToLocal = (doc: Record<string, unknown>[]) => {
+    if (asrStatus === "live") return;
     const rows = (doc as { type?: string; content?: { text?: string }[] }[])
       .filter((b) => b.type === "paragraph" || b.type === "heading")
       .map((b) => {
         const raw = (b.content?.[0]?.text ?? "").trim();
         const m = raw.match(/^([^：:]{1,12})[：:]\s*(.+)/);
-        return m ? { speaker: m[1], text: m[2] } : { speaker: null, text: raw };
+        return m
+          ? { speaker: m[1], text: m[2], startMs: Date.now() }
+          : { speaker: null, text: raw, startMs: Date.now() };
       })
       .filter((r) => r.text.length > 0);
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      if (rows.length <= savedCountRef.current) return;
-      const newOnes = rows.slice(savedCountRef.current);
+      if (rows.length <= seqRef.current + 1) return;
+      const newOnes = rows.slice(seqRef.current + 1);
       saveSegments(meetingId, newOnes, seqRef.current + 1).then((n) => {
         seqRef.current += newOnes.length;
-        savedCountRef.current = rows.length;
-        setSaveInfo((s) => ({ ...s, saved: savedCountRef.current, pending: s.pending + n }));
+        setSaveInfo((s) => ({ ...s, saved: s.saved + n, pending: s.pending + n }));
       });
     }, 800);
   };
@@ -187,18 +265,20 @@ export function MeetingSessionPage() {
           <span
             className={cn(
               "flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs",
-              session.isPaused
-                ? "bg-amber-500/10 text-amber-600"
-                : "bg-emerald-500/10 text-emerald-600",
+              asrStatus === "live"
+                ? "bg-emerald-500/10 text-emerald-600"
+                : asrStatus === "connecting"
+                  ? "bg-sky-500/10 text-sky-600"
+                  : "bg-zinc-500/10 text-zinc-500",
             )}
           >
             <span
               className={cn(
                 "size-1.5 rounded-full bg-current",
-                !session.isPaused && "animate-pulse",
+                asrStatus === "live" && "animate-pulse",
               )}
             />
-            {session.isPaused ? "已暂停" : "转写中"}
+            {asrStatus === "live" ? "转写中" : asrStatus === "connecting" ? "连接中" : "未连接"}
           </span>
           <Button
             variant="ghost"
@@ -221,7 +301,8 @@ export function MeetingSessionPage() {
           variant="outline"
           size="sm"
           onClick={() => {
-            // 结束会议：清除会话持久化，放行拦截（正常结束流程），标记为「AI 纪要生成中」，回到会议列表页
+            // 结束会议：先通知 sidecar 停止转写并 flush 队列，再清除会话、标记生成中、回列表
+            stopAsr();
             try {
               sessionStorage.removeItem(SESSION_KEY);
             } catch {

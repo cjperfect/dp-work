@@ -1,0 +1,349 @@
+<html style="margin: 0; padding: 0">
+  <title>ASR 转写同步流程（本地优先 + Outbox）</title>
+  <div
+    style="
+      font-family: -apple-system, &quot;PingFang SC&quot;, sans-serif;
+      background: #f6f7f9;
+      min-height: 100%;
+      padding: 24px 20px;
+      box-sizing: border-box;
+    "
+  >
+    <div style="max-width: 1100px; margin: 0 auto">
+      <h1 style="font-size: 20px; margin: 0 0 4px; color: #111">ASR 转写同步流程</h1>
+      <p style="font-size: 13px; margin: 0 0 18px; color: #666">
+        本地优先 + Outbox（发件箱）模式 · 临时文本仅实时展示，确认片段才落库同步
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <!-- 泳道 1：前端 -->
+        <div
+          style="
+            display: flex;
+            align-items: stretch;
+            background: #fff;
+            border: 1px solid #e3e6ea;
+            border-radius: 10px;
+            overflow: hidden;
+          "
+        >
+          <div
+            style="
+              flex: 0 0 130px;
+              background: #eef4ff;
+              border-right: 1px solid #e3e6ea;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 10px;
+              box-sizing: border-box;
+            "
+          >
+            <div style="text-align: center">
+              <div style="font-weight: 600; font-size: 13px; color: #1a4fd8">前端 Renderer</div>
+              <div style="font-size: 11px; color: #7a8aa8; margin-top: 2px">
+                Electron · 实时展示
+              </div>
+            </div>
+          </div>
+          <div
+            style="
+              flex: 1;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              padding: 14px 16px;
+              flex-wrap: wrap;
+            "
+          >
+            <div
+              style="
+                background: #fff;
+                border: 1.5px solid #8ab4ff;
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-size: 12px;
+                text-align: center;
+              "
+            >
+              <div style="font-weight: 600">麦克风采集</div>
+              <div style="color: #888; font-size: 11px">音频流 → Sidecar</div>
+            </div>
+            <span style="font-size: 16px; color: #1a4fd8">→</span>
+            <div
+              style="
+                background: #fff;
+                border: 1.5px dashed #8ab4ff;
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-size: 12px;
+                text-align: center;
+              "
+            >
+              <div style="font-weight: 600">临时文本实时展示</div>
+              <div style="color: #888; font-size: 11px">
+                utterance definite=false · 瞬态 · 不落库
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 泳道 2：本地 -->
+        <div
+          style="
+            display: flex;
+            align-items: stretch;
+            background: #fff;
+            border: 1px solid #e3e6ea;
+            border-radius: 10px;
+            overflow: hidden;
+          "
+        >
+          <div
+            style="
+              flex: 0 0 130px;
+              background: #f0fdf4;
+              border-right: 1px solid #e3e6ea;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 10px;
+              box-sizing: border-box;
+            "
+          >
+            <div style="text-align: center">
+              <div style="font-weight: 600; font-size: 13px; color: #1a7f37">
+                本地 Main + Sidecar
+              </div>
+              <div style="font-size: 11px; color: #6aa27f; margin-top: 2px">ASR 识别 · SQLite</div>
+            </div>
+          </div>
+          <div
+            style="
+              flex: 1;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              padding: 14px 16px;
+              flex-wrap: wrap;
+            "
+          >
+            <div
+              style="
+                background: #fff;
+                border: 1.5px solid #4caf7d;
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-size: 12px;
+                text-align: center;
+              "
+            >
+              <div style="font-weight: 600">豆包流式 ASR 分句</div>
+              <div style="color: #888; font-size: 11px">
+                show_utterances: true · definite=true 即确认
+              </div>
+            </div>
+            <span style="font-size: 16px; color: #1a7f37">→</span>
+            <div
+              style="
+                background: #fff;
+                border: 1.5px solid #4caf7d;
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-size: 12px;
+                text-align: center;
+              "
+            >
+              <div style="font-weight: 600">写入本地 SQLite（Outbox）</div>
+              <div style="color: #888; font-size: 11px">
+                status=pending · idempotency_key=分句 id · attempt=0
+              </div>
+            </div>
+            <span style="font-size: 16px; color: #1a7f37">→</span>
+            <div
+              style="
+                background: #fff;
+                border: 1.5px solid #4caf7d;
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-size: 12px;
+                text-align: center;
+              "
+            >
+              <div style="font-weight: 600">同步 Worker 触发</div>
+              <div style="color: #888; font-size: 11px">定时轮询 · 网络恢复 online 立即 flush</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 泳道 3：后端 -->
+        <div
+          style="
+            display: flex;
+            align-items: stretch;
+            background: #fff;
+            border: 1px solid #e3e6ea;
+            border-radius: 10px;
+            overflow: hidden;
+          "
+        >
+          <div
+            style="
+              flex: 0 0 130px;
+              background: #fff8ed;
+              border-right: 1px solid #e3e6ea;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 10px;
+              box-sizing: border-box;
+            "
+          >
+            <div style="text-align: center">
+              <div style="font-weight: 600; font-size: 13px; color: #b76e00">后端服务</div>
+              <div style="font-size: 11px; color: #a88a5a; margin-top: 2px">纪要生成 · 知识库</div>
+            </div>
+          </div>
+          <div
+            style="
+              flex: 1;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              padding: 14px 16px;
+              flex-wrap: wrap;
+            "
+          >
+            <div
+              style="
+                background: #fff;
+                border: 1.5px solid #f0a33a;
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-size: 12px;
+                text-align: center;
+              "
+            >
+              <div style="font-weight: 600">异步请求后端（JSON-RPC / HTTP）</div>
+              <div style="color: #888; font-size: 11px">按 idempotency_key 幂等去重</div>
+            </div>
+            <span style="font-size: 16px; color: #b76e00">→</span>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <div style="display: flex; align-items: center; gap: 6px">
+                <span style="font-size: 15px; color: #1a7f37">成功</span>
+                <div
+                  style="
+                    background: #e9f9ef;
+                    border: 1.5px solid #4caf7d;
+                    border-radius: 8px;
+                    padding: 6px 10px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: #1a7f37;
+                  "
+                >
+                  标记 status=synced
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+                <span style="font-size: 15px; color: #b76e00">失败</span>
+                <div
+                  style="
+                    background: #fff8ed;
+                    border: 1.5px solid #f0a33a;
+                    border-radius: 8px;
+                    padding: 6px 10px;
+                    font-size: 12px;
+                    color: #8a5a00;
+                  "
+                >
+                  保留 pending · attempt+1 · 指数退避自动重试
+                </div>
+                <span style="font-size: 13px; color: #888">→</span>
+                <div
+                  style="
+                    background: #fdeeee;
+                    border: 1.5px solid #e05d5d;
+                    border-radius: 8px;
+                    padding: 6px 10px;
+                    font-size: 12px;
+                    color: #b02a2a;
+                  "
+                >
+                  超过上限 → failed 人工处理
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- definite 机制 -->
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          background: #fff;
+          border: 1px solid #e3e6ea;
+          border-radius: 10px;
+          padding: 12px 16px;
+          margin-top: 10px;
+          font-size: 12px;
+          color: #333;
+          flex-wrap: wrap;
+        "
+      >
+        <span style="font-weight: 600; color: #1a4fd8">豆包 definite 判定：</span>
+        <span
+          style="
+            background: #eef4ff;
+            border: 1px solid #8ab4ff;
+            border-radius: 6px;
+            padding: 3px 8px;
+          "
+          >definite: false → 中间结果，持续更新界面当前行</span
+        >
+        <span style="color: #bbb">→</span>
+        <span
+          style="
+            background: #f0fdf4;
+            border: 1px solid #4caf7d;
+            border-radius: 6px;
+            padding: 3px 8px;
+          "
+          >definite: true → 分句定型，落库（pending）并异步同步</span
+        >
+      </div>
+
+      <!-- 结束衔接 -->
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          background: #fff;
+          border: 1px dashed #c9d3e8;
+          border-radius: 10px;
+          padding: 12px 16px;
+          margin-top: 10px;
+          font-size: 12px;
+          color: #333;
+          flex-wrap: wrap;
+        "
+      >
+        <span style="font-weight: 600; color: #1a4fd8">会议结束衔接：</span>
+        <span>先 flush 待同步队列</span><span style="color: #bbb">→</span>
+        <span>后端仅用「definite=true 的定型分句」生成会议纪要</span
+        ><span style="color: #bbb">→</span>
+        <span>纪要状态：AI 生成中 → 已生成（可协同编辑 / 转知识库）</span>
+      </div>
+
+      <div style="margin-top: 14px; font-size: 11px; color: #999; line-height: 1.6">
+        示意：临时/确认判定由豆包流式 ASR 的 utterances 分句自带（show_utterances:
+        true）；重试参数（退避间隔、上限次数）按接入侧实际配置；本地库由 Main/Sidecar 持有，Renderer
+        仅经 IPC 读写。
+      </div>
+    </div>
+  </div>
+</html>
