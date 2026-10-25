@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useAuthStore } from "@/stores/auth";
-import { loadAgents, loadThreads, resetAgents } from "@/stores/agent";
+import { loadAgents, loadThreads, resetAgents, useAgentStore } from "@/stores/agent";
 export function AgentBootstrap() {
   const owner = useAuthStore((state) => state.user?.id);
   useEffect(() => {
@@ -11,7 +11,13 @@ export function AgentBootstrap() {
     void loadAgents()
       .then(async () => {
         if (useAuthStore.getState().user?.id !== owner) return;
-        await Promise.all([loadThreads("general"), loadThreads("product")]);
+        const agents = useAgentStore.getState().agents;
+        await Promise.all(
+          agents.map(async (agent) => {
+            await window.desktop?.ensureAgentWorkspace?.(agent.code);
+            await loadThreads(agent.code);
+          }),
+        );
       })
       .catch(() => {});
   }, [owner]);

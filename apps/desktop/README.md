@@ -22,11 +22,16 @@ pnpm dev:desktop
 
 ```text
 .dp-work/
+  workspace/     Agent 独立工作目录
+    general/     通用 Agent
+    product/     产品 Agent
   data/          Electron 持久化数据，包括 localStorage、IndexedDB 等
   logs/          应用日志
     crashes/     崩溃文件
   cache/         Chromium 磁盘缓存
 ```
+
+Agent 加载后通过受限 IPC 创建对应工作目录，目录名使用稳定的 Agent code，修改显示名称不会更换目录；重复启动不会覆盖目录内文件。浏览器网页版不创建本机文件夹。
 
 Token 仍由页面通过 localStorage 保存，文件由 Electron 管理，放在 `data/` 内，不会单独保存为 token 文件。浏览器网页版的站点存储仍由浏览器管理。
 

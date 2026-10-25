@@ -1,10 +1,10 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from "electron";
 import path from "node:path";
 import { mkdirSync, readFileSync } from "node:fs";
 import type { DesktopInfo } from "@dp-work/contracts";
 import { desktopPort, developmentUrl, isAppUrl } from "./config";
 import { startWebServer, waitForWeb } from "./server";
-import { migrateProfile, persistencePaths } from "./persistence";
+import { ensureAgentWorkspace, migrateProfile, persistencePaths } from "./persistence";
 
 let window: BrowserWindow | null = null;
 let webServer: Awaited<ReturnType<typeof startWebServer>> | null = null;
@@ -18,7 +18,13 @@ const storage = persistencePaths(
   app.getPath("home"),
   path.resolve(__dirname, "../../.."),
 );
-for (const directory of [storage.data, storage.logs, storage.cache, storage.crashes])
+for (const directory of [
+  storage.data,
+  storage.logs,
+  storage.cache,
+  storage.crashes,
+  storage.workspace,
+])
   mkdirSync(directory, { recursive: true, mode: 0o700 });
 app.setPath("userData", storage.data);
 app.setPath("sessionData", storage.data);
@@ -73,7 +79,8 @@ async function createWindow(url: string): Promise<void> {
   await window.loadURL(url);
 }
 
-ipcMain.handle("desktop:info", (event): DesktopInfo => {
+/** 检查桌面 IPC 请求来源。 */
+function assertDesktopSender(event: IpcMainInvokeEvent): void {
   if (
     !window ||
     event.sender !== window.webContents ||
@@ -81,11 +88,20 @@ ipcMain.handle("desktop:info", (event): DesktopInfo => {
     !isAppUrl(event.senderFrame.url, origin)
   )
     throw new Error("无效的桌面请求来源。");
+}
+
+ipcMain.handle("desktop:info", (event): DesktopInfo => {
+  assertDesktopSender(event);
   return {
     version: app.getVersion(),
     electron: process.versions.electron,
     platform: process.platform,
   };
+});
+
+ipcMain.handle("desktop:ensure-agent-workspace", (event, agentId: unknown): void => {
+  assertDesktopSender(event);
+  ensureAgentWorkspace(storage.workspace, agentId);
 });
 
 if (!app.requestSingleInstanceLock()) {

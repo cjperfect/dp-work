@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+  existsSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { migrateProfile, persistencePaths } from "../src/persistence";
+import { ensureAgentWorkspace, migrateProfile, persistencePaths } from "../src/persistence";
 
 test("development and packaged storage use their respective .dp-work roots", () => {
   assert.equal(
@@ -12,6 +20,11 @@ test("development and packaged storage use their respective .dp-work roots", () 
   );
   const packaged = persistencePaths(true, "/users/test", "/workspace");
   assert.equal(packaged.data, path.join("/users/test", ".dp-work/data"));
+  assert.equal(packaged.workspace, path.join("/users/test", ".dp-work/workspace"));
+  assert.equal(
+    persistencePaths(false, "/users/test", "/workspace").workspace,
+    path.join("/workspace", ".dp-work/workspace"),
+  );
   assert.equal(packaged.cache, path.join("/users/test", ".dp-work/cache"));
 });
 
@@ -32,6 +45,28 @@ test("migration preserves profiles, existing application data, and the legacy so
     writeFileSync(copied, "newer-data");
     migrateProfile(destination, legacy);
     assert.equal(readFileSync(copied, "utf8"), "newer-data");
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("Agent workspaces are separate and repeated creation preserves existing files", () => {
+  const temporary = mkdtempSync(path.join(tmpdir(), "dp-workspaces-"));
+  try {
+    const workspace = path.join(temporary, "workspace");
+    const general = ensureAgentWorkspace(workspace, "general");
+    const product = ensureAgentWorkspace(workspace, "product");
+    assert.notEqual(general, product);
+    assert.equal(general, path.join(workspace, "general"));
+    writeFileSync(path.join(general, "notes.md"), "existing notes");
+    ensureAgentWorkspace(workspace, "general");
+    assert.equal(readFileSync(path.join(general, "notes.md"), "utf8"), "existing notes");
+    for (const id of ["../escape", "/absolute", "general/child", "..", "", null, 1])
+      assert.throws(() => ensureAgentWorkspace(workspace, id), /标识无效/);
+    const outside = path.join(temporary, "outside");
+    mkdirSync(outside);
+    symlinkSync(outside, path.join(workspace, "linked"), "dir");
+    assert.throws(() => ensureAgentWorkspace(workspace, "linked"), /符号链接/);
   } finally {
     rmSync(temporary, { recursive: true, force: true });
   }

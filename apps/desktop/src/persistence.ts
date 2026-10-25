@@ -2,6 +2,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  lstatSync,
   mkdtempSync,
   readlinkSync,
   renameSync,
@@ -16,6 +17,7 @@ export function persistencePaths(packaged: boolean, home: string, workspace: str
   return {
     root,
     data: path.join(root, "data"),
+    workspace: path.join(root, "workspace"),
     logs: path.join(root, "logs"),
     cache: path.join(root, "cache"),
     crashes: path.join(root, "logs/crashes"),
@@ -60,4 +62,16 @@ export function migrateProfile(destination: string, legacy: string): void {
     }
   }
   writeFileSync(marker, "1\n", { mode: 0o600, flag: "wx" });
+}
+
+/** 创建 Agent 独立工作目录，保留已有文件。 */
+export function ensureAgentWorkspace(workspace: string, agentId: unknown): string {
+  if (typeof agentId !== "string" || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(agentId))
+    throw new Error("Agent 标识无效。");
+  mkdirSync(workspace, { recursive: true, mode: 0o700 });
+  if (lstatSync(workspace).isSymbolicLink()) throw new Error("工作目录不能使用符号链接。");
+  const directory = path.join(workspace, agentId);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  if (lstatSync(directory).isSymbolicLink()) throw new Error("Agent 工作目录不能使用符号链接。");
+  return directory;
 }
