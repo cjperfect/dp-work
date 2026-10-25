@@ -12,13 +12,8 @@ dependencies = [
     "uvicorn[standard]>=0.29",
     "httpx>=0.27",
     "python-dotenv>=1.0",
-]
-
-[project.optional-dependencies]
-asr = [
-    # 豆包流式 ASR 官方 SDK（definite 分句来自 show_utterances）
-    "volcengine-python-sdk[streaming]>=1.0.8",
+    "websockets>=15,<18",
 ]
 
 [tool.setuptools.packages.find]
-include = ["app*"]
+include = ["src*"]

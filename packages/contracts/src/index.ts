@@ -28,56 +28,82 @@ export interface StoredSegment extends TranscriptSegment {
   createdAt: number;
 }
 
-/* ============ Sidecar WebSocket 消息（JSON-RPC 风格） ============ */
+/* ============ Web ↔ Sidecar ASR 协议 ============ */
 
-export interface WsReady {
-  type: "ready";
-  meetingId: string;
+export interface AsrAudioFormat {
+  format: "pcm";
+  sampleRate: 16000;
+  channels: 1;
+  bitsPerSample: 16;
 }
 
-/** 分句事件：definite=false 为中间结果（前端更新当前行，不落库）；true 为定型（已落库 pending） */
-export interface WsUtterance {
-  type: "utterance";
-  definite: boolean;
-  seq?: number;
+export interface AsrSegment {
+  id: string;
+  seq: number;
+  revision: number;
   text: string;
-  speaker?: string | null;
-  startMs?: number;
-  endMs?: number;
+  speakerId: string | null;
+  startMs: number;
+  endMs: number;
+  isFinal: boolean;
 }
-
-export interface WsAudioAck {
-  type: "audio.ack";
-  bytes: number;
-}
-
-export interface WsStopped {
-  type: "stopped";
-  meetingId: string | null;
-}
-
-export type SidecarToClient = WsReady | WsUtterance | WsAudioAck | WsStopped;
-
-/* ============ 客户端 → Sidecar ============ */
 
 export interface WsAsrStart {
   type: "asr.start";
+  requestId: string;
   meetingId: string;
-  sampleRate?: number;
-}
-
-export interface WsAudio {
-  type: "audio";
-  /** base64 PCM */
-  payload: string;
+  audio: AsrAudioFormat;
 }
 
 export interface WsAsrStop {
   type: "asr.stop";
+  requestId: string;
   meetingId: string;
 }
 
-export type ClientToSidecar = WsAsrStart | WsAudio | WsAsrStop;
+export interface WsAsrReady {
+  type: "asr.ready";
+  requestId: string;
+  meetingId: string;
+  sessionId: string;
+  mode: "mock" | "doubao";
+}
+
+/** isFinal=true 的片段已由 Sidecar 保存到 SQLite。 */
+export interface WsAsrTranscript {
+  type: "asr.transcript";
+  meetingId: string;
+  sessionId: string;
+  segment: AsrSegment;
+}
+
+export interface WsAsrStopped {
+  type: "asr.stopped";
+  requestId: string;
+  meetingId: string;
+  sessionId: string;
+  lastFinalSeq: number;
+}
+
+export interface WsAsrSync {
+  type: "asr.sync";
+  meetingId: string;
+  pendingCount: number;
+  status: "pending" | "syncing" | "synced" | "failed";
+}
+
+export interface WsAsrError {
+  type: "asr.error";
+  requestId?: string;
+  meetingId?: string;
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
+/** 音频通过独立的二进制 WebSocket 帧发送，PCM16 小端，建议每帧 200ms。 */
+export type ClientToSidecar = WsAsrStart | WsAsrStop;
+export type SidecarToClient = WsAsrReady | WsAsrTranscript | WsAsrStopped | WsAsrSync | WsAsrError;
 
 /* ============ api 服务（POST /api/segments） ============ */
 

@@ -21,6 +21,7 @@ export type Meeting = {
 };
 export type Entry = {
   id: string;
+  revision?: number;
   seq: number;
   speaker: string | null;
   text: string;

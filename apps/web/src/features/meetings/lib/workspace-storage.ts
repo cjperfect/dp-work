@@ -5,7 +5,7 @@ export type Draft = Workspace & {
   dirtyControls: boolean;
   dirtyMinutes: boolean;
   dirtyEntries: string[];
-  temporary: { speaker: string; text: string };
+  temporary: { id?: string; seq?: number; revision?: number; speaker: string; text: string };
   flight: { version: number; payload: SyncPayload } | null;
   error: string | null;
 };

@@ -20,6 +20,7 @@ export function persistencePaths(packaged: boolean, home: string, workspace: str
     workspace: path.join(root, "workspace"),
     logs: path.join(root, "logs"),
     cache: path.join(root, "cache"),
+    temp: path.join(root, "temp"),
     crashes: path.join(root, "logs/crashes"),
   };
 }

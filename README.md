@@ -111,8 +111,8 @@ uvicorn app.main:app --port 8000
 
 ```bash
 cd services/sidecar && python -m venv .venv && source .venv/bin/activate && pip install -e .
-cp .env.example .env        # MOCK_ASR=1 为 mock 流；改 0 并填 VOLC_* 凭证接真实 ASR
-uvicorn app.main:app --port 8001
+cp .env.example .env        # MOCK_ASR=1 验证协议，真实豆包识别待接入
+uvicorn src.main:app --host 127.0.0.1 --port 8001
 ```
 
 ### 4. Web 前端（:3000）

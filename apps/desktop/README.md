@@ -29,6 +29,7 @@ pnpm dev:desktop
   logs/          应用日志
     crashes/     崩溃文件
   cache/         Chromium 磁盘缓存
+  temp/          未确认的 ASR 临时片段
 ```
 
 Agent 加载后通过受限 IPC 创建对应工作目录，目录名使用稳定的 Agent code，修改显示名称不会更换目录；重复启动不会覆盖目录内文件。浏览器网页版不创建本机文件夹。

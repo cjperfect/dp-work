@@ -60,8 +60,8 @@ export function SaveStatus({
             : pending
               ? "本地已保存 · 待同步"
               : draft.temporary.text
-                ? "临时文字已本地保存 · 尚未确认"
-                : "本地已保存 · 已同步"}
+                ? "识别中 · 临时文字尚未确认"
+                : "本地已保存"}
       </span>
       {(pending || draft.error || !draft.localSaved) && (
         <Button size="xs" variant="outline" onClick={() => void run()} disabled={busy}>

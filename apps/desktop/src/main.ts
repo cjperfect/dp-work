@@ -22,6 +22,7 @@ for (const directory of [
   storage.data,
   storage.logs,
   storage.cache,
+  storage.temp,
   storage.crashes,
   storage.workspace,
 ])

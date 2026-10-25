@@ -30,7 +30,9 @@
     "dev:desktop": "pnpm --filter @dp-work/desktop dev",
     "build:desktop": "pnpm --filter @dp-work/desktop build && pnpm --filter @dp-work/desktop build:web",
     "package:desktop": "pnpm --filter @dp-work/desktop package",
-    "package:desktop:dir": "pnpm --filter @dp-work/desktop package:dir"
+    "package:desktop:dir": "pnpm --filter @dp-work/desktop package:dir",
+    "dev:sidecar": "cd services/sidecar && .venv/bin/python -m uvicorn src.main:app --reload --host 127.0.0.1 --port 8001",
+    "test:sidecar": "cd services/sidecar && .venv/bin/python -m unittest discover -s tests -v"
   },
   "lint-staged": {
     "*.{js,mjs,cjs,ts,tsx}": [

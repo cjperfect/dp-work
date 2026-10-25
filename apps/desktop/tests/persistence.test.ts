@@ -26,6 +26,11 @@ test("development and packaged storage use their respective .dp-work roots", () 
     path.join("/workspace", ".dp-work/workspace"),
   );
   assert.equal(packaged.cache, path.join("/users/test", ".dp-work/cache"));
+  assert.equal(packaged.temp, path.join("/users/test", ".dp-work/temp"));
+  assert.equal(
+    persistencePaths(false, "/users/test", "/workspace").temp,
+    path.join("/workspace", ".dp-work/temp"),
+  );
 });
 
 test("migration preserves profiles, existing application data, and the legacy source", () => {

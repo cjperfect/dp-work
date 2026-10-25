@@ -208,13 +208,30 @@ export function useWorkspace(id: string | undefined) {
     },
     [id, accountId, editable],
   );
+  const preview = useCallback(
+    (update: (current: Draft) => Draft) => {
+      if (!id || !accountId || !editable) return;
+      useMeetingCache.setState((state) => {
+        const cacheKey = key(accountId, id);
+        const current = state.records[cacheKey];
+        if (!current) return state;
+        return {
+          records: {
+            ...state.records,
+            [cacheKey]: { ...update(current), localSaved: current.localSaved },
+          },
+        };
+      });
+    },
+    [id, accountId, editable],
+  );
   const retry = useCallback(async () => {
     if (!id || !accountId) return;
     const current = useMeetingCache.getState().records[key(accountId, id)];
     if (current && !current.localSaved) await persist(current);
     await flushMeeting(accountId, id);
   }, [id, accountId]);
-  return { draft, loading, error, change, retry, accountId, editable };
+  return { draft, loading, error, change, preview, retry, accountId, editable };
 }
 export function cacheCreated(workspace: Workspace) {
   return persist(localDraft(workspace));

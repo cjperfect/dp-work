@@ -16,11 +16,17 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { duration, elapsed, generateMinutes, applyGeneratedMinutes } from "@/apis/meetings";
 import { useWorkspace } from "@/stores/meetings";
 import { control } from "../lib/recording";
+import { useMeetingAsr } from "../hooks/use-meeting-asr";
+import { applyAsrTranscript } from "../lib/asr-transcript";
 import { SaveStatus } from "./workspace-parts";
 
 export function MeetingSessionPage() {
   const { id } = useSearch({ from: "/_app/meetings/active" });
-  const { draft, loading, error, change, retry, editable } = useWorkspace(id);
+  const { draft, loading, error, change, preview, retry, editable } = useWorkspace(id);
+  const asr = useMeetingAsr(id ?? "", (message) => {
+    if (message.segment.isFinal) return change((current) => applyAsrTranscript(current, message));
+    preview((current) => applyAsrTranscript(current, message));
+  });
   const navigate = useNavigate();
   const [now, setNow] = useState(Date.now);
   const [end, setEnd] = useState(false);
@@ -40,55 +46,48 @@ export function MeetingSessionPage() {
       if (target) target.scrollTop = target.scrollHeight;
     }
   }, [following, draft?.segments.length, draft?.temporary.text]);
-  useEffect(() => {
-    if (!editable || draft?.meeting.status !== "active" || draft.segments.length >= 4) return;
-    const samples = [
-      "今天先讨论会议记录和纪要协作的完整流程。",
-      "会议结束后生成纪要，并用重点导图回顾结论。",
-      "分享支持阅读和编辑，便于同事补充内容。",
-      "后续按计划完成验收，并归档到对应知识库。",
-    ];
-    let partial = true;
-    const timer = setInterval(() => {
-      void change((current) => {
-        if (current.meeting.status !== "active" || current.segments.length >= samples.length)
-          return current;
-        const seq = current.segments.length;
-        if (partial) {
-          partial = false;
-          return {
-            ...current,
-            temporary: {
-              speaker: `说话人 ${(seq % 2) + 1}`,
-              text: samples[seq].slice(0, 12) + "…",
-            },
-          };
-        }
-        partial = true;
-        const entry = {
-          id: crypto.randomUUID(),
-          seq,
-          speaker: `说话人 ${(seq % 2) + 1}`,
-          text: samples[seq],
-          start_ms: Math.floor(elapsed(current.meeting)),
-        };
-        return {
-          ...current,
-          segments: [...current.segments, entry],
-          dirtyEntries: [...current.dirtyEntries, entry.id],
+  async function startTranscription() {
+    setActionError(null);
+    try {
+      await asr.start();
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "启动转写失败。");
+    }
+  }
+  async function toggleRecording() {
+    if (!editable || actionLock.current) return;
+    actionLock.current = true;
+    setBusy(true);
+    setActionError(null);
+    try {
+      if (draft?.meeting.status === "active") {
+        if (asr.status === "live" || asr.status === "connecting") await asr.stop();
+        await change((current) => ({
+          ...control(current, "paused"),
           temporary: { speaker: "", text: "" },
-        };
-      });
-    }, 2000);
-    return () => clearInterval(timer);
-  }, [editable, draft?.meeting.status, draft?.segments.length, change]);
+        }));
+      } else {
+        await change((current) => control(current, "active"));
+        await asr.start();
+      }
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "暂停或恢复失败。");
+    } finally {
+      actionLock.current = false;
+      setBusy(false);
+    }
+  }
   async function finish() {
     if (!editable || actionLock.current) return;
     actionLock.current = true;
     setBusy(true);
     setActionError(null);
     try {
-      await change((current) => control(current, "ended"));
+      if (asr.status === "live" || asr.status === "connecting") await asr.stop();
+      await change((current) => ({
+        ...control(current, "ended"),
+        temporary: { speaker: "", text: "" },
+      }));
       setEnd(false);
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "结束失败，请重试");
@@ -145,7 +144,7 @@ export function MeetingSessionPage() {
               <h1 className="text-lg font-semibold">{draft.meeting.title}</h1>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              {ended ? "会议已结束" : live ? "会议进行中" : "会议已暂停"} · ASR 模拟转写
+              {ended ? "会议已结束" : live ? "会议进行中" : "会议已暂停"} · 模拟转写
             </p>
           </div>
         </div>
@@ -154,14 +153,26 @@ export function MeetingSessionPage() {
             <Clock3 className="size-4 text-muted-foreground" />
             {duration(elapsed(draft.meeting, now))}
           </span>
+          {!ended && live && ["idle", "stopped", "error"].includes(asr.status) && (
+            <Button
+              variant="outline"
+              disabled={!editable || busy}
+              onClick={() => void startTranscription()}
+            >
+              {asr.status === "error" ? "重试转写" : "开始转写"}
+            </Button>
+          )}
+          {["connecting", "stopping"].includes(asr.status) && (
+            <span role="status" className="text-xs text-muted-foreground">
+              {asr.status === "connecting" ? "正在连接转写服务…" : "正在保存最后的转写…"}
+            </span>
+          )}
           {!ended && (
             <>
               <Button
                 variant="outline"
                 disabled={!editable || busy || generating}
-                onClick={() =>
-                  void change((current) => control(current, live ? "paused" : "active"))
-                }
+                onClick={() => void toggleRecording()}
               >
                 {live ? <Pause className="size-4" /> : <Play className="size-4" />}
                 {live ? "暂停" : "恢复"}
@@ -239,6 +250,21 @@ export function MeetingSessionPage() {
         </div>
       </header>
       <SaveStatus draft={draft} retry={retry} editable={editable} />
+      <p role="status" className="text-xs text-muted-foreground">
+        {ended
+          ? "转写已结束"
+          : !live
+            ? "转写已暂停"
+            : asr.status === "live"
+              ? "模拟识别中 · 未采集麦克风音频"
+              : "点击开始转写，预览模拟识别效果。"}
+        {asr.sync && ` · 本地待同步 ${asr.sync.pendingCount} 个片段`}
+      </p>
+      {asr.error && (
+        <p role="alert" className="text-sm text-destructive">
+          {asr.error}
+        </p>
+      )}
       {!editable && (
         <p role="status" className="text-sm text-amber-700">
           当前为只读模式：另一标签页可能正在编辑。关闭该页面后刷新可继续记录。
