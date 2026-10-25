@@ -15,7 +15,22 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "dev:api": "cd services/api && .venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
+    "dev:https": "pnpm --filter @dp-work/web dev:https",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && docker compose up -d",
+    "migrate": "cd services/api && .venv/bin/python -m alembic upgrade head",
+    "migrate:generate": "cd services/api && .venv/bin/python -m alembic revision --autogenerate",
+    "migrate:revert": "cd services/api && .venv/bin/python -m alembic downgrade -1",
+    "migrate:check": "cd services/api && .venv/bin/python -m alembic check",
+    "migrate:current": "cd services/api && .venv/bin/python -m alembic current",
+    "migrate:history": "cd services/api && .venv/bin/python -m alembic history",
+    "dev:desktop": "pnpm --filter @dp-work/desktop dev",
+    "build:desktop": "pnpm --filter @dp-work/desktop build && pnpm --filter @dp-work/desktop build:web",
+    "package:desktop": "pnpm --filter @dp-work/desktop package",
+    "package:desktop:dir": "pnpm --filter @dp-work/desktop package:dir"
   },
   "lint-staged": {
     "*.{js,mjs,cjs,ts,tsx}": [
@@ -30,11 +45,14 @@
     "@commitlint/config-conventional": "^21.2.4",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.13.0",
-    "eslint-config-next": "^16.4.2",
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
     "prettier": "^3.9.10",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^16.0.0"
   }
 }

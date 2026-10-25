@@ -9,19 +9,20 @@ from app.modules.users.models import User
 
 
 def _session(user: User) -> dict:
+    """生成用户登录会话。"""
     return {
         "token": create_access_token(user.id, user.role, user.department),
         "user": user.to_public(),
     }
 
 
-async def register(username: str, password: str) -> dict:
+async def register(username: str, password: str, department: str = "unassigned") -> dict:
+    """注册用户。"""
     try:
         user = await users_service.create_user(
             username=username,
             password=password,
-            display_name=username,
-            department="unassigned",
+            department=department,
             role="member",
             allow_existing=False,
         )
@@ -33,6 +34,7 @@ async def register(username: str, password: str) -> dict:
 
 
 async def login(username: str, password: str) -> dict:
+    """验证账号并登录。"""
     user = await users_service.find_by_username(username)
     if user is None or not verify_password(password, user.password_hash):
         raise ApiError(ApiCode.BAD_CREDENTIALS, "用户名或密码错误", 401)
@@ -42,10 +44,11 @@ async def login(username: str, password: str) -> dict:
 
 
 async def refresh(token: str) -> dict:
+    """刷新访问令牌。"""
     payload = decode_token(token)
     if payload is None or not payload.get("sub"):
         raise ApiError(ApiCode.TOKEN_EXPIRED, "登录已过期，请重新登录", 401)
-    user = await users_service.find_by_id(str(payload["sub"]))
+    user = await users_service.find_by_subject(payload["sub"], payload.get("uidv"))
     if user is None or not user.is_active:
         raise ApiError(ApiCode.UNAUTHORIZED, "账号不存在或已停用", 401)
     return {"token": create_access_token(user.id, user.role, user.department)}

@@ -8,13 +8,17 @@ from .models import User
 
 
 class UserRepository:
+    """用户数据访问。"""
     def __init__(self, db_session: AsyncSession):
+        """接收数据库会话。"""
         self.session = db_session
 
     async def find_by_username(self, username: str) -> User | None:
+        """按用户名查询用户。"""
         return await self.session.scalar(select(User).where(User.username == username))
 
-    async def find_by_id(self, user_id: str) -> User | None:
+    async def find_by_id(self, user_id: int) -> User | None:
+        """按用户 ID 查询用户。"""
         return await self.session.get(User, user_id)
 
     async def insert(
@@ -22,17 +26,15 @@ class UserRepository:
         *,
         username: str,
         password_hash: str,
-        display_name: str,
         department: str,
         role: str,
     ) -> User | None:
+        """新增用户，重名时跳过。"""
         statement = (
             insert(User)
             .values(
-                id=f"u-{username}",
                 username=username,
                 password_hash=password_hash,
-                display_name=display_name,
                 department=department,
                 role=role,
             )
@@ -42,14 +44,16 @@ class UserRepository:
         return (await self.session.scalars(statement)).one_or_none()
 
     async def list_public(self) -> list[dict]:
+        """查询用户公开信息列表。"""
         result = await self.session.execute(
             select(
                 User.id,
                 User.username,
-                User.display_name,
                 User.department,
                 User.role,
                 User.status,
+                User.created_at,
+                User.updated_at,
             ).order_by(User.created_at)
         )
         return [dict(row) for row in result.mappings()]

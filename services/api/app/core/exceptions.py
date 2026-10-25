@@ -18,6 +18,7 @@ class ApiError(Exception):
     """业务错误：携带 code / message / http status_code。"""
 
     def __init__(self, code: int, message: str, status_code: int = 400) -> None:
+        """初始化业务异常。"""
         super().__init__(message)
         self.code = code
         self.message = message
@@ -25,10 +26,11 @@ class ApiError(Exception):
 
 
 def register_exception_handlers(app: FastAPI) -> None:
-    """注册全局异常过滤器（docs/api-architecture.md §6）。"""
+    """注册全局异常处理器。"""
 
     @app.exception_handler(ApiError)
     async def api_error_handler(_: Request, exc: ApiError) -> JSONResponse:
+        """处理业务异常。"""
         return JSONResponse(
             status_code=exc.status_code,
             content={"code": exc.code, "message": exc.message, "data": None},
@@ -39,18 +41,29 @@ def register_exception_handlers(app: FastAPI) -> None:
         _: Request, exc: RequestValidationError
     ) -> JSONResponse:
         # 校验失败：code=1002，data 带字段级明细（供前端定位）
+        """处理请求参数校验异常。"""
         return JSONResponse(
             status_code=422,
             content={
                 "code": ApiCode.VALIDATION_ERROR,
                 "message": "请求参数校验失败",
-                "data": jsonable_encoder(exc.errors()),
+                "data": jsonable_encoder(
+                    [
+                        {
+                            "loc": error["loc"],
+                            "msg": error["msg"],
+                            "type": error["type"],
+                        }
+                        for error in exc.errors()
+                    ]
+                ),
             },
         )
 
     @app.exception_handler(HTTPException)
     async def http_error_handler(_: Request, exc: HTTPException) -> JSONResponse:
         # 第三方/未覆盖的 HTTPException：按状态码映射，detail 不泄堆栈
+        """处理 HTTP 异常。"""
         status = exc.status_code
         if status == 401:
             code, message = ApiCode.UNAUTHORIZED, "未登录或凭证无效"
@@ -68,6 +81,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(Exception)
     async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
         # 兜底：完整堆栈只留服务端日志，客户端仅见 5000
+        """处理未捕获异常。"""
         log.exception(
             "unhandled error: %s %s", request.method, request.url.path, exc_info=exc
         )

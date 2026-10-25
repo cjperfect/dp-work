@@ -12,8 +12,8 @@ services:
     restart: unless-stopped
     environment:
       # 按需修改（生产环境务必使用强密码）
-      POSTGRES_USER: dp
-      POSTGRES_PASSWORD: dp_dev_password
+      POSTGRES_USER: chenjiang
+      POSTGRES_PASSWORD: chenjiang
       POSTGRES_DB: dp_work
     ports:
       - "5432:5432"
@@ -22,7 +22,7 @@ services:
       # 首次启动仅启用 vector 扩展，业务表通过 API 的 Alembic 迁移创建
       - ./infra/postgres/bootstrap:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dp -d dp_work"]
+      test: ["CMD-SHELL", "pg_isready -U chenjiang -d dp_work"]
       interval: 5s
       timeout: 5s
       retries: 5

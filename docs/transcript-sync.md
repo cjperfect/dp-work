@@ -68,5 +68,5 @@ PostgreSQL（定稿）
 - [ ] 定 Sidecar JSON-RPC 协议：`asr.stream` / `asr.utterance`（含 definite）/ `outbox.flush` / `outbox.poll`
 - [ ] Electron Main 建 SQLite（dp.db / outbox）：schema + `getDataDir()` 路径解析
 - [ ] 后端批量写入接口：幂等 upsert + 权限校验（上行时服务端强制）
-- [ ] Postgres 表结构：transcript_segments（append-only）等，写入 `infra/postgres/init/`
+- [x] Postgres 表结构：transcript_segments（append-only）等，统一由 `services/api/migrations`（Alembic）管理，旧库基线快照见 `services/api/tests/fixtures/legacy_schema.sql`
 - [ ] 前端：BlockNote 待定行逻辑（definite=false 更新 / definite=true 定型落库）

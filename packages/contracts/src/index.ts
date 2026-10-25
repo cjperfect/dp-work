@@ -79,7 +79,7 @@ export interface WsAsrStop {
 
 export type ClientToSidecar = WsAsrStart | WsAudio | WsAsrStop;
 
-/* ============ api 服务（POST /api/v1/segments） ============ */
+/* ============ api 服务（POST /api/segments） ============ */
 
 export interface SegmentInput {
   id?: string;
@@ -103,7 +103,9 @@ export interface SegmentsBatchResult {
 /** Sidecar → api 上行协议常量（字段名与 Python 端对齐） */
 export const SYNC_API = {
   /** 批量上行端点 */
-  segmentsPath: "/api/v1/segments",
+  segmentsPath: "/api/segments",
   /** 每批最大分句数 */
   batchSize: 200,
 } as const;
+
+export type { DesktopInfo, DesktopBridge } from "./desktop";

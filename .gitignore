@@ -51,3 +51,7 @@ packages/**/dist/
 
 # TanStack Router generator temporary files
 .tanstack/
+
+# Electron / desktop Next.js build
+.next-desktop
+apps/desktop/release/

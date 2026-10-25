@@ -7,14 +7,15 @@ from typing import Annotated
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import Depends, FastAPI, Request
+from httpx import ASGITransport, AsyncClient
+from pydantic import BaseModel
+
 from app.core.exceptions import register_exception_handlers
 from app.core.security import create_access_token
 from app.decorators import require_user
 from app.modules.auth import dependencies
 from app.modules.users.models import User
-from fastapi import Depends, FastAPI, Request
-from httpx import ASGITransport, AsyncClient
-from pydantic import BaseModel
 
 
 class GuardBody(BaseModel):
@@ -26,10 +27,9 @@ def guarded_app(monkeypatch):
     application = FastAPI()
     register_exception_handlers(application)
     user = User(
-        id="guard-user",
+        id=101,
         username="guard",
         password_hash="unused",
-        display_name="Guard",
         department="finance",
         role="admin",
         status=0,
@@ -143,7 +143,6 @@ def test_sync_endpoint_and_openapi(guarded_app):
     assert {p["name"] for p in schema["parameters"]} == {
         "item_id",
         "limit",
-        "Authorization",
     }
     assert schema["requestBody"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/GuardBody"

@@ -6,17 +6,16 @@ from app.core.exceptions import ApiError
 from app.core.responses import ApiCode
 from app.infrastructure.database import session
 from app.modules.auth.router import router as auth_router
-from app.modules.meetings.router import placeholder_router
-from app.modules.meetings.router import router as meetings_router
-from app.modules.users.router import router as users_router
+from app.modules.knowledge.router import router as knowledge_router
 
 api_router = APIRouter()
-for router in (auth_router, users_router, meetings_router, placeholder_router):
+for router in (auth_router, knowledge_router):
     api_router.include_router(router)
 
 
 @api_router.get("/health")
 async def health() -> dict:
+    """检查服务健康状态。"""
     try:
         healthy = await session.is_healthy()
         return {"ok": healthy, "db": "up" if healthy else "down"}
@@ -30,4 +29,5 @@ async def health() -> dict:
     include_in_schema=False,
 )
 async def not_found(full_path: str) -> None:
+    """处理未注册的接口请求。"""
     raise ApiError(ApiCode.NOT_FOUND, "资源不存在", 404)

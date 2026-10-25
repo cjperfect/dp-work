@@ -5,6 +5,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):
+    """ORM 模型公共基类。"""
     metadata = MetaData(
         naming_convention={
             "pk": "%(table_name)s_pkey",

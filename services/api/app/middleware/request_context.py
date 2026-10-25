@@ -1,11 +1,4 @@
-"""拦截器：RequestContext 中间件 —— X-Request-ID、计时、访问日志、上下文注入。
-
-docs/api-architecture.md §5.1。认证在守卫层完成，中间件只做横切观察。
-
-实现说明：使用纯 ASGI 中间件（而非 starlette BaseHTTPMiddleware），
-保证业务在**同一事件循环**内执行——asyncpg 连接池绑定创建时的 loop，
-BaseHTTPMiddleware 的独立任务会触发 "attached to a different loop"。
-"""
+"""请求上下文与访问日志中间件。"""
 
 from __future__ import annotations
 
@@ -20,10 +13,13 @@ log = logging.getLogger("api.access")
 
 
 class RequestContextMiddleware:
+    """管理请求上下文和访问日志。"""
     def __init__(self, app: ASGIApp) -> None:
+        """保存下游 ASGI 应用。"""
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """处理请求上下文并记录访问日志。"""
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -37,6 +33,7 @@ class RequestContextMiddleware:
         status_sent: dict[str, int | None] = {"code": None}
 
         def send_with_rid(message: dict) -> None:  # type: ignore[type-arg]
+            """向响应添加请求 ID。"""
             if message["type"] == "http.response.start":
                 status_sent["code"] = message.get("status")
                 headers = message.setdefault("headers", [])

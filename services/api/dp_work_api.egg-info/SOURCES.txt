@@ -10,8 +10,13 @@ app/core/exceptions.py
 app/core/logging.py
 app/core/responses.py
 app/core/security.py
+app/decorators/__init__.py
+app/decorators/auth.py
 app/infrastructure/__init__.py
 app/infrastructure/database/__init__.py
+app/infrastructure/database/base.py
+app/infrastructure/database/baseline.py
+app/infrastructure/database/model_registry.py
 app/infrastructure/database/session.py
 app/middleware/__init__.py
 app/middleware/request_context.py
@@ -27,6 +32,7 @@ app/modules/departments/__init__.py
 app/modules/knowledge/__init__.py
 app/modules/meetings/__init__.py
 app/modules/meetings/exceptions.py
+app/modules/meetings/models.py
 app/modules/meetings/repository.py
 app/modules/meetings/router.py
 app/modules/meetings/schemas.py

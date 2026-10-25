@@ -10,12 +10,12 @@ log = logging.getLogger(__name__)
 
 
 async def ensure_initial_admin() -> None:
+    """初始化管理员账号。"""
     if not config.BOOTSTRAP_ADMIN_ENABLED:
         return
     user = await service.create_user(
         username=config.BOOTSTRAP_ADMIN_USERNAME,
         password=config.BOOTSTRAP_ADMIN_PASSWORD,
-        display_name="管理员",
         department="platform",
         role="admin",
         allow_existing=True,

@@ -1,0 +1,9 @@
+@@ -71,7 +71,7 @@
+     (0, _navigator.traverse)(window.location.href, state.__PRIVATE_NEXTJS_INTERNALS_TREE);
+ }
+ function HistoryUpdater({ appRouterState }) {
+-    (0, _react.useInsertionEffect)(()=>{
++    (0, _react.useEffect)(()=>{
+         if (process.env.__NEXT_APP_NAV_FAIL_HANDLING) {
+             // clear pending URL as navigation is no longer
+             // in flight

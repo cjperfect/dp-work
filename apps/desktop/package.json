@@ -1,0 +1,71 @@
+{
+  "name": "@dp-work/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "\u4f01\u4e1a Agent \u5e73\u53f0\u684c\u9762\u5ba2\u6237\u7aef",
+  "author": "DP Work",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "pnpm build && node scripts/dev.mjs",
+    "build": "pnpm --filter @dp-work/contracts build && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:web": "node scripts/prepare-web.mjs",
+    "start": "electron .",
+    "preview": "pnpm build && node scripts/preview.mjs",
+    "package": "pnpm build && pnpm build:web && electron-builder",
+    "package:dir": "pnpm build && pnpm build:web && electron-builder --dir",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@dp-work/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "electron": "45.0.0",
+    "electron-builder": "26.18.0",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "vite": "^6.0.0"
+  },
+  "build": {
+    "appId": "com.dpwork.desktop",
+    "productName": "DP Work",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build",
+        "to": ".",
+        "filter": [
+          "web/**/*",
+          "web-config.json"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office"
+    }
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

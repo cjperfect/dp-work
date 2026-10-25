@@ -17,12 +17,14 @@ _ITERATIONS = 200_000
 
 
 def hash_password(password: str) -> str:
+    """生成密码哈希。"""
     salt = os.urandom(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, _ITERATIONS)
     return f"pbkdf2_sha256${_ITERATIONS}${salt.hex()}${digest.hex()}"
 
 
 def verify_password(password: str, stored: str) -> bool:
+    """验证密码。"""
     try:
         algo, iterations_s, salt_hex, hash_hex = stored.split("$")
         if algo != "pbkdf2_sha256":
@@ -37,10 +39,12 @@ def verify_password(password: str, stored: str) -> bool:
         return False
 
 
-def create_access_token(sub: str, role: str, dept: str) -> str:
+def create_access_token(sub: int, role: str, dept: str) -> str:
+    """签发访问令牌。"""
     now = int(time.time())
     payload: dict[str, Any] = {
-        "sub": sub,
+        "sub": str(sub),
+        "uidv": 2,
         "role": role,
         "dept": dept,
         "iat": now,
@@ -50,7 +54,7 @@ def create_access_token(sub: str, role: str, dept: str) -> str:
 
 
 def decode_token(token: str) -> dict[str, Any] | None:
-    """解析并校验 JWT；失败返回 None（原因由调用方映射 code）。"""
+    """解析并验证访问令牌。"""
     try:
         return jwt.decode(token, config.JWT_SECRET, algorithms=[config.JWT_ALG])
     except jwt.ExpiredSignatureError:

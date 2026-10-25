@@ -14,15 +14,12 @@ from app.modules.users.models import User
 def require_user(
     *, roles: tuple[str, ...] = (), departments: tuple[str, ...] = ()
 ) -> Callable:
-    """校验有效用户；同类权限满足任意一个，角色与部门同时指定时须同时满足。
-
-    当前用户由 get_current_user 写入 request.state.user；需要参数注入时仍可
-    使用 Annotated[User, Depends(get_current_user)]，同请求会复用依赖结果。
-    """
+    """为接口添加用户权限校验。"""
     role_guard = require_role(*roles) if roles else None
     dept_guard = require_dept(*departments) if departments else None
 
     async def authorize(user: Annotated[User, Depends(get_current_user)]) -> User:
+        """校验用户角色和部门权限。"""
         if role_guard:
             await role_guard(user)
         if dept_guard:
@@ -30,6 +27,7 @@ def require_user(
         return user
 
     def decorate(endpoint: Callable) -> Callable:
+        """为接口注册鉴权依赖。"""
         original = signature(endpoint)
         if any(
             parameter.kind in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD)
@@ -59,6 +57,7 @@ def require_user(
 
             @wraps(endpoint)
             async def wrapped(*args, **kwargs):
+                """调用原接口函数。"""
                 kwargs.pop(dependency_name, None)
                 return await endpoint(*args, **kwargs)
 
@@ -66,6 +65,7 @@ def require_user(
 
             @wraps(endpoint)
             def wrapped(*args, **kwargs):
+                """调用原接口函数。"""
                 kwargs.pop(dependency_name, None)
                 return endpoint(*args, **kwargs)
 

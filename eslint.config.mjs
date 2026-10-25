@@ -1,34 +1,54 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import js from "@eslint/js";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
-import eslintConfigPrettier from "eslint-config-prettier/flat";
+import tseslint from "typescript-eslint";
+import reactHooks from "eslint-plugin-react-hooks";
+import reactRefresh from "eslint-plugin-react-refresh";
+import globals from "globals";
+import prettier from "eslint-config-prettier/flat";
 
 export default defineConfig([
   globalIgnores([
     "**/node_modules/**",
+    ".dp-work/**",
+    "**/.tanstack/**",
     "**/.next/**",
-    "**/out/**",
-    "**/build/**",
+    "**/.next-desktop/**",
     "**/dist/**",
+    "**/build/**",
+    "**/release/**",
     "**/coverage/**",
     "**/routeTree.gen.ts",
     "**/public/pdf/pdf.worker*.mjs",
   ]),
   js.configs.recommended,
-  ...nextVitals,
-  ...nextTs,
+  ...tseslint.configs.recommended,
   {
+    files: ["**/*.{js,mjs,cjs,ts,tsx}"],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
     rules: {
-      // App Router 项目没有 pages 目录，eslint-config-next 的该规则误报
-      "@next/next/no-html-link-for-pages": "off",
-      // 允许 catch {} 吞异常（模板与工具代码的常见写法）
       "no-empty": ["error", { allowEmptyCatch: true }],
-      // eslint-plugin-react-hooks 6.x 新增规则，与 useRef 缓存值、
-      // effect 内同步 setState 的常见 React 模式冲突，关闭避免误报
-      "react-hooks/refs": "off",
-      "react-hooks/set-state-in-effect": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
     },
   },
-  eslintConfigPrettier,
+  {
+    files: ["apps/web/src/**/*.{ts,tsx}"],
+    plugins: { "react-hooks": reactHooks, "react-refresh": reactRefresh },
+    rules: {
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
+      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+    },
+  },
+  {
+    files: ["apps/web/src/routes/**/*.tsx"],
+    rules: { "react-refresh/only-export-components": ["warn", { allowExportNames: ["Route"] }] },
+  },
+  {
+    files: ["apps/web/src/components/ui/**/*.tsx", "apps/web/src/components/assistant-ui/**/*.tsx"],
+    rules: { "react-refresh/only-export-components": "off" },
+  },
+  prettier,
 ]);

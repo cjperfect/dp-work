@@ -17,13 +17,13 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 # ---- 数据库 ----
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
-    "postgresql://dp:dp_dev_password@localhost:5432/dp_work",
+    "postgresql://chenjiang:chenjiang@localhost:5432/dp_work",
 )
 
 # ---- 认证 / JWT ----
 JWT_SECRET = os.environ.get("JWT_SECRET", "dp-dev-insecure-secret-change-me")
 JWT_ALG = os.environ.get("JWT_ALG", "HS256")
-JWT_TTL_SECONDS = int(os.environ.get("JWT_TTL_SECONDS", "7200"))  # 2h
+JWT_TTL_SECONDS = int(os.environ.get("JWT_TTL_SECONDS", "604800"))  # 一周
 
 # ---- 初始管理员（只创建，不重置已有账号） ----
 BOOTSTRAP_ADMIN_ENABLED = os.environ.get("BOOTSTRAP_ADMIN_ENABLED", "1") == "1"
@@ -39,3 +39,9 @@ CORS_ORIGINS = [
     ).split(",")
     if o.strip()
 ]
+
+# RSA 私钥仅供服务端保存；多实例部署必须挂载同一份私钥。
+CREDENTIAL_PRIVATE_KEY_FILE = os.environ.get(
+    "CREDENTIAL_PRIVATE_KEY_FILE",
+    str(Path(__file__).resolve().parents[4] / ".dp-work/keys/auth-transport.pem"),
+)

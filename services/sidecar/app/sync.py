@@ -37,7 +37,7 @@ def _sync_once(meeting_id: str) -> None:
         ],
     }
     try:
-        resp = httpx.post(f"{API_BASE}/api/v1/segments", json=payload, timeout=15)
+        resp = httpx.post(f"{API_BASE}/api/segments", json=payload, timeout=15)
         resp.raise_for_status()
     except httpx.HTTPError as e:
         log.warning("上行失败（保留 pending，下次重试）: %s", e)

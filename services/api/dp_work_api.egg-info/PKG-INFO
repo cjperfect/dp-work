@@ -9,6 +9,7 @@ Requires-Dist: asyncpg>=0.29
 Requires-Dist: sqlalchemy[asyncio]<3,>=2.0
 Requires-Dist: alembic<2,>=1.13
 Requires-Dist: pyjwt>=2.8
+Requires-Dist: jwcrypto<2,>=1.5.6
 Requires-Dist: python-dotenv>=1.0
 Provides-Extra: test
 Requires-Dist: pytest>=8; extra == "test"

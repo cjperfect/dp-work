@@ -8,6 +8,7 @@ from app.modules.users.bootstrap import ensure_initial_admin
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    """管理服务启动和关闭。"""
     await session.init_db()
     try:
         await ensure_initial_admin()

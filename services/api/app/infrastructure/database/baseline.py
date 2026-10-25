@@ -14,16 +14,18 @@ from sqlalchemy.pool import NullPool
 
 from app.core import config
 
-from .model_registry import Base
+from .legacy_schema import legacy_schema_metadata
 from .session import async_database_url
 
-BASELINE_REVISION = "0001_initial"
+BASELINE_REVISION = "0001_users"
 
 
 def adopt_existing_schema(connection: Connection) -> None:
+    """核对旧库结构并登记迁移基线。"""
     inspector = inspect(connection)
     tables = set(inspector.get_table_names())
-    managed_tables = set(Base.metadata.tables)
+    metadata = legacy_schema_metadata()
+    managed_tables = set(metadata.tables)
     if "alembic_version" in tables:
         raise RuntimeError(
             "数据库已有 Alembic 版本，请使用 alembic current / upgrade head"
@@ -34,6 +36,7 @@ def adopt_existing_schema(connection: Connection) -> None:
         )
 
     def include_name(name, type_, parent_names):
+        """筛选需要核对的表。"""
         return type_ != "table" or name in managed_tables
 
     migration_context = MigrationContext.configure(
@@ -44,7 +47,7 @@ def adopt_existing_schema(connection: Connection) -> None:
             "include_name": include_name,
         },
     )
-    differences = compare_metadata(migration_context, Base.metadata)
+    differences = compare_metadata(migration_context, metadata)
     if differences:
         raise RuntimeError(
             f"现有表结构与 ORM 基线不一致，不能登记版本：{differences!r}"
@@ -55,6 +58,7 @@ def adopt_existing_schema(connection: Connection) -> None:
 
 
 async def adopt() -> None:
+    """执行旧库基线登记。"""
     engine = create_async_engine(
         async_database_url(config.DATABASE_URL),
         poolclass=NullPool,
@@ -69,4 +73,4 @@ async def adopt() -> None:
 
 if __name__ == "__main__":
     asyncio.run(adopt())
-    print("旧库表结构核对通过，已登记 0001_initial。")
+    print("旧库表结构核对通过，已登记 0001_users；请继续执行 alembic upgrade head。")
