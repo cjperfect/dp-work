@@ -37,16 +37,20 @@ class AsrSession:
         """将识别事件转换为统一协议，先落库再确认。"""
         try:
             async for event in self.provider.events():
-                key = event.pop("key")
+                key = event["key"]
+                content = {field: value for field, value in event.items() if field != "key"}
+                content["startMs"] += self.offset
+                content["endMs"] += self.offset
                 previous = self.segments.get(key)
-                if previous and previous["isFinal"]:
+                if previous and (previous["isFinal"] or all(
+                    previous[field] == value for field, value in content.items()
+                )):
                     continue
                 seq = previous["seq"] if previous else self.next_seq
                 if not previous:
                     self.next_seq += 1
-                segment = dict(event, id=f"{self.meeting_id}:{self.session_id}#{seq}", seq=seq,
-                               revision=previous["revision"]+1 if previous else 1,
-                               startMs=self.offset+event["startMs"], endMs=self.offset+event["endMs"])
+                segment = dict(content, id=f"{self.meeting_id}:{self.session_id}#{seq}", seq=seq,
+                               revision=previous["revision"]+1 if previous else 1)
                 if segment["isFinal"]:
                     await asyncio.to_thread(repository.save_segment, self.meeting_id, segment)
                     self.last_final_seq = seq

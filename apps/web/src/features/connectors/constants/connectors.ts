@@ -1,4 +1,4 @@
-/** 连接器 mock 数据：连接飞书 CLI 等外部服务（UI 骨架，授权流程待接入后端） */
+/** 连接器目录：实际授权状态从本机 API 获取。 */
 
 export type ConnectorStatus = "connected" | "disconnected";
 
@@ -6,7 +6,7 @@ export interface Connector {
   id: string;
   name: string;
   description: string;
-  /** 连接后的账号信息（mock） */
+  /** 连接后的账号名称 */
   account?: string;
   status: ConnectorStatus;
   /** 连接器能力标签 */
@@ -18,10 +18,9 @@ export const CONNECTORS: Connector[] = [
     id: "lark-cli",
     name: "飞书 CLI",
     description:
-      "连接飞书企业账号后，会议纪要、知识库资料可一键同步到飞书文档 / 多维表格，Agent 输出也可直接沉淀到飞书知识空间。",
-    status: "connected",
-    account: "chen.jiang@breo.com（飞书企业号）",
-    capabilities: ["会议纪要同步", "知识库资料同步", "Agent 输出沉淀"],
+      "通过飞书官方 CLI 完成应用配置、用户授权和身份验证。业务同步与 Agent 调用后续接入。",
+    status: "disconnected",
+    capabilities: ["网页授权", "登录验证", "本机凭证管理"],
   },
 ];
 

@@ -7,9 +7,10 @@ from app.core.responses import ApiCode
 from app.infrastructure.database import session
 from app.modules.auth.router import router as auth_router
 from app.modules.knowledge.router import router as knowledge_router
+from app.modules.connectors.router import router as connectors_router
 
 api_router = APIRouter()
-for router in (auth_router, knowledge_router):
+for router in (auth_router, knowledge_router, connectors_router):
     api_router.include_router(router)
 
 

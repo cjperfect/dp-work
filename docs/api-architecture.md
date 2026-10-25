@@ -16,7 +16,7 @@
 
 当前代码已按业务模块落地，目录及测试命令以 [API README](../services/api/README.md) 为准。
 `modules/*/router.py → service.py → repository.py`；连接池和事务工具集中在 `infrastructure/database/session.py`。
-已接入 SQLAlchemy 2.x 异步 ORM 与 Alembic，asyncpg 作为 PostgreSQL 驱动。
+已接入 SQLAlchemy 2.x 异步 ORM 与 Alembic，aiosqlite 作为 SQLite 驱动。
 
 ```
 请求 → [CORS] → [拦截器：RequestContext 中间件]
@@ -108,7 +108,7 @@ async def upsert_segments(batch: SegmentsBatch, _: User = Depends(get_current_us
 
 ## 4. 用户认证守卫
 
-### 4.1 认证模型（PostgreSQL `users` 表）
+### 4.1 认证模型（SQLite `users` 表）
 
 ```sql
 CREATE TABLE users (
@@ -314,7 +314,7 @@ upload/editor 来源、storage_key、可选 Markdown content、size_bytes、创�
 删除知识库通过外键级联删除文档行，用户删除受外键限制；文件对象清理须在文件服务接入时实现。
 
 这一步仅开放知识库接口，文档表已建，上传、在线编辑和文档管理接口后续实现。
-前端知识库目录改为请求后端，不再写入 IndexedDB。原 IndexedDB 数据保留，但不自动导入 PostgreSQL；
+前端知识库目录改为请求后端，不再写入 IndexedDB。原 IndexedDB 数据保留，但不自动导入 SQLite；
 原上传文件仍在 localStorage，跨设备同步目前仅适用于知识库名称、描述等元数据。
 
 迁移命令：`cd services/api && .venv/bin/python -m alembic upgrade head`。

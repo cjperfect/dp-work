@@ -87,7 +87,9 @@ VOLC_SPEAKER_INFO=1
 }
 ```
 
-同一分句临时更新与最终确认使用同一个 ID，revision 递增。临时文字不写 SQLite，而是原子保存到 `.dp-work/temp/asr/<meetingId>/<sessionId>/<seq>.json`；确认片段成功提交 SQLite 后清理对应临时文件，异常断开或保存失败时保留；isFinal=true 只能在 SQLite 事务提交后发送。前端按 ID 和版本去重，确认文字不被临时结果覆盖。
+同一分句临时更新与最终确认使用同一个 ID，revision 递增。临时文字不写 SQLite，而是按版本逐行追加到 `.dp-work/temp/asr/<meetingId>/<sessionId>/transcripts.jsonl`，每行是一条 JSON 记录；确认片段成功提交 SQLite 后清理该片段的所有临时版本，保留其他未确认片段，文件为空时删除，异常断开或保存失败时保留；isFinal=true 只能在 SQLite 事务提交后发送。前端按 ID 和版本去重，确认文字不被临时结果覆盖。
+
+`meetings.repository.read_temporary(meeting_id, session_id)` 按片段 ID 选取最大 revision，并按 seq 返回最新临时片段。读取时忽略异常退出留下的不完整尾行，追加和清理前修复尾行；完整记录不会被丢弃。目前提供内部读取方法，尚未接入页面恢复接口。
 
 seq 在会议内持续递增，时间戳相对于有效录音时间轴。新连接从已保存的序号和有效录音时长继续，保留录音中的静音，不包含暂停间隔；sessionId 每次重新生成。片段 ID 包含 sessionId，避免异常重连后临时片段版本冲突。
 

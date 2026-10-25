@@ -12,11 +12,11 @@
     <div style="max-width: 1100px; margin: 0 auto">
       <h1 style="font-size: 20px; margin: 0 0 4px; color: #111">数据库分工与同步方向</h1>
       <p style="font-size: 13px; margin: 0 0 18px; color: #666">
-        PostgreSQL = 服务端事实源 · SQLite = 桌面离线层 · pgvector = 语义检索
+        SQLite = 本地事实源（单文件，零依赖）· 向量检索（预留）
       </p>
 
       <div style="display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap">
-        <!-- PostgreSQL -->
+        <!-- SQLite（本地事实源） -->
         <div
           style="
             flex: 1 1 300px;
@@ -37,9 +37,9 @@
                 border-radius: 6px;
                 padding: 3px 8px;
               "
-              >服务端</span
+              >本地</span
             >
-            <span style="font-weight: 600; font-size: 14px">PostgreSQL</span>
+            <span style="font-weight: 600; font-size: 14px">SQLite</span>
           </div>
           <div style="font-size: 12px; color: #555; line-height: 1.9">
             <div>· 用户 / 部门 / 权限</div>
@@ -108,7 +108,7 @@
           </div>
         </div>
 
-        <!-- pgvector -->
+        <!-- 向量检索（预留） -->
         <div
           style="
             flex: 1 1 300px;
@@ -131,13 +131,13 @@
               "
               >检索层</span
             >
-            <span style="font-weight: 600; font-size: 14px">pgvector</span>
+            <span style="font-weight: 600; font-size: 14px">向量检索（预留）</span>
           </div>
           <div style="font-size: 12px; color: #555; line-height: 1.9">
             <div>· 知识库资料 → 切分 chunk</div>
             <div>· 文本向量（embedding）</div>
             <div>· 语义检索（RAG 召回）</div>
-            <div>· 附：资料元数据在 PostgreSQL</div>
+            <div>· 附：资料元数据在本地 SQLite</div>
           </div>
           <div
             style="
@@ -189,7 +189,7 @@
                 font-weight: 600;
               "
               >上行</span
-            ><span>转写片段（outbox → Postgres 定稿） / 会议 / 纪要</span
+            ><span>转写片段（outbox → SQLite 定稿） / 会议 / 纪要</span
             ><span style="color: #999">SQLite pending → 幂等同步</span>
           </div>
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
@@ -220,8 +220,8 @@
       </div>
 
       <div style="margin-top: 14px; font-size: 11px; color: #999; line-height: 1.7">
-        示意：主键统一 UUID（离线生成的片段 / 纪要 id 先落 SQLite，上行后与 Postgres
-        幂等对应）；权限检查在上行时由服务端执行；pgvector 随资料入库在服务端切分并生成向量。
+        示意：主键统一整数自增（离线生成的片段 / 纪要 id 先落前端本地，再同步至本地 SQLite
+        幂等对应）；权限检查在上行时由服务端执行；向量检索预留，随资料入库在 api 侧切分并生成向量。
       </div>
     </div>
   </div>

@@ -1,48 +1,66 @@
+import { mockHttpRequest } from "../../../lib/testing/mock-http.mjs";
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, test } from "node:test";
+import { afterEach, beforeEach, mock, test } from "node:test";
 import { useAuthStore } from "../../../stores/auth.ts";
-import { loadConnectors, updateConnectors, useConnectorStore } from "../../../stores/connectors.ts";
+import {
+  loadConnectors,
+  applyFeishuStatus,
+  useConnectorStore,
+} from "../../../stores/connectors.ts";
 
 const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+const disconnected = {
+  installed: true,
+  configured: false,
+  connected: false,
+  verified: false,
+  account: null,
+  flow: null,
+};
 beforeEach(() => {
-  const data = new Map();
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
-    value: {
-      getItem: (key) => data.get(key) ?? null,
-      setItem: (key, value) => data.set(key, value),
-    },
+    value: { getItem: () => "test-token", setItem: () => {} },
   });
   useAuthStore.setState({ user: { id: 1, username: "tester" } });
-  loadConnectors(1);
 });
-afterEach(() => {
+afterEach(async () => {
+  mock.restoreAll();
   useAuthStore.setState({ user: null });
-  loadConnectors(null);
+  await loadConnectors(null);
   if (originalStorage) Object.defineProperty(globalThis, "localStorage", originalStorage);
   else delete globalThis.localStorage;
 });
 
-test("connection changes update the shared state and survive loading again", () => {
-  assert.equal(useConnectorStore.getState().connectors[0].status, "connected");
-  updateConnectors(1, (rows) => rows.map((row) => ({ ...row, status: "disconnected" })));
-  assert.equal(
-    useConnectorStore.getState().connectors.filter((row) => row.status === "connected").length,
-    0,
-  );
-  loadConnectors(1);
+test("connector status comes from API instead of a simulated connected account", async () => {
+  const request = mockHttpRequest(async () => Response.json({ code: 0, data: disconnected }));
+  await Promise.all([loadConnectors(1), loadConnectors(1)]);
+  assert.equal(request.mock.callCount(), 1);
   assert.equal(useConnectorStore.getState().connectors[0].status, "disconnected");
+  assert.equal(useConnectorStore.getState().connectors[0].account, undefined);
+  assert.equal(useConnectorStore.getState().feishu.installed, true);
 });
 
-test("connector settings remain isolated between accounts", () => {
-  updateConnectors(1, (rows) => rows.map((row) => ({ ...row, status: "disconnected" })));
-  useAuthStore.setState({ user: { id: 2, username: "other" } });
-  loadConnectors(2);
-  assert.equal(useConnectorStore.getState().connectors[0].status, "connected");
-  assert.throws(() => updateConnectors(1, () => []), /登录状态已改变/);
-  loadConnectors(1);
-  assert.equal(useConnectorStore.getState().owner, 2);
-  useAuthStore.setState({ user: { id: 1, username: "tester" } });
-  loadConnectors(1);
+test("late responses cannot expose another platform account's connection", async () => {
+  mockHttpRequest(async () => {
+    useAuthStore.setState({ user: { id: 2, username: "other" } });
+    return Response.json({
+      code: 0,
+      data: { ...disconnected, connected: true, account: "private-user" },
+    });
+  });
+  await loadConnectors(1);
+  assert.notEqual(useConnectorStore.getState().feishu?.account, "private-user");
+  applyFeishuStatus(1, { ...disconnected, account: "private-user" });
+  assert.notEqual(useConnectorStore.getState().feishu?.account, "private-user");
+});
+
+test("an unavailable API does not invent an authorized connection", async () => {
+  await loadConnectors(null);
+  mockHttpRequest(async () =>
+    Response.json({ code: 5000, message: "连接器服务不可用", data: null }, { status: 500 }),
+  );
+  await loadConnectors(1);
   assert.equal(useConnectorStore.getState().connectors[0].status, "disconnected");
+  assert.match(useConnectorStore.getState().error, /服务不可用/);
 });

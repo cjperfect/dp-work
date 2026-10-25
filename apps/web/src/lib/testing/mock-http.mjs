@@ -21,7 +21,7 @@ export function mockHttpRequest(
       signal: config.signal,
     });
     return {
-      data: await response.text(),
+      data: config.responseType === "blob" ? await response.blob() : await response.text(),
       status: response.status,
       statusText: response.statusText,
       headers: Object.fromEntries(response.headers),

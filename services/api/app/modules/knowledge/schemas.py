@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any, Literal
 
 from app.core.pagination import Page
 
@@ -41,9 +42,39 @@ class KnowledgeBaseOut(BaseModel):
     owner_id: int
     name: str
     description: str
+    document_count: int = 0
     created_at: datetime
     updated_at: datetime
 
 
 class KnowledgeBasePage(Page[KnowledgeBaseOut]):
     """知识库分页数据。"""
+
+
+class KnowledgeDocumentSave(BaseModel):
+    """在线文档自动保存参数。"""
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = "未命名文档"
+    content: str = ""
+    blocks: list[dict[str, Any]] | None = None
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, value: str) -> str:
+        """清理标题，空标题使用默认名称。"""
+        return value.strip() or "未命名文档"
+
+
+class KnowledgeDocumentOut(KnowledgeDocumentSave):
+    """在线文档响应数据。"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    knowledge_base_id: int
+    source: Literal["editor", "upload"] = "editor"
+    file_type: Literal["md", "pdf"] = "md"
+    original_name: str | None = None
+    byte_size: int = 0
+    created_at: datetime
+    updated_at: datetime

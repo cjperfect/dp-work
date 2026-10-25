@@ -51,7 +51,7 @@ Web 构建输出到 `apps/web/dist`，打包时仅复制静态产物及不含密
 
 桌面应用启动后，在 Main 进程启动轻量本地静态服务，支持 SPA 路由回退和 `/api` 转发，默认监听 `127.0.0.1:34731`；退出应用时关闭。固定端口用于保持 localStorage 的来源一致；如果端口被占用会提示启动失败。
 
-FastAPI 仍是独立服务，API 地址默认读取 Web 的 `API_BASE_URL`，也可在桌面构建或运行环境中通过 `DESKTOP_API_BASE_URL` 覆盖。当前不打包 PostgreSQL、FastAPI 或 Python Sidecar。安装包发布所需签名、证书及自动更新后续接入。
+FastAPI 仍是独立服务，API 地址默认读取 Web 的 `API_BASE_URL`，也可在桌面构建或运行环境中通过 `DESKTOP_API_BASE_URL` 覆盖。当前不打包 FastAPI 或 Python Sidecar；本地数据由 SQLite 单文件承载。安装包发布所需签名、证书及自动更新后续接入。
 
 ## 目录
 

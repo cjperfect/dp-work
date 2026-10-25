@@ -1,6 +1,7 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Depends, Path, Query, File, UploadFile
+from fastapi.responses import FileResponse
 
 from app.core.pagination import PageParams
 from app.core.responses import ApiResponse, ok
@@ -8,7 +9,7 @@ from app.modules.auth.dependencies import get_current_user
 from app.modules.users.models import User
 
 from . import service
-from .schemas import KnowledgeBaseCreate, KnowledgeBaseOut, KnowledgeBasePage, KnowledgeBaseUpdate
+from .schemas import (KnowledgeBaseCreate, KnowledgeBaseOut, KnowledgeBasePage, KnowledgeBaseUpdate, KnowledgeDocumentSave, KnowledgeDocumentOut)
 
 router = APIRouter(prefix="/api/knowledge-bases", tags=["knowledge"])
 
@@ -67,3 +68,46 @@ async def delete_knowledge_base(
     """处理删除知识库请求。"""
     await service.delete_knowledge_base(user.id, base_id)
     return ok(message="知识库删除成功")
+
+
+BaseId = Annotated[int, Path(ge=1, le=9_223_372_036_854_775_807)]
+DocumentId = Annotated[str, Path(pattern=r"^[a-zA-Z0-9_-]{1,128}$")]
+CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+@router.get("/{base_id}/documents", response_model=ApiResponse[list[KnowledgeDocumentOut]], summary="查询在线文档")
+async def list_documents(base_id: BaseId, user: CurrentUser) -> ApiResponse[list[KnowledgeDocumentOut]]:
+    """返回知识库的在线文档列表。"""
+    return ok(await service.list_documents(user.id, base_id))
+
+
+@router.get("/{base_id}/documents/{document_id}", response_model=ApiResponse[KnowledgeDocumentOut], summary="读取在线文档")
+async def get_document(base_id: BaseId, document_id: DocumentId, user: CurrentUser) -> ApiResponse[KnowledgeDocumentOut]:
+    """返回指定文档的标题、正文和富文本块。"""
+    return ok(await service.get_document(user.id, base_id, document_id))
+
+
+@router.put("/{base_id}/documents/{document_id}", response_model=ApiResponse[KnowledgeDocumentOut], summary="自动保存在线文档")
+async def save_document(base_id: BaseId, document_id: DocumentId, body: KnowledgeDocumentSave, user: CurrentUser) -> ApiResponse[KnowledgeDocumentOut]:
+    """幂等创建或更新在线文档。"""
+    return ok(await service.save_document(user.id, base_id, document_id, body), message="文档已保存")
+
+
+@router.delete("/{base_id}/documents/{document_id}", response_model=ApiResponse[None], summary="删除在线文档")
+async def delete_document(base_id: BaseId, document_id: DocumentId, user: CurrentUser) -> ApiResponse[None]:
+    """删除当前用户知识库中的文档。"""
+    await service.delete_document(user.id, base_id, document_id)
+    return ok(message="文档已删除")
+
+
+@router.post("/{base_id}/documents/upload", response_model=ApiResponse[KnowledgeDocumentOut], summary="上传 Markdown 或 PDF")
+async def upload_document(base_id: BaseId, file: Annotated[UploadFile, File(description="Markdown 或 PDF，最大 20 MB")], user: CurrentUser):
+    """保存文件并返回列表所需的文档信息。"""
+    return ok(await service.upload_document(user.id, base_id, file), message="文件上传成功")
+
+
+@router.get("/{base_id}/documents/{document_id}/file", response_class=FileResponse, summary="读取上传源文件")
+async def get_source_file(base_id: BaseId, document_id: DocumentId, user: CurrentUser):
+    """鉴权后提供源文件下载或预览。"""
+    path, filename, mime = await service.get_source_file(user.id, base_id, document_id)
+    return FileResponse(path, filename=filename, media_type=mime)

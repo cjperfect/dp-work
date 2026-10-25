@@ -286,7 +286,7 @@ export function KnowledgePage() {
         />
       )}
       <p className="mt-6 text-xs leading-5 text-muted-foreground">
-        知识库新增、查询、编辑和删除已接入服务器；文档操作暂使用本地模拟数据。
+        支持在线写文档和上传 Markdown、PDF 文件。
       </p>
 
       {form && (

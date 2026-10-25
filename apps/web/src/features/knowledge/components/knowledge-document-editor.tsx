@@ -1,14 +1,24 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { LazyBlockNoteEditor as Editor } from "@/components/editor/lazy-blocknote-editor";
-import { ArrowLeft, FileText, Loader2, Save } from "lucide-react";
+import { ArrowLeft, FileText } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/stores/auth";
 import { localAccountId } from "@/features/auth/lib/auth";
+import { useKnowledgeDocuments } from "@/features/knowledge/hooks/use-knowledge-documents";
 import { useKnowledgeBases } from "@/features/knowledge/hooks/use-knowledge-bases";
 import { saveKnowledgeDocument } from "@/stores/knowledge";
+import type { EditorDocumentInput } from "../lib/knowledge-repository";
 import type { KbFile, KnowledgeBase } from "../constants/knowledge-data";
+
+function savedDate(value: string | null): Date | null {
+  if (!value) return null;
+  // SQLite 返回的无时区时间按服务端 UTC 解释。
+  const timestamp = /T/.test(value) && !/(Z|[+-]\d{2}:\d{2})$/i.test(value) ? `${value}Z` : value;
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
 export function NewKnowledgeDocumentPage() {
   const { kbId } = useParams({ from: "/_app/knowledge/$kbId/new" });
@@ -24,15 +34,26 @@ function DocumentPage({ kbId, fileId }: { kbId: string; fileId?: string }) {
   const { bases, loading, error, reload } = useKnowledgeBases();
   const accountId = useAuthStore((state) => localAccountId(state.user));
   const base = bases.find((row) => row.id === kbId);
-  const file = base?.files.find((row) => row.id === fileId);
-  if (loading || error)
+  const documents = useKnowledgeDocuments(kbId);
+  const file =
+    documents.files.find((row) => row.id === fileId) ??
+    base?.files.find((row) => row.id === fileId);
+  const loadError = error ?? documents.error;
+  if ((loading && !base) || loadError || (fileId && documents.loading && !file))
     return (
       <div className="grid gap-4 p-8">
-        <p role={error ? "alert" : "status"} className="text-sm text-muted-foreground">
-          {error ?? "正在读取文档…"}
+        <p role={loadError ? "alert" : "status"} className="text-sm text-muted-foreground">
+          {loadError ?? "正在读取文档…"}
         </p>
-        {error && (
-          <Button variant="outline" className="w-fit" onClick={reload}>
+        {loadError && (
+          <Button
+            variant="outline"
+            className="w-fit"
+            onClick={() => {
+              reload();
+              documents.reload();
+            }}
+          >
             重新加载
           </Button>
         )}
@@ -71,62 +92,172 @@ function DocumentForm({
 }) {
   const navigate = useNavigate();
   const [id] = useState(() => initialFile?.id ?? `editor-${crypto.randomUUID()}`);
-  const [title, setTitle] = useState(() => initialFile?.name.replace(/\.md$/i, "") ?? "");
-  const [content, setContent] = useState(initialFile?.content ?? "");
-  const [blocks, setBlocks] = useState(initialFile?.blocks);
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState<"draft" | "published" | null>(null);
+  const [title, setTitle] = useState(() => initialFile?.name.replace(/\.md$/i, "") ?? "未命名文档");
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(title);
+  const titleInput = useRef<HTMLInputElement>(null);
+  const titleButton = useRef<HTMLButtonElement>(null);
+  const cancelTitle = useRef(false);
+  const restoreTitleFocus = useRef(false);
+  const [content] = useState(initialFile?.content ?? "");
+  const [blocks] = useState(initialFile?.blocks);
+  const [revision, setRevision] = useState(0);
+  const [dirty, setDirty] = useState(!initialFile);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(initialFile?.updatedAt ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState(
-    initialFile?.status === "draft" ? "草稿已保存" : initialFile ? "已保存" : "尚未保存",
+  const pending = useRef<EditorDocumentInput | null>(
+    initialFile
+      ? null
+      : {
+          id,
+          title,
+          content,
+          blocks,
+          status: "published",
+        },
   );
-  const lock = useRef(false);
-  const titleRef = useRef<HTMLInputElement>(null);
+  const document = useRef({ title, content, blocks });
+  const savingRef = useRef(false);
+  const mounted = useRef(false);
+  const isNew = !initialFile;
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryCount = useRef(0);
 
-  async function save(status: "draft" | "published") {
-    if (lock.current) return;
-    if (!title.trim().replace(/\.md$/i, "").trim()) {
-      setError("请输入文档标题。");
-      titleRef.current?.focus();
+  const save = useCallback(
+    async function persist() {
+      const snapshot = pending.current;
+      if (!snapshot || savingRef.current) return;
+      if (localAccountId(useAuthStore.getState().user) !== accountId) return;
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+      retryTimer.current = null;
+      savingRef.current = true;
+      let succeeded = false;
+      if (mounted.current) {
+        setSaving(true);
+        setError(null);
+      }
+      try {
+        const file = await saveKnowledgeDocument(accountId, base.id, snapshot);
+        succeeded = true;
+        if (mounted.current && localAccountId(useAuthStore.getState().user) === accountId)
+          setSavedAt(file.updatedAt);
+        retryCount.current = 0;
+        if (pending.current === snapshot) {
+          pending.current = null;
+          if (mounted.current) setDirty(false);
+        }
+        if (
+          mounted.current &&
+          isNew &&
+          !pending.current &&
+          localAccountId(useAuthStore.getState().user) === accountId
+        ) {
+          await navigate({
+            to: "/knowledge/$kbId/edit/$fileId",
+            params: { kbId: base.id, fileId: file.id },
+            replace: true,
+          });
+        }
+      } catch (cause) {
+        if (mounted.current) {
+          setError(cause instanceof Error ? cause.message : "自动保存失败，请重试。");
+          const delay = Math.min(2000 * 2 ** Math.min(retryCount.current++, 4), 30000);
+          retryTimer.current = setTimeout(() => {
+            retryTimer.current = null;
+            void persist();
+          }, delay);
+        }
+      } finally {
+        savingRef.current = false;
+        if (mounted.current) setSaving(false);
+        if (succeeded && pending.current && pending.current !== snapshot) void persist();
+      }
+    },
+    [accountId, base.id, isNew, navigate],
+  );
+
+  useEffect(() => {
+    mounted.current = true;
+    const createTimer = isNew
+      ? setTimeout(() => {
+          void save();
+        }, 0)
+      : null;
+    const interval = setInterval(() => {
+      if (!retryTimer.current) void save();
+    }, 5000);
+    const flush = () => {
+      void save();
+    };
+    const onVisibility = () => {
+      if (window.document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    window.document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      mounted.current = false;
+      if (createTimer) clearTimeout(createTimer);
+      clearInterval(interval);
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+      retryTimer.current = null;
+      window.removeEventListener("pagehide", flush);
+      window.document.removeEventListener("visibilitychange", onVisibility);
+      flush();
+    };
+  }, [isNew, save]);
+
+  useEffect(() => {
+    if (!revision) return;
+    const timer = window.setTimeout(() => {
+      if (!retryTimer.current) void save();
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [revision, save]);
+
+  function updateDocument(change: Partial<typeof document.current>) {
+    document.current = { ...document.current, ...change };
+    pending.current = {
+      ...document.current,
+      id,
+      title: document.current.title.trim().replace(/\.md$/i, "").trim() || "未命名文档",
+      status: "published",
+    };
+    setDirty(true);
+    setRevision((value) => value + 1);
+  }
+
+  useEffect(() => {
+    if (editingTitle) {
+      titleInput.current?.focus();
+      titleInput.current?.select();
+    } else if (restoreTitleFocus.current) {
+      restoreTitleFocus.current = false;
+      titleButton.current?.focus();
+    }
+  }, [editingTitle]);
+
+  function finishTitle() {
+    setEditingTitle(false);
+    if (cancelTitle.current) {
+      cancelTitle.current = false;
       return;
     }
-    lock.current = true;
-    setSaving(status);
-    setError(null);
-    try {
-      const file = await saveKnowledgeDocument(accountId, base.id, {
-        id,
-        title,
-        content,
-        blocks,
-        status,
-      });
-      if (localAccountId(useAuthStore.getState().user) !== accountId) return;
-      setDirty(false);
-      setNotice(status === "draft" ? "草稿已保存" : "已保存");
-      if (status === "published")
-        await navigate({
-          to: "/knowledge/$kbId/files/$fileId",
-          params: { kbId: base.id, fileId: file.id },
-        });
-      else if (!initialFile)
-        await navigate({
-          to: "/knowledge/$kbId/edit/$fileId",
-          params: { kbId: base.id, fileId: file.id },
-          replace: true,
-        });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "保存失败，请重试。");
-    } finally {
-      lock.current = false;
-      setSaving(null);
+    const next = titleDraft.trim().replace(/\.md$/i, "").trim() || "未命名文档";
+    if (next !== title) {
+      setTitle(next);
+      updateDocument({ title: next });
+      void save();
     }
   }
+
+  const lastSaved = savedDate(savedAt);
+  const displayTitle = title.trim().replace(/\.md$/i, "").trim() || "未命名文档";
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-5 px-6 py-6 md:px-10">
       <header className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <Link
             to="/knowledge/$kbId"
             params={{ kbId: base.id }}
@@ -135,66 +266,85 @@ function DocumentForm({
           >
             <ArrowLeft className="size-4" />
           </Link>
-          <div className="min-w-0">
-            <h1 className="flex items-center gap-2 text-lg font-semibold">
-              <FileText className="size-4" />
-              {initialFile ? "编辑文档" : "新建文档"}
+          <span
+            className="max-w-[40%] shrink-0 truncate text-sm text-muted-foreground"
+            title={`知识库：${base.name}`}
+          >
+            知识库：{base.name}
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="flex min-w-0 items-center gap-2 text-lg font-semibold">
+              <FileText className="size-4 shrink-0" />
+              {editingTitle ? (
+                <Input
+                  ref={titleInput}
+                  id="knowledge-document-title"
+                  aria-label="文档标题"
+                  value={titleDraft}
+                  onChange={(event) => setTitleDraft(event.target.value)}
+                  onBlur={finishTitle}
+                  onKeyDown={(event) => {
+                    if (event.nativeEvent.isComposing) return;
+                    if (event.key === "Enter" || event.key === "Escape") {
+                      event.preventDefault();
+                      cancelTitle.current = event.key === "Escape";
+                      restoreTitleFocus.current = true;
+                      event.currentTarget.blur();
+                    }
+                  }}
+                  placeholder="未命名文档"
+                  className="h-8 max-w-md text-lg! font-semibold"
+                />
+              ) : (
+                <button
+                  ref={titleButton}
+                  type="button"
+                  aria-label={`修改文档标题：${displayTitle}`}
+                  title="点击修改标题"
+                  className="max-w-full truncate rounded-sm py-0.5 text-left outline-none hover:text-foreground/75 focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => {
+                    setTitleDraft(title);
+                    setEditingTitle(true);
+                  }}
+                >
+                  {displayTitle}
+                </button>
+              )}
             </h1>
-            <p className="mt-1 truncate text-xs text-muted-foreground">{base.name}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" disabled={saving !== null} onClick={() => void save("draft")}>
-            {saving === "draft" && <Loader2 className="size-4 animate-spin" />}保存草稿
-          </Button>
-          <Button disabled={saving !== null} onClick={() => void save("published")}>
-            {saving === "published" ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Save className="size-4" />
-            )}
-            保存
-          </Button>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span role={error ? "alert" : "status"} title={error ?? undefined}>
+            {error ? "保存失败" : saving || dirty ? "保存中…" : lastSaved ? "" : "尚未保存"}
+          </span>
+          {lastSaved && (
+            <span>
+              最近保存于{" "}
+              <time dateTime={lastSaved.toISOString()}>
+                {lastSaved.toLocaleString("zh-CN", { hour12: false })}
+              </time>
+            </span>
+          )}
+          {error && (
+            <Button
+              variant="link"
+              className="h-auto px-1 py-0 text-xs text-destructive"
+              onClick={() => void save()}
+            >
+              重试
+            </Button>
+          )}
         </div>
       </header>
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <p>保存草稿后可继续编辑；保存后进入文档阅读页。</p>
-        <span role="status">{saving ? "保存中…" : dirty ? "有未保存的修改" : notice}</span>
-      </div>
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card">
-        <div className="border-b px-5 py-4">
-          <label className="sr-only" htmlFor="knowledge-document-title">
-            文档标题
-          </label>
-          <Input
-            ref={titleRef}
-            id="knowledge-document-title"
-            value={title}
-            disabled={saving !== null}
-            onChange={(event) => {
-              setTitle(event.target.value);
-              setDirty(true);
-              setError(null);
-            }}
-            placeholder="请输入文档标题"
-            className="h-11 border-0 px-0 text-xl! font-semibold shadow-none focus-visible:ring-0"
-          />
-        </div>
         <div className="min-h-0 flex-1 overflow-y-auto" aria-label="文档富文本编辑器">
           <Editor
             initialContent={blocks}
             markdown={blocks ? undefined : content}
-            editable={saving === null}
+            editable
             className="px-2 py-5 md:px-5"
             onDocumentChange={({ blocks: nextBlocks, markdown }) => {
-              setBlocks(nextBlocks);
-              setContent(markdown);
-              setDirty(true);
+              updateDocument({ blocks: nextBlocks, content: markdown });
             }}
           />
         </div>

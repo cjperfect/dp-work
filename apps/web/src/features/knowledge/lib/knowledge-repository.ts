@@ -126,8 +126,6 @@ export async function saveEditorDocument(
 ) {
   const title = input.title.trim().replace(/\.md$/i, "").trim();
   if (!title) throw new Error("请输入文档标题。");
-  if (input.status === "published" && !input.content.trim())
-    throw new Error("请先填写文档正文，或保存为草稿。");
   const base = load(accountId).find((row) => row.id === baseId);
   if (!base) throw new Error("知识库不存在。");
   const existing = base.files.find((row) => row.id === input.id);
@@ -167,4 +165,45 @@ export function cacheServerKnowledgeBases(
     ...bases,
   ]);
   return bases;
+}
+
+/** 仅供迁移读取旧版在线文档。 */
+export function listLocalEditorDocuments(accountId: string, baseId: string): KbFile[] {
+  return (
+    load(accountId)
+      .find((base) => base.id === baseId)
+      ?.files.filter((file) => file.source === "editor") ?? []
+  );
+}
+
+/** SQLite 保存成功后移除旧版本地副本。 */
+export function removeLocalEditorDocuments(accountId: string, baseId: string, ids: string[]) {
+  const keys = new Set(ids);
+  writeMock(
+    `knowledge:${accountId}`,
+    load(accountId).map((base) =>
+      base.id === baseId
+        ? {
+            ...base,
+            files: base.files.filter((file) => file.source !== "editor" || !keys.has(file.id)),
+          }
+        : base,
+    ),
+  );
+}
+
+/** 删除尚未迁移到 SQLite 的本地文件记录。 */
+export function removeLocalKnowledgeDocument(
+  accountId: string,
+  baseId: string,
+  documentId: string,
+) {
+  writeMock(
+    `knowledge:${accountId}`,
+    load(accountId).map((base) =>
+      base.id === baseId
+        ? { ...base, files: base.files.filter((file) => file.id !== documentId) }
+        : base,
+    ),
+  );
 }

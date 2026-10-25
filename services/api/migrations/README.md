@@ -1,6 +1,6 @@
 # 数据库迁移
 
-使用 SQLAlchemy 2.x 异步 ORM + Alembic，asyncpg 负责 PostgreSQL 连接。命令在 `services/api` 目录、激活本服务虚拟环境后运行；数据库地址取自本服务 `.env` 的 `DATABASE_URL`，进程环境变量优先。应用启动只初始化连接和缺省管理员，不自动执行 DDL。
+使用 SQLAlchemy 2.x 异步 ORM + Alembic，aiosqlite 负责 SQLite 连接。命令在 `services/api` 目录、激活本服务虚拟环境后运行；数据库地址取自本服务 `.env` 的 `DATABASE_URL`，进程环境变量优先。应用启动只初始化连接和缺省管理员，不自动执行 DDL。
 
 ## 迁移体系（squash 后）
 
@@ -24,7 +24,7 @@
 
 ## 新建数据库
 
-先启动 PostgreSQL（镜像包含 pgvector），再执行：
+直接执行（SQLite 单文件，无需任何数据库服务）：
 
 ```bash
 alembic upgrade head
@@ -82,7 +82,7 @@ alembic downgrade -1             # 回退一个版本
 ## 集成验证
 
 ```bash
-TEST_DATABASE_URL=postgresql://test_user:test_password@127.0.0.1:55432/test_db \
+TEST_DATABASE_URL=sqlite+aiosqlite:///./data/test_dp_work.db \
   .venv/bin/python -m pytest tests -q
 ```
 

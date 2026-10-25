@@ -1,4 +1,4 @@
-"""只连接显式指定的测试数据库；运行前应用 Alembic 迁移。"""
+"""使用临时 SQLite 测试库；运行前应用 Alembic 迁移。"""
 
 import os
 import subprocess
@@ -12,10 +12,11 @@ API_ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="session", autouse=True)
-def migrated_test_database():
+def migrated_test_database(tmp_path_factory):
     url = os.environ.get("TEST_DATABASE_URL")
     if not url:
-        pytest.skip("请设置 TEST_DATABASE_URL，指向专用测试 PostgreSQL")
+        path = tmp_path_factory.mktemp("database") / "integration.db"
+        url = f"sqlite+aiosqlite:///{path}"
     subprocess.run(
         [
             sys.executable,

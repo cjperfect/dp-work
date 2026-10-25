@@ -6,7 +6,7 @@
 
 dp-work 是一套**企业 Agent 工作台 + 会议智能化**平台：团队成员在统一的 Agent 聊天界面（支持模型切换、知识库问答、工具调用可视化）里协作，同时内置完整会议链路——**实时转写（ASR）→ AI 会议纪要 → 历史归档**。
 
-架构遵循 **local-first** 原则：转写分句先落本地（实时、离线可用），再经 outbox 队列批量幂等同步到服务端 PostgreSQL，兼顾桌面端流畅体验与服务端事实源一致性。最终形态为 Electron 桌面应用 + Web 端双入口。
+架构遵循 **local-first** 原则：转写分句先落本地（实时、离线可用），再经 outbox 队列批量幂等同步到本地 SQLite（单文件、零依赖），兼顾桌面端流畅体验与数据一致性。最终形态为 Electron 桌面应用 + Web 端双入口。
 
 **Agent 的作用**：根据**部门专业范畴**和 **SOP**，以及对应的 **Skills** 来输出结果——部门专业范畴界定职责边界（不越界回答），SOP 标准作业流程约束推理与执行步骤，对应 Skills 决定可用工具与话术。三者建模为 Agent 配置（department / sop / skills）：会话启动时组装为系统提示并挂载工具集，输出前做范畴与 SOP 合规检查。此外 Agent 可**对接用户创建的知识库**（RAG 语义检索），作答时引用库内资料；**会议纪要生成后可发布转入知识库**，沉淀为团队可检索的资料资产。
 
@@ -14,45 +14,44 @@ dp-work 是一套**企业 Agent 工作台 + 会议智能化**平台：团队成�
 
 ### ✅ 已开发
 
-| 模块                 | 功能                                    | 说明                                                                                                                                                                                                                                                                  |
-| -------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Agent 工作台**     | 通用 Agent / 产品 / 技能 / 知识库多入口 | 路由：`/`、`/product`、`/skills`、`/knowledge`                                                                                                                                                                                                                        |
-|                      | assistant-ui 聊天界面                   | 消息流、模型切换器（Sonnet / GPT / Gemini + 品牌图标）、会话地图（右侧栏）、日期分隔、Directive 指令文本、Markdown 渲染、Shiki 语法高亮、Mermaid 图、引用块、工具调用 / 回退 UI                                                                                       |
-|                      | 状态管理                                | zustand：agentId、启用知识库、当前模型、会议标题、会议状态（live / generating）                                                                                                                                                                                       |
-| **会议模块**         | 开始会议                                | 单按钮 + 标题弹窗，一键进入会议页                                                                                                                                                                                                                                     |
-|                      | 实时转写页（`/meetings/active`）        | 麦克风采集 PCM16，经 Sidecar 对接豆包双向流式识别；展示临时文字、确认片段和说话人，支持暂停、恢复和结束等待尾句。                                                                                                                                                     |
-|                      | 会话持久化                              | sessionStorage 恢复：刷新 / 切换路由不丢计时与已转写内容（离开拦截 confirm：取消不刷新）                                                                                                                                                                              |
-|                      | 会议列表页（`/meetings`）               | 「会议纪要 AI 生成中」区块（结束会议后进入生成中态 + 测试数据）+「历史会议」区块（查看会议纪要入口）                                                                                                                                                                  |
-| **转写同步体系**     | 豆包流式 ASR 分句确认                   | 已接入真实 WebSocket 协议；未确认片段原子保存到 `.dp-work/temp/asr`，确认片段先写 SQLite 再推送前端。实际服务连通性待填写凭证后验证。                                                                                                                                 |
-|                      | 前端本地实时保存                        | IndexedDB 模拟 SQLite（`dp-work-local`）：一分句一行 + outbox pending 标记；Electron 期无缝换 better-sqlite3                                                                                                                                                          |
-|                      | Web ⇄ Sidecar WS 对接                   | `useMeetingAsr` hook：连接生命周期、StrictMode 时序竞态已修复、协议类型共享                                                                                                                                                                                           |
-| **后端服务**         | sidecar（:8001）                        | FastAPI WebSocket + SQLite 本地存储 + 豆包 ASR 适配；会议 API 批量同步尚未接入。                                                                                                                                                                                      |
-|                      | api（:8000）                            | FastAPI + SQLAlchemy 2.x + Alembic（asyncpg 驱动）；**统一响应 `{code,message,data}`** + **JWT 认证守卫**（登录/刷新、require_role/require_dept）+ RequestContext 中间件（X-Request-ID/日志/耗时）+ 全局异常过滤器；`POST /api/segments` 单语句多行幂等写入（认证后） |
-|                      | PostgreSQL（pgvector/pg16）             | `transcript_segments`（一分句一行、UNIQUE(meeting_id, seq)）、`minutes` 表；vector 扩展（知识库向量预留）                                                                                                                                                             |
-| `@dp-work/contracts` | `packages/contracts`                    | Web ↔ Sidecar 的 camelCase 消息、转写分句及桌面 IPC 类型定义。                                                                                                                                                                                                        |
-|                      | `@dp-work/api-client`                   | 浏览器 / Node 通用 API 客户端：批量上行分句、健康检查                                                                                                                                                                                                                 |
-| **工程化**           | Monorepo                                | pnpm workspace；ESLint / Prettier 根配置统一收口（子包零配置继承）；Commitlint + Husky + lint-staged                                                                                                                                                                  |
+| 模块                 | 功能                                    | 说明                                                                                                                                                                                                                                                           |
+| -------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Agent 工作台**     | 通用 Agent / 产品 / 技能 / 知识库多入口 | 路由：`/`、`/product`、`/skills`、`/knowledge`                                                                                                                                                                                                                 |
+|                      | assistant-ui 聊天界面                   | 消息流、模型切换器（Sonnet / GPT / Gemini + 品牌图标）、会话地图（右侧栏）、日期分隔、Directive 指令文本、Markdown 渲染、Shiki 语法高亮、Mermaid 图、引用块、工具调用 / 回退 UI                                                                                |
+|                      | 状态管理                                | zustand：agentId、启用知识库、当前模型、会议标题、会议状态（live / generating）                                                                                                                                                                                |
+| **会议模块**         | 开始会议                                | 单按钮 + 标题弹窗，一键进入会议页                                                                                                                                                                                                                              |
+|                      | 实时转写页（`/meetings/active`）        | 麦克风采集 PCM16，经 Sidecar 对接豆包双向流式识别；展示临时文字、确认片段和说话人，支持暂停、恢复和结束等待尾句。                                                                                                                                              |
+|                      | 会话持久化                              | sessionStorage 恢复：刷新 / 切换路由不丢计时与已转写内容（离开拦截 confirm：取消不刷新）                                                                                                                                                                       |
+|                      | 会议列表页（`/meetings`）               | 「会议纪要 AI 生成中」区块（结束会议后进入生成中态 + 测试数据）+「历史会议」区块（查看会议纪要入口）                                                                                                                                                           |
+| **转写同步体系**     | 豆包流式 ASR 分句确认                   | 已接入真实 WebSocket 协议；未确认片段原子保存到 `.dp-work/temp/asr`，确认片段先写 SQLite 再推送前端。实际服务连通性待填写凭证后验证。                                                                                                                          |
+|                      | 前端本地实时保存                        | IndexedDB 模拟 SQLite（`dp-work-local`）：一分句一行 + outbox pending 标记；Electron 期无缝换 better-sqlite3                                                                                                                                                   |
+|                      | Web ⇄ Sidecar WS 对接                   | `useMeetingAsr` hook：连接生命周期、StrictMode 时序竞态已修复、协议类型共享                                                                                                                                                                                    |
+| **后端服务**         | sidecar（:8001）                        | FastAPI WebSocket + SQLite 本地存储 + 豆包 ASR 适配；会议 API 批量同步尚未接入。                                                                                                                                                                               |
+|                      | api（:8000）                            | FastAPI + SQLAlchemy 2.x + Alembic（aiosqlite）；**统一响应 `{code,message,data}`** + **JWT 认证守卫**（登录/刷新、require_role/require_dept）+ RequestContext 中间件（X-Request-ID/日志/耗时）+ 全局异常过滤器；SQLite 单文件存储 `users` / `knowledge_bases` |
+| `@dp-work/contracts` | `packages/contracts`                    | Web ↔ Sidecar 的 camelCase 消息、转写分句及桌面 IPC 类型定义。                                                                                                                                                                                                 |
+|                      | `@dp-work/api-client`                   | 浏览器 / Node 通用 API 客户端：批量上行分句、健康检查                                                                                                                                                                                                          |
+| **工程化**           | Monorepo                                | pnpm workspace；ESLint / Prettier 根配置统一收口（子包零配置继承）；Commitlint + Husky + lint-staged                                                                                                                                                           |
 
 ### 🚧 规划中 / 待接入
 
 | 事项                                            | 状态                                                                                                                                                    |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 豆包真实服务联调                                | 接入代码和本地模拟上游测试已完成，待填写有效语音服务凭证后验证。无需额外安装旧版 Ark SDK。                                                              |
-| 前端 outbox → api 定时上行                      | `@dp-work/api-client` 已就绪，待接线（api + PG 已可写）                                                                                                 |
+| 前端 outbox → api 定时上行                      | `@dp-work/api-client` 已就绪，待接线（api + SQLite 已可写）                                                                                             |
 | AI 会议纪要生成链路                             | `minutes` 表已建（status 预留 2=已发布到知识库）；`/meetings/minutes` 页面为占位待设计；纪要支持发布转入知识库                                          |
-| 知识库上传 / 解析 / 向量化                      | pgvector 扩展已启用，`knowledge_chunks` 表结构预留；Agent 可绑定知识库（RAG 检索），会议纪要可发布入库沉淀为团队资料                                    |
+| 知识库上传 / 解析 / 向量化                      | RAG 检索链路预留；Agent 可绑定知识库（RAG 检索），会议纪要可发布入库沉淀为团队资料                                                                      |
 | 桌面本地执行                                    | SQLite 持久化、Python Sidecar 生命周期与业务 IPC 待接；窗口、应用信息 IPC 和 Web 集成已完成                                                             |
 | 部门 / 权限 / Agent / Skill 版本 / 聊天等业务表 | 部分落地：`users` 表 + JWT 认证已实现（docs/api-architecture.md）；Agent 配置含 `department`（专业范畴）/ `sop`（标准流程）/ `skills`（技能绑定）待建表 |
 
 ## 技术栈
 
-| 层      | 技术                                                                                  |
-| ------- | ------------------------------------------------------------------------------------- |
-| Web     | Vite + React 19 + TanStack Router + Zustand + assistant-ui + BlockNote                |
-| 共享 TS | TypeScript 6 + tsup                                                                   |
-| 服务端  | Python 3.11 + FastAPI + SQLAlchemy 2.x + Alembic（asyncpg 驱动） + httpx + websockets |
-| 数据库  | PostgreSQL 16（pgvector）+ SQLite / IndexedDB（本地层）                               |
-| 工程化  | pnpm 10 + ESLint 10 + Prettier 3 + Commitlint + Husky                                 |
+| 层      | 技术                                                                              |
+| ------- | --------------------------------------------------------------------------------- |
+| Web     | Vite + React 19 + TanStack Router + Zustand + assistant-ui + BlockNote            |
+| 共享 TS | TypeScript 6 + tsup                                                               |
+| 服务端  | Python 3.11 + FastAPI + SQLAlchemy 2.x + Alembic（aiosqlite）+ httpx + websockets |
+| 数据库  | SQLite（单文件 `services/api/data/dp_work.db`，零依赖）                           |
+| 工程化  | pnpm 10 + ESLint 10 + Prettier 3 + Commitlint + Husky                             |
 
 ## 目录结构
 
@@ -60,38 +59,30 @@ dp-work 是一套**企业 Agent 工作台 + 会议智能化**平台：团队成�
 apps/desktop    Electron 桌面客户端（复用 Web 页面）
 apps/web        Web 前端（Vite + React + assistant-ui；features 按模块划分）
 packages/       共享 TS 包（workspace 内引用）
-services/       Python 服务（sidecar：ASR+本地转写；api：Postgres 写入）
-infra/          基础设施（docker-compose、PG 初始化脚本）
+services/       Python 服务（sidecar：ASR+本地转写；api：SQLite 存储）
 docs/           项目文档（转写同步方案 / 架构图）
 ```
 
 ## 子包 / 服务作用
 
-| 包 / 服务             | 目录                  | 作用                                                                                                                                                                                                                                                                                             |
-| --------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@dp-work/contracts`  | `packages/contracts`  | Web ↔ Sidecar 的 camelCase 消息、转写分句及桌面 IPC 类型定义。                                                                                                                                                                                                                                   |
-| `@dp-work/api-client` | `packages/api-client` | 浏览器 / Node 通用 **API 客户端**（批量上行分句、健康检查）                                                                                                                                                                                                                                      |
-| `@dp-work/ui`         | `packages/ui`         | 两端复用 UI 组件（骨架，待从 `apps/web` 提取）                                                                                                                                                                                                                                                   |
-| `@dp-work/tsconfig`   | `packages/tsconfig`   | 共享 TypeScript 配置（`base.json`）                                                                                                                                                                                                                                                              |
-| sidecar               | `services/sidecar`    | 本机 ASR、临时片段文件和 SQLite 确认片段；对接豆包真实识别，云端同步待接入。                                                                                                                                                                                                                     |
-| api                   | `services/api`        | **服务端写入 + 企业级 API 底座**：统一响应 `{code,message,data}`、JWT 认证守卫（登录/刷新、require_role/require_dept）、RequestContext 中间件、全局异常过滤器；批量分句幂等写 PostgreSQL；按业务模块分层；测试与目录说明见 `services/api/README.md`（默认单元/API 测试，集成测试显式指定测试库） |
-| web                   | `apps/web`            | Web 前端：Agent 工作台 + 会议模块（features 按模块组织）                                                                                                                                                                                                                                         |
-| infra                 | `infra/postgres`      | PG 扩展初始化；业务表由 API 的 Alembic 迁移管理                                                                                                                                                                                                                                                  |
+| 包 / 服务             | 目录                  | 作用                                                                                                                                                                                                                                                                                                       |
+| --------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@dp-work/contracts`  | `packages/contracts`  | Web ↔ Sidecar 的 camelCase 消息、转写分句及桌面 IPC 类型定义。                                                                                                                                                                                                                                             |
+| `@dp-work/api-client` | `packages/api-client` | 浏览器 / Node 通用 **API 客户端**（批量上行分句、健康检查）                                                                                                                                                                                                                                                |
+| `@dp-work/ui`         | `packages/ui`         | 两端复用 UI 组件（骨架，待从 `apps/web` 提取）                                                                                                                                                                                                                                                             |
+| `@dp-work/tsconfig`   | `packages/tsconfig`   | 共享 TypeScript 配置（`base.json`）                                                                                                                                                                                                                                                                        |
+| sidecar               | `services/sidecar`    | 本机 ASR、临时片段文件和 SQLite 确认片段；对接豆包真实识别，云端同步待接入。                                                                                                                                                                                                                               |
+| api                   | `services/api`        | **企业级 API 底座**：统一响应 `{code,message,data}`、JWT 认证守卫（登录/刷新、require_role/require_dept）、RequestContext 中间件、全局异常过滤器；SQLite 单文件存储（`users` / `knowledge_bases`）；按业务模块分层；测试与目录说明见 `services/api/README.md`（默认单元/API 测试，集成测试显式指定测试库） |
+| web                   | `apps/web`            | Web 前端：Agent 工作台 + 会议模块（features 按模块组织）                                                                                                                                                                                                                                                   |
 
 ## 如何启动
 
-按依赖顺序：**PostgreSQL → api → sidecar → web**。
+按依赖顺序：**api → sidecar → web**（SQLite 单文件，无需任何数据库服务）。
 
-### 1. 基础设施（PostgreSQL + pgvector）
+### 1. 初始化数据库
 
 ```bash
-docker compose up -d   # 首次启动启用 vector 扩展；下一步执行 Alembic 建表
-# 若本机无 docker compose 子命令（如 colima + docker CLI）：
-#   docker run -d --name dp-postgres -e POSTGRES_USER=chenjiang -e POSTGRES_PASSWORD=chenjiang \
-#     -e POSTGRES_DB=dp_work -p 5432:5432 \
-#     -v pgdata:/var/lib/postgresql/data \
-#     -v "$PWD/infra/postgres/bootstrap:/docker-entrypoint-initdb.d:ro" \
-#     pgvector/pgvector:pg16
+cd services/api && .venv/bin/python -m alembic upgrade head   # 首次启动建表
 ```
 
 ### 2. api 服务（:8000）
@@ -104,8 +95,6 @@ uvicorn app.main:app --port 8000
 ```
 
 依赖和数据库准备完成后，日常可在仓库根目录用 `pnpm dev:api` 启动 API，再用 `pnpm dev:web` 启动前端。
-
-已有旧版业务表但没有 Alembic 版本的数据库，先在 API 目录运行 `python -m app.infrastructure.database.baseline` 核对结构并登记基线，再运行 `alembic upgrade head`。详见 [数据库迁移说明](services/api/migrations/README.md)。
 
 ### 3. sidecar（:8001，豆包 ASR）
 
@@ -188,7 +177,6 @@ chore: 升级依赖
 
 - TypeScript 固定使用 6.x（typescript-eslint 尚不支持 TS 7）。
 - `eslint.config.mjs` 关闭了 `react-hooks/refs`、`react-hooks/set-state-in-effect`（hooks 6.x 新规则，与模板的 useRef 缓存值 / effect 同步 setState 模式冲突）。
-- 本机 docker daemon 走 colima（`colima start` 后可用）；`docker compose` 子命令若无 compose 插件，用上方等价 `docker run` 命令。
 
 ## Electron 桌面端
 

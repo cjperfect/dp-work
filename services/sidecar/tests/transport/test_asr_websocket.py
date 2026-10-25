@@ -85,7 +85,7 @@ class AsrWebSocketTests(unittest.TestCase):
             self.assertNotIn("mode", ready)
             partial, _ = until(ws, "asr.transcript")
             self.assertFalse(partial["segment"]["isFinal"])
-            temporary = Path(self.temporary.name) / "temp/asr/meeting-1" / ready["sessionId"] / "0.json"
+            temporary = Path(self.temporary.name) / "temp/asr/meeting-1" / ready["sessionId"] / "transcripts.jsonl"
             self.assertEqual(json.loads(temporary.read_text())["segment"], partial["segment"])
             self.assertEqual(repository.pending_count("meeting-1"), 0)
             ws.send_bytes(bytes(6400))
@@ -162,7 +162,7 @@ class AsrWebSocketTests(unittest.TestCase):
                 self.assertEqual(error["code"], "TRANSCRIPT_FAILED")
                 self.assertFalse(any(m["type"] == "asr.transcript" and m["segment"]["isFinal"] for m in messages))
                 self.assertEqual(repository.pending_count("meeting-1"), 0)
-                self.assertTrue(list((Path(self.temporary.name) / "temp/asr/meeting-1").rglob("*.json")))
+                self.assertTrue(list((Path(self.temporary.name) / "temp/asr/meeting-1").rglob("*.jsonl")))
 
     @patch("src.providers.asr.doubao.DoubaoSettings.from_config")
     def test_missing_credentials_fail_explicitly_instead_of_losing_audio(self, settings):
@@ -188,6 +188,6 @@ class AsrWebSocketTests(unittest.TestCase):
             ready = ws.receive_json()
             partial, _ = until(ws, "asr.transcript")
         directory = Path(self.temporary.name) / "temp/asr/meeting-1" / ready["sessionId"]
-        saved = json.loads((directory / "0.json").read_text())
+        saved = json.loads((directory / "transcripts.jsonl").read_text())
         self.assertEqual(saved["segment"], partial["segment"])
         self.assertEqual(repository.pending_count("meeting-1"), 0)

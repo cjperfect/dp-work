@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { localAccountId } from "@/features/auth/lib/auth";
+import { loadKnowledgeDocumentsRequest } from "@/apis/knowledge";
 import type { KbFile } from "@/features/knowledge/constants/knowledge-data";
 export function useKnowledgeDocuments(baseId: string) {
   const accountId = useAuthStore((state) => localAccountId(state.user));
@@ -17,16 +18,25 @@ export function useKnowledgeDocuments(baseId: string) {
     let alive = true;
     if (!accountId) return;
     setState({ key, files: [], loading: true, error: null });
-    // 业务 API 已下线：静态空实现，不再发起请求。
-    Promise.resolve([] as KbFile[]).then((rows) => {
-      if (alive)
-        setState({
-          key,
-          files: rows,
-          loading: false,
-          error: null,
-        });
-    });
+    loadKnowledgeDocumentsRequest(accountId, baseId)
+      .then((rows) => {
+        if (alive)
+          setState({
+            key,
+            files: rows,
+            loading: false,
+            error: null,
+          });
+      })
+      .catch((cause) => {
+        if (alive)
+          setState({
+            key,
+            files: [],
+            loading: false,
+            error: cause instanceof Error ? cause.message : "读取文档失败，请重试。",
+          });
+      });
     return () => {
       alive = false;
     };

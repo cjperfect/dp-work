@@ -15,9 +15,10 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 # ---- 数据库 ----
+# SQLite 单文件数据库（本地化部署）；可用环境变量 DATABASE_URL 覆盖路径
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
-    "postgresql://chenjiang:chenjiang@localhost:5432/dp_work",
+    f"sqlite+aiosqlite:///{Path(__file__).resolve().parents[2] / 'data/dp_work.db'}",
 )
 
 # ---- 认证 / JWT ----

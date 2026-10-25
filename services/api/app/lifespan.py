@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from app.infrastructure.database import session
 from app.modules.users.bootstrap import ensure_initial_admin
+from app.modules.connectors.service import shutdown as shutdown_connectors
 
 
 @asynccontextmanager
@@ -14,4 +15,5 @@ async def lifespan(_: FastAPI):
         await ensure_initial_admin()
         yield
     finally:
+        await shutdown_connectors()
         await session.close_db()

@@ -14,6 +14,7 @@ export type KbFile = {
   content?: string;
   blocks?: PartialBlock[];
   source?: "editor" | "upload";
+  storage?: "server";
   status?: "draft" | "published";
   /** 源文件地址（pdf 等二进制文件提供，用于在线预览；上传文件为 data URL） */
   pdfUrl?: string;

@@ -5,6 +5,9 @@ import {
   listAllKnowledgeBasesRequest,
   updateKnowledgeBaseRequest,
   deleteKnowledgeBaseRequest,
+  saveKnowledgeDocumentRequest,
+  deleteKnowledgeDocumentRequest,
+  uploadKnowledgeDocumentRequest,
 } from "@/apis/knowledge";
 import type {
   EditorDocumentInput,
@@ -110,7 +113,63 @@ export async function saveKnowledgeDocument(
   baseId: string,
   input: EditorDocumentInput,
 ) {
-  const result = await repository.saveEditorDocument(accountId, baseId, input);
-  remember(accountId, result.base);
-  return result.file;
+  const file = await saveKnowledgeDocumentRequest(accountId, baseId, input);
+  if (useKnowledgeStore.getState().accountId === accountId) {
+    useKnowledgeStore.setState((state) => ({
+      bases: state.bases.map((base) =>
+        base.id === baseId
+          ? {
+              ...base,
+              files: [file, ...base.files.filter((row) => row.id !== file.id)],
+              updatedAt: file.updatedAt,
+            }
+          : base,
+      ),
+    }));
+  }
+  return file;
+}
+
+export async function deleteKnowledgeDocument(
+  accountId: string,
+  baseId: string,
+  documentId: string,
+) {
+  await deleteKnowledgeDocumentRequest(accountId, baseId, documentId);
+  if (useKnowledgeStore.getState().accountId !== accountId) return;
+  useKnowledgeStore.setState((state) => ({
+    bases: state.bases.map((base) =>
+      base.id === baseId
+        ? {
+            ...base,
+            files: base.files.filter((file) => file.id !== documentId),
+            documentCount: Math.max(0, (base.documentCount ?? 0) - 1),
+          }
+        : base,
+    ),
+  }));
+}
+
+export async function uploadKnowledgeDocument(
+  accountId: string,
+  baseId: string,
+  file: File,
+  onProgress?: (percent: number) => void,
+) {
+  const uploaded = await uploadKnowledgeDocumentRequest(accountId, baseId, file, onProgress);
+  if (useKnowledgeStore.getState().accountId === accountId) {
+    useKnowledgeStore.setState((state) => ({
+      bases: state.bases.map((base) =>
+        base.id === baseId
+          ? {
+              ...base,
+              files: [uploaded, ...base.files],
+              updatedAt: uploaded.updatedAt,
+              documentCount: (base.documentCount ?? 0) + 1,
+            }
+          : base,
+      ),
+    }));
+  }
+  return uploaded;
 }

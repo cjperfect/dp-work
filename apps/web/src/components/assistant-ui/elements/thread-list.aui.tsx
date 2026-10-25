@@ -3,6 +3,7 @@ import { selectThreadById, useAgentStore } from "@/stores/agent";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/app";
@@ -453,57 +454,106 @@ const ThreadListItemRename: FC<{
 
 const ThreadListItemMore: FC<{ onRename: () => void }> = ({ onRename }) => {
   const renameRequested = useRef(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   return (
-    <ThreadListItemMorePrimitive.Root sharedFocusGroup>
-      <ThreadListItemMorePrimitive.Trigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon"
-            data-slot="aui_thread-list-item-more"
-            className="data-[state=open]:bg-accent absolute end-1.5 top-1/2 size-6 -translate-y-1/2 p-0 opacity-0 group-hover:opacity-100 group-has-focus-visible:opacity-100 group-data-active:opacity-100 data-[state=open]:opacity-100"
-          />
-        }
-      >
-        <MoreHorizontalIcon className="size-3.5" />
-        <span className="sr-only">更多选项</span>
-      </ThreadListItemMorePrimitive.Trigger>
-      <ThreadListItemMorePrimitive.Content
-        side="right"
-        align="start"
-        sideOffset={6}
-        onCloseAutoFocus={(event) => {
-          if (!renameRequested.current) return;
-          // 等菜单关闭后再编辑，避免焦点恢复触发输入框失焦保存。
-          event.preventDefault();
-          renameRequested.current = false;
-          onRename();
-        }}
-        data-slot="aui_thread-list-item-more-content"
-        className="bg-popover text-popover-foreground data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-32 overflow-hidden rounded-xl border p-1.5"
-      >
-        <ThreadListItemMorePrimitive.Item
-          data-slot="aui_thread-list-item-more-item"
-          className="hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm outline-none select-none"
-          onSelect={() => {
-            renameRequested.current = true;
-          }}
-        >
-          <PencilIcon className="size-4" />
-          重命名
-        </ThreadListItemMorePrimitive.Item>
-        <ThreadListItemPrimitive.Delete
+    <>
+      <ThreadListItemMorePrimitive.Root sharedFocusGroup>
+        <ThreadListItemMorePrimitive.Trigger
           render={
-            <ThreadListItemMorePrimitive.Item
-              data-slot="aui_thread-list-item-more-item"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10 focus:text-destructive flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm outline-none select-none"
+            <Button
+              variant="ghost"
+              size="icon"
+              data-slot="aui_thread-list-item-more"
+              className="data-[state=open]:bg-accent absolute end-1.5 top-1/2 size-6 -translate-y-1/2 p-0 opacity-0 group-hover:opacity-100 group-has-focus-visible:opacity-100 group-data-active:opacity-100 data-[state=open]:opacity-100"
             />
           }
         >
-          <TrashIcon className="size-4" />
-          删除
-        </ThreadListItemPrimitive.Delete>
-      </ThreadListItemMorePrimitive.Content>
-    </ThreadListItemMorePrimitive.Root>
+          <MoreHorizontalIcon className="size-3.5" />
+          <span className="sr-only">更多选项</span>
+        </ThreadListItemMorePrimitive.Trigger>
+        <ThreadListItemMorePrimitive.Content
+          side="right"
+          align="start"
+          sideOffset={6}
+          onCloseAutoFocus={(event) => {
+            if (!renameRequested.current) return;
+            // 等菜单关闭后再编辑，避免焦点恢复触发输入框失焦保存。
+            event.preventDefault();
+            renameRequested.current = false;
+            onRename();
+          }}
+          data-slot="aui_thread-list-item-more-content"
+          className="bg-popover text-popover-foreground data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-32 overflow-hidden rounded-xl border p-1.5"
+        >
+          <ThreadListItemMorePrimitive.Item
+            data-slot="aui_thread-list-item-more-item"
+            className="hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm outline-none select-none"
+            onSelect={() => {
+              renameRequested.current = true;
+            }}
+          >
+            <PencilIcon className="size-4" />
+            重命名
+          </ThreadListItemMorePrimitive.Item>
+          <ThreadListItemMorePrimitive.Item
+            data-slot="aui_thread-list-item-more-item"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10 focus:text-destructive flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm outline-none select-none"
+            onSelect={() => {
+              setConfirmOpen(true);
+            }}
+          >
+            <TrashIcon className="size-4" />
+            删除
+          </ThreadListItemMorePrimitive.Item>
+        </ThreadListItemMorePrimitive.Content>
+      </ThreadListItemMorePrimitive.Root>
+      {/* 删除二次确认：锚定在更多按钮同一位置 */}
+      <Popover open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <PopoverTrigger
+          render={
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-hidden="true"
+              className="pointer-events-none absolute end-1.5 top-1/2 size-6 -translate-y-1/2 opacity-0"
+            />
+          }
+        />
+        <PopoverContent
+          side="right"
+          align="start"
+          sideOffset={6}
+          className="w-64 p-3"
+          aria-labelledby="delete-thread-title"
+          aria-describedby="delete-thread-description"
+        >
+          <h2 id="delete-thread-title" className="text-sm font-medium">
+            删除该会话？
+          </h2>
+          <p id="delete-thread-description" className="text-muted-foreground mt-1 text-xs">
+            删除后无法恢复该会话的聊天记录。
+          </p>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setConfirmOpen(false)}>
+              取消
+            </Button>
+            <ThreadListItemPrimitive.Delete
+              render={
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  data-slot="aui_thread-list-item-delete-confirm"
+                  onClick={() => setConfirmOpen(false)}
+                >
+                  确认删除
+                </Button>
+              }
+            >
+              确认删除
+            </ThreadListItemPrimitive.Delete>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </>
   );
 };

@@ -62,14 +62,15 @@ test("editor drafts retain formatting and publish as the same document", async (
   );
 });
 
-test("empty document bodies can be drafted but cannot be saved as completed documents", async () => {
+test("empty documents can be created immediately and autosaved under the same ID", async () => {
   const base = await createKnowledgeBase("user:12", { name: "草稿库", description: "" });
   const input = { id: "editor-empty", title: "空草稿", content: "", status: "draft" };
   await saveEditorDocument("user:12", base.id, input);
-  await assert.rejects(
-    saveEditorDocument("user:12", base.id, { ...input, status: "published" }),
-    /正文/,
-  );
+  await saveEditorDocument("user:12", base.id, { ...input, status: "published" });
+  const stored = (await listKnowledgeBases("user:12")).find((row) => row.id === base.id);
+  assert.equal(stored.files.length, 1);
+  assert.equal(stored.files[0].status, "published");
+  assert.equal(stored.files[0].content, "");
   await assert.rejects(
     saveEditorDocument("user:12", base.id, { ...input, title: " .md " }),
     /标题/,

@@ -4,10 +4,9 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
-    BigInteger,
     DateTime,
     FetchedValue,
-    Identity,
+    Integer,
     SmallInteger,
     Text,
     func,
@@ -24,7 +23,7 @@ class User(Base):
     """用户表模型。"""
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(Text, unique=True)
     password_hash: Mapped[str] = mapped_column(Text)
     department: Mapped[str] = mapped_column(Text)

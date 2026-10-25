@@ -1,10 +1,26 @@
 import { localAccountId } from "@/features/auth/lib/auth";
-import { useParams } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import { useState, useRef, type ChangeEvent } from "react";
-import { ArrowLeft, FilePlus2, FileText, Pencil, Upload, UploadCloud } from "lucide-react";
+import {
+  ArrowLeft,
+  FilePlus2,
+  FileText,
+  Pencil,
+  ScanText,
+  Trash2,
+  Loader2,
+  Upload,
+  UploadCloud,
+} from "lucide-react";
 import { cn } from "cn";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+} from "@/components/ui/context-menu";
 import {
   Dialog,
   DialogContent,
@@ -12,30 +28,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Popover, PopoverContent } from "@/components/ui/popover";
+import { deleteKnowledgeDocument, uploadKnowledgeDocument } from "@/stores/knowledge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useKnowledgeDocuments } from "@/features/knowledge/hooks/use-knowledge-documents";
 import { useKnowledgeBases } from "@/features/knowledge/hooks/use-knowledge-bases";
 import { useAuthStore } from "@/stores/auth";
+import { useDocumentPdf } from "@/features/knowledge/hooks/use-document-pdf";
 import { PdfPreview } from "@/features/knowledge/components/pdf-preview";
 import { LazyBlockNoteEditor as BlockNoteEditor } from "@/components/editor/lazy-blocknote-editor";
-import { appendUploadedFile, getKbFiles } from "@/stores/knowledge-upload";
+import { getKbFiles, removeUploadedFile } from "@/stores/knowledge-upload";
 import {
   FILE_TYPE_META,
   KNOWLEDGE_BASES,
   type KbFile,
 } from "@/features/knowledge/constants/knowledge-data";
 
-/** 文件大小格式化：< 1MB 显示 KB，否则显示 MB */
-function formatSize(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 export { KnowledgePage } from "./knowledge-list-page";
 
 /** 知识库详情页（/knowledge/$kbId）：文件列表，支持上传 md / pdf */
 export function KnowledgeBaseDetailPage() {
   const { kbId } = useParams({ from: "/_app/knowledge/$kbId/" });
+  const navigate = useNavigate();
   const { bases, loading, error, reload } = useKnowledgeBases();
   const documents = useKnowledgeDocuments(kbId);
   // 后端知识库/文档接口不可用或未接入时，降级为本地 mock + 本地上传数据，页面始终可看
@@ -51,10 +65,53 @@ export function KnowledgeBaseDetailPage() {
   );
   const accountId = useAuthStore((state) => localAccountId(state.user));
   const [uploadMsg, setUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [vectorNotice, setVectorNotice] = useState<{ kbId: string; text: string } | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogErr, setDialogErr] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const uploadLock = useRef(false);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const cards = useRef(new Map<string, HTMLLIElement>());
+  const [deleteTarget, setDeleteTarget] = useState<{
+    kbId: string;
+    file: KbFile;
+    anchor: HTMLElement;
+  } | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteLock = useRef(false);
+  const cancelDeleteRef = useRef<HTMLButtonElement>(null);
+
+  async function confirmDelete() {
+    if (
+      !deleteOpen ||
+      !deleteTarget ||
+      !accountId ||
+      deleteLock.current ||
+      deleteTarget.kbId !== kbId
+    )
+      return;
+    const target = deleteTarget;
+    deleteLock.current = true;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      if (target.file.source === "editor" || target.file.storage === "server")
+        await deleteKnowledgeDocument(accountId, kbId, target.file.id);
+      else removeUploadedFile(kbId, target.file.id, accountId);
+      if (localAccountId(useAuthStore.getState().user) !== accountId) return;
+      setDeleteOpen(false);
+      documents.reload();
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : "删除失败，请重试。");
+    } finally {
+      deleteLock.current = false;
+      setDeleting(false);
+    }
+  }
 
   // 仅当本地也无对应知识库时才阻断：加载中显示加载态，其余按不存在处理
   if ((loading || error || documents.loading || documents.error) && !kb)
@@ -79,50 +136,31 @@ export function KnowledgeBaseDetailPage() {
     );
   }
 
-  /** 处理单个文件：仅允许 md / pdf，成功后写入存储并关闭弹窗 */
-  const handleFile = (file: File) => {
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    if (ext !== "md" && ext !== "pdf") {
-      setDialogErr(`仅支持 Markdown 与 PDF，已忽略「${file.name}」`);
-      return;
-    }
+  /** 上传源文件，后端确认成功后更新列表。 */
+  const handleFile = async (file: File) => {
+    if (uploadLock.current || !accountId) return;
+    uploadLock.current = true;
+    setUploading(true);
+    setUploadProgress(0);
     setDialogErr(null);
-    const now = new Date().toISOString().slice(0, 10);
-    const id = `f-${Date.now()}`;
-    const base = {
-      id,
-      name: file.name,
-      size: formatSize(file.size),
-      uploader: "我",
-      updatedAt: now,
-    };
-    const done = (entry: KbFile) => {
-      if (!accountId || localAccountId(useAuthStore.getState().user) !== accountId) return;
-      try {
-        appendUploadedFile(kb.id, entry, accountId);
-        setUploadMsg({ ok: true, text: `已上传 ${file.name}` });
-        setDialogOpen(false);
-      } catch {
-        setDialogErr("本地保存失败，请检查浏览器存储空间后重试。");
-      }
-    };
-    if (ext === "md") {
-      file
-        .text()
-        .then((content) => done({ ...base, type: "md", content }))
-        .catch(() => setDialogErr(`读取 ${file.name} 失败，请重试`));
-    } else {
-      const reader = new FileReader();
-      reader.onload = () => done({ ...base, type: "pdf", pdfUrl: reader.result as string });
-      reader.onerror = () => setDialogErr(`读取 ${file.name} 失败，请重试`);
-      reader.readAsDataURL(file);
+    try {
+      await uploadKnowledgeDocument(accountId, kb.id, file, setUploadProgress);
+      if (localAccountId(useAuthStore.getState().user) !== accountId) return;
+      setUploadMsg({ ok: true, text: `已上传 ${file.name}` });
+      setDialogOpen(false);
+      documents.reload();
+    } catch (cause) {
+      setDialogErr(cause instanceof Error ? cause.message : "上传失败，请重试。");
+    } finally {
+      uploadLock.current = false;
+      setUploading(false);
     }
   };
 
   const onPickFile = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = ""; // 允许重复选择同一文件
-    if (file) handleFile(file);
+    if (file) void handleFile(file);
   };
 
   return (
@@ -145,7 +183,7 @@ export function KnowledgeBaseDetailPage() {
           <p className="text-muted-foreground text-sm">{kb.description}</p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={() => setDialogOpen(true)}>
+          <Button variant="outline" disabled={uploading} onClick={() => setDialogOpen(true)}>
             <Upload className="size-4" />
             上传文件
           </Button>
@@ -174,15 +212,30 @@ export function KnowledgeBaseDetailPage() {
         </p>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+      {vectorNotice?.kbId === kbId && (
+        <p role="status" className="text-xs text-muted-foreground">
+          {vectorNotice.text}
+        </p>
+      )}
+
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          if (!uploadLock.current) setDialogOpen(open);
+        }}
+      >
+        <DialogContent showCloseButton={!uploading}>
           <DialogHeader>
             <DialogTitle>上传文件</DialogTitle>
-            <DialogDescription>仅支持 Markdown 与 PDF，单次选择一个文件</DialogDescription>
+            <DialogDescription>
+              支持 Markdown 与 PDF，单次选择一个文件，最大 20 MB。
+            </DialogDescription>
           </DialogHeader>
           <div
             role="button"
-            tabIndex={0}
+            tabIndex={uploading ? -1 : 0}
+            aria-busy={uploading}
+            aria-disabled={uploading}
             aria-label="选择上传文件"
             className={cn(
               "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-8 py-10 text-center transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -190,9 +243,14 @@ export function KnowledgeBaseDetailPage() {
                 ? "border-primary bg-primary/5"
                 : "border-muted-foreground/25 hover:bg-muted/50",
             )}
-            onClick={() => inputRef.current?.click()}
+            onClick={() => {
+              if (!uploading) inputRef.current?.click();
+            }}
             onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+              if (!uploading && (e.key === "Enter" || e.key === " ")) {
+                e.preventDefault();
+                inputRef.current?.click();
+              }
             }}
             onDragOver={(e) => {
               e.preventDefault();
@@ -203,16 +261,23 @@ export function KnowledgeBaseDetailPage() {
               e.preventDefault();
               setDragging(false);
               const f = e.dataTransfer.files?.[0];
-              if (f) handleFile(f);
+              if (f) void handleFile(f);
             }}
           >
-            <UploadCloud className="text-muted-foreground size-8" />
-            <p className="text-sm font-medium">点击选择文件，或将文件拖拽到此处</p>
-            <p className="text-muted-foreground text-xs">支持 .md / .pdf</p>
+            {uploading ? (
+              <Loader2 className="size-8 animate-spin text-muted-foreground" />
+            ) : (
+              <UploadCloud className="size-8 text-muted-foreground" />
+            )}
+            <p role="status" className="text-sm font-medium">
+              {uploading ? `上传中… ${uploadProgress}%` : "点击选择文件，或将文件拖拽到此处"}
+            </p>
+            <p className="text-xs text-muted-foreground">支持 .md / .pdf，最大 20 MB</p>
           </div>
           <input
             ref={inputRef}
             type="file"
+            disabled={uploading}
             accept=".md,.pdf"
             className="hidden"
             onChange={onPickFile}
@@ -235,61 +300,98 @@ export function KnowledgeBaseDetailPage() {
           {files.map((file) => {
             const meta = FILE_TYPE_META[file.type];
             const extension = file.type === "md" ? "MD" : file.type.replace(/x$/, "").toUpperCase();
-            const savedToServer = file.id.startsWith("doc-");
             const date = new Date(file.updatedAt);
             const displayDate = Number.isNaN(date.getTime())
               ? file.updatedAt
               : `${date.getMonth() + 1}/${date.getDate()}`;
             return (
-              <li key={file.id} className="min-w-0">
-                <Link
-                  to={
-                    file.status === "draft" && file.source === "editor"
-                      ? "/knowledge/$kbId/edit/$fileId"
-                      : "/knowledge/$kbId/files/$fileId"
+              <ContextMenu key={file.id}>
+                <ContextMenuTrigger
+                  render={
+                    <li
+                      ref={(node) => {
+                        if (node) cards.current.set(file.id, node);
+                        else cards.current.delete(file.id);
+                      }}
+                      className="min-w-0 rounded-2xl data-[popup-open]:bg-muted/60"
+                    />
                   }
-                  params={{ kbId: kb.id, fileId: file.id }}
-                  title={file.name}
-                  className="group relative flex h-full min-w-0 flex-col items-center rounded-2xl px-3 pb-3 pt-4 text-center outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  {file.status === "draft" ? (
-                    <span className="absolute right-2 top-2 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-700">
-                      草稿
-                    </span>
-                  ) : (
-                    <span
-                      title={savedToServer ? "本地演示文档" : "此浏览器中的文件"}
-                      className={cn(
-                        "absolute right-3 top-3 size-1.5 rounded-full",
-                        savedToServer ? "bg-emerald-500/70" : "bg-muted-foreground/30",
-                      )}
-                    >
-                      <span className="sr-only">
-                        {savedToServer ? "本地演示文档" : "此浏览器中的文件"}
-                      </span>
-                    </span>
-                  )}
-                  <div
-                    aria-hidden="true"
-                    className={`mb-3 flex size-14 shrink-0 items-center justify-center rounded-2xl ${meta.badge}`}
+                  <Link
+                    to={
+                      file.source === "editor"
+                        ? "/knowledge/$kbId/edit/$fileId"
+                        : "/knowledge/$kbId/files/$fileId"
+                    }
+                    params={{ kbId: kb.id, fileId: file.id }}
+                    title={file.name}
+                    className="group relative flex h-full min-w-0 flex-col items-center rounded-2xl px-3 pb-3 pt-9 text-center outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <span className="flex h-8 min-w-7 items-center justify-center rounded-[5px] border-[1.5px] border-current px-1 text-[9px] font-semibold tracking-tight">
-                      {extension}
+                    <span
+                      title="该文档尚未向量化"
+                      className="absolute right-2 top-2 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+                    >
+                      未向量化
                     </span>
-                  </div>
-                  <span className="line-clamp-2 min-h-10 w-full break-all text-xs font-medium leading-5">
-                    {file.name}
-                  </span>
-                  <span className="mt-1 flex max-w-full flex-wrap items-center justify-center gap-x-1 text-[10px] leading-4 text-muted-foreground">
-                    <span className={cn(meta.badge, "bg-transparent")}>{extension}</span>
-                    <span aria-hidden="true">·</span>
-                    <span>{file.size}</span>
-                    <time dateTime={file.updatedAt} className="ml-0.5">
-                      {displayDate}
-                    </time>
-                  </span>
-                </Link>
-              </li>
+                    <div
+                      aria-hidden="true"
+                      className={`mb-3 flex size-14 shrink-0 items-center justify-center rounded-2xl ${meta.badge}`}
+                    >
+                      <span className="flex h-8 min-w-7 items-center justify-center rounded-[5px] border-[1.5px] border-current px-1 text-[9px] font-semibold tracking-tight">
+                        {extension}
+                      </span>
+                    </div>
+                    <span className="line-clamp-2 min-h-10 w-full break-all text-xs font-medium leading-5">
+                      {file.name}
+                    </span>
+                    <span className="mt-1 flex max-w-full flex-wrap items-center justify-center gap-x-1 text-[10px] leading-4 text-muted-foreground">
+                      <span className={cn(meta.badge, "bg-transparent")}>{extension}</span>
+                      <span aria-hidden="true">·</span>
+                      <span>{file.size}</span>
+                      <time dateTime={file.updatedAt} className="ml-0.5">
+                        {displayDate}
+                      </time>
+                    </span>
+                  </Link>
+                </ContextMenuTrigger>
+                <ContextMenuContent aria-label={`${file.name}的操作`}>
+                  <ContextMenuItem
+                    disabled={file.source !== "editor"}
+                    title={file.source !== "editor" ? "上传文件暂不支持在线编辑" : undefined}
+                    onClick={() =>
+                      void navigate({
+                        to: "/knowledge/$kbId/edit/$fileId",
+                        params: { kbId, fileId: file.id },
+                      })
+                    }
+                  >
+                    <Pencil />
+                    编辑
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    onClick={() =>
+                      setVectorNotice({ kbId, text: `「${file.name}」的向量化服务尚未接入。` })
+                    }
+                  >
+                    <ScanText />
+                    向量化
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    className="text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive [&_svg]:text-destructive"
+                    onClick={() => {
+                      const anchor = cards.current.get(file.id);
+                      if (anchor) {
+                        setDeleteError(null);
+                        setDeleteTarget({ kbId, file, anchor });
+                        setDeleteOpen(true);
+                      }
+                    }}
+                  >
+                    <Trash2 />
+                    删除
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             );
           })}
           {files.length === 0 && (
@@ -300,8 +402,56 @@ export function KnowledgeBaseDetailPage() {
         </ul>
       </section>
 
+      <Popover
+        open={deleteOpen && deleteTarget?.kbId === kbId}
+        onOpenChange={(open) => {
+          if (!open && !deleteLock.current) setDeleteOpen(false);
+        }}
+      >
+        <PopoverContent
+          anchor={deleteTarget?.anchor}
+          align="start"
+          className="w-72"
+          aria-label="删除文档确认"
+          initialFocus={cancelDeleteRef}
+          finalFocus={() =>
+            deleteTarget?.anchor.isConnected ? deleteTarget.anchor.querySelector("a") : false
+          }
+        >
+          <p className="text-sm font-medium">删除文档？</p>
+          <p className="mt-2 break-words text-xs text-muted-foreground">
+            确定删除「{deleteTarget?.file.name}」？此操作无法撤销。
+          </p>
+          {deleteError && (
+            <p role="alert" className="mt-2 text-xs text-destructive">
+              {deleteError}
+            </p>
+          )}
+          <div className="mt-4 flex justify-end gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              ref={cancelDeleteRef}
+              disabled={deleting}
+              onClick={() => setDeleteOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={deleting}
+              onClick={() => void confirmDelete()}
+            >
+              {deleting && <Loader2 className="size-3 animate-spin" />}
+              {deleting ? "删除中…" : "确认删除"}
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+
       <p className="text-muted-foreground text-xs">
-        上传支持 Markdown 与 PDF；在线文档可保存为草稿，或保存后阅读。
+        上传支持 Markdown 与 PDF；在线文档修改后自动保存。
       </p>
     </div>
   );
@@ -315,6 +465,7 @@ export function KnowledgeFilePage() {
   const kb = bases.find((k) => k.id === kbId);
   const documents = useKnowledgeDocuments(kbId);
   const file = [...documents.files, ...getKbFiles(kbId)].find((f) => f.id === fileId);
+  const pdf = useDocumentPdf(kbId, file);
 
   if (loading || error || documents.loading || documents.error)
     return (
@@ -340,7 +491,7 @@ export function KnowledgeFilePage() {
 
   const meta = FILE_TYPE_META[file.type];
   const Icon = meta.icon;
-  const isPdf = file.type === "pdf" && !!file.pdfUrl;
+  const isPdf = file.type === "pdf";
 
   return (
     <div className="flex h-full w-full flex-col gap-6 px-6 py-8 md:px-10">
@@ -396,7 +547,16 @@ export function KnowledgeFilePage() {
           </TabsList>
           <TabsContent value="source" className="min-h-0 flex-1 overflow-auto">
             {isPdf ? (
-              <PdfPreview url={file.pdfUrl!} />
+              pdf.url ? (
+                <PdfPreview url={pdf.url} />
+              ) : (
+                <div
+                  role={pdf.error ? "alert" : "status"}
+                  className="p-8 text-sm text-muted-foreground"
+                >
+                  {pdf.error ?? "正在读取 PDF…"}
+                </div>
+              )
             ) : file.content ? (
               <BlockNoteEditor
                 initialContent={file.blocks}
@@ -417,7 +577,7 @@ export function KnowledgeFilePage() {
                 <BlockNoteEditor
                   initialContent={file.blocks}
                   markdown={file.blocks ? undefined : (file.content ?? "")}
-                  editable={file.source !== "editor" && !file.id.startsWith("doc-")}
+                  editable={false}
                   className="px-4 py-4"
                 />
               </div>

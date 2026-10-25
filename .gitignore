@@ -55,3 +55,10 @@ packages/**/dist/
 # Electron / desktop Next.js build
 .next-desktop
 apps/desktop/release/
+
+# SQLite 本地数据库文件
+services/api/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

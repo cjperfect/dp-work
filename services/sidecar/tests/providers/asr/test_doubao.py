@@ -6,7 +6,8 @@ from pathlib import Path
 import struct
 from tempfile import TemporaryDirectory
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 from websockets.asyncio.client import connect
 from websockets.asyncio.server import serve
@@ -109,14 +110,14 @@ class DoubaoStreamTests(unittest.IsolatedAsyncioTestCase):
                 await session.send_audio(pcm)
                 await asyncio.wait_for(partial.wait(), 2)
                 self.assertEqual(repository.pending_count("meeting-1"), 0)
-                self.assertTrue(repository.segment_path("meeting-1", session.session_id, 0).exists())
+                self.assertTrue(repository.temporary_path("meeting-1", session.session_id).exists())
                 await session.stop()
                 finals = [m["segment"] for m in messages if m["type"] == "asr.transcript" and m["segment"]["isFinal"]]
                 self.assertEqual(len(finals), 1)
                 self.assertEqual(finals[0]["text"], "讨论知识库。")
                 self.assertEqual(finals[0]["speakerId"], "speaker-1")
                 self.assertEqual(repository.pending_count("meeting-1"), 1)
-                self.assertFalse(repository.segment_path("meeting-1", session.session_id, 0).exists())
+                self.assertFalse(repository.temporary_path("meeting-1", session.session_id).exists())
                 self.assertEqual(repository.position("meeting-1"), (1, 200))
                 self.assertEqual(observed["audio"], (2, 2, pcm))
                 self.assertEqual(observed["tail"], (2, -3, b""))
@@ -149,9 +150,70 @@ class DoubaoStreamTests(unittest.IsolatedAsyncioTestCase):
                     await session.stop()
                 self.assertEqual(failure.exception.code, "FINAL_RESULT_MISSING")
                 self.assertEqual(repository.pending_count("meeting-1"), 0)
-                self.assertTrue(repository.segment_path("meeting-1", session.session_id, 0).exists())
+                self.assertTrue(repository.temporary_path("meeting-1", session.session_id).exists())
             finally:
                 await session.close()
+
+    async def test_startup_deadline_covers_waiting_for_first_response(self):
+        async def blocked_receive():
+            await asyncio.Future()
+        socket = SimpleNamespace(response=SimpleNamespace(headers={}),
+                                 send=AsyncMock(), recv=AsyncMock(side_effect=blocked_receive),
+                                 close=AsyncMock())
+        provider = DoubaoRecognizer(DoubaoSettings(api_key="fixture-key"), AsyncMock(return_value=socket))
+        with patch("src.providers.asr.doubao.STARTUP_TIMEOUT", 0.02):
+            with self.assertRaises(AsrProviderError) as failure:
+                await asyncio.wait_for(provider.open(), 1)
+        self.assertEqual(failure.exception.code, "PROVIDER_CONNECT_TIMEOUT")
+        socket.close.assert_awaited_once()
+        self.assertIsNone(provider.socket)
+
+    async def test_cancelling_startup_closes_connection(self):
+        receiving = asyncio.Event()
+        async def blocked_receive():
+            receiving.set()
+            await asyncio.Future()
+        socket = SimpleNamespace(response=SimpleNamespace(headers={}),
+                                 send=AsyncMock(), recv=AsyncMock(side_effect=blocked_receive),
+                                 close=AsyncMock())
+        provider = DoubaoRecognizer(DoubaoSettings(api_key="fixture-key"), AsyncMock(return_value=socket))
+        task = asyncio.create_task(provider.open())
+        await asyncio.wait_for(receiving.wait(), 1)
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+        socket.close.assert_awaited_once()
+        self.assertIsNone(provider.socket)
+
+    async def test_session_deduplicates_before_writing_with_resumed_time_offset(self):
+        repository.save_duration("meeting-1", "previous-session", 0, 500)
+        partial = dict(key=0, text="讨论", speakerId="speaker-1", startMs=0, endMs=160, isFinal=False)
+        final = dict(partial, isFinal=True)
+        async def events():
+            for event in (partial, partial, final, final):
+                yield event
+        provider = SimpleNamespace(open=AsyncMock(), close=AsyncMock(), events=events)
+        messages = []
+        async def send(message):
+            messages.append(message)
+        session = AsrSession("meeting-1", send, provider)
+        try:
+            await session.prepare()
+            with patch.object(repository, "save_temporary", wraps=repository.save_temporary) as temporary, \
+                 patch.object(repository, "save_segment", wraps=repository.save_segment) as committed:
+                await session.run()
+            self.assertFalse(session.failed)
+            self.assertEqual(temporary.call_count, 1)
+            self.assertEqual(committed.call_count, 1)
+            segments = [m["segment"] for m in messages if m["type"] == "asr.transcript"]
+            self.assertEqual([s["revision"] for s in segments], [1, 2])
+            self.assertEqual([(s["startMs"], s["endMs"]) for s in segments], [(500, 660)] * 2)
+            self.assertTrue(segments[-1]["isFinal"])
+            self.assertEqual(partial["startMs"], 0)
+            self.assertEqual(partial["key"], 0)
+            self.assertEqual(repository.pending_count("meeting-1"), 1)
+        finally:
+            await session.close()
 
     async def test_failed_handshake_reports_auth_error_without_echoing_credentials(self):
         async def rejected(_url, **kwargs):
