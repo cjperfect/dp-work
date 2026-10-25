@@ -38,3 +38,16 @@ export function apiBaseUrl(value: string): string {
     throw new Error("API 地址必须使用 HTTPS；本机回环地址允许 HTTP。");
   return url.href.replace(/\/$/, "");
 }
+
+/** 仅允许当前应用页面申请麦克风，不开放摄像头或屏幕采集。 */
+export function canCaptureMicrophone(
+  requestingUrl: string,
+  origin: string,
+  mediaTypes?: readonly string[],
+): boolean {
+  return (
+    isAppUrl(requestingUrl, origin) &&
+    !!mediaTypes?.length &&
+    mediaTypes.every((type) => type === "audio")
+  );
+}

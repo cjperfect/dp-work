@@ -66,7 +66,6 @@ export interface WsAsrReady {
   requestId: string;
   meetingId: string;
   sessionId: string;
-  mode: "mock" | "doubao";
 }
 
 /** isFinal=true 的片段已由 Sidecar 保存到 SQLite。 */

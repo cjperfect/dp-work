@@ -5,14 +5,13 @@ import logging
 from starlette.websockets import WebSocketDisconnect
 from uuid import uuid4
 
-from . import repository, temporary
-from ..providers.asr.mock import MockRecognizer
-from ..providers.asr.doubao import AsrProviderError
+from . import repository
+from ..providers.asr.doubao import AsrProviderError, DoubaoRecognizer
 
 
 class AsrSession:
     def __init__(self, meeting_id, send, provider=None):
-        self.provider = provider or MockRecognizer()
+        self.provider = provider or DoubaoRecognizer()
         self.meeting_id = meeting_id
         self.session_id = str(uuid4())
         self.send = send
@@ -45,18 +44,18 @@ class AsrSession:
                 seq = previous["seq"] if previous else self.next_seq
                 if not previous:
                     self.next_seq += 1
-                segment = dict(event, id=f"{self.meeting_id}#{seq}", seq=seq,
+                segment = dict(event, id=f"{self.meeting_id}:{self.session_id}#{seq}", seq=seq,
                                revision=previous["revision"]+1 if previous else 1,
                                startMs=self.offset+event["startMs"], endMs=self.offset+event["endMs"])
                 if segment["isFinal"]:
                     await asyncio.to_thread(repository.save_segment, self.meeting_id, segment)
                     self.last_final_seq = seq
                     try:
-                        await asyncio.to_thread(temporary.remove_temporary, self.meeting_id, self.session_id, seq)
+                        await asyncio.to_thread(repository.remove_temporary, self.meeting_id, self.session_id, seq)
                     except OSError:
                         logging.getLogger(__name__).warning("已确认片段的临时文件清理失败")
                 else:
-                    await asyncio.to_thread(temporary.save_temporary, self.meeting_id, self.session_id, segment)
+                    await asyncio.to_thread(repository.save_temporary, self.meeting_id, self.session_id, segment)
                 self.segments[key] = segment
                 await self.send(dict(type="asr.transcript", meetingId=self.meeting_id,
                                      sessionId=self.session_id, segment=segment))
@@ -81,9 +80,13 @@ class AsrSession:
     async def stop(self):
         """等待最后的确认片段保存并推送完成。"""
         self.stop_event.set()
-        await self.provider.finish()
-        if self.task:
-            await asyncio.wait_for(asyncio.shield(self.task), timeout=8)
+        try:
+            async with asyncio.timeout(8):
+                await self.provider.finish()
+                if self.task:
+                    await asyncio.shield(self.task)
+        except TimeoutError as cause:
+            raise AsrProviderError("PROVIDER_STOP_TIMEOUT", "等待豆包最终结果超时，临时片段已保留。", True) from cause
         if not self.failed and any(not row["isFinal"] for row in self.segments.values()):
             raise AsrProviderError("FINAL_RESULT_MISSING", "部分文字尚未确认，已保留临时文件，请重试。", True)
         await self.save_duration()

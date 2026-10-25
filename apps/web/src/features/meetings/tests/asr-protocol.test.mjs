@@ -55,7 +55,6 @@ async function connect(env) {
     meetingId: "meeting-1",
     sessionId: "session-1",
     requestId: command.requestId,
-    mode: "mock",
   });
   await start;
   return command;
@@ -97,7 +96,6 @@ test("audio waits for ready and is sent as binary PCM rather than Base64 JSON", 
     requestId: command.requestId,
     meetingId: "meeting-1",
     sessionId: "session-1",
-    mode: "mock",
   });
   await start;
   const pcm = new ArrayBuffer(6400);

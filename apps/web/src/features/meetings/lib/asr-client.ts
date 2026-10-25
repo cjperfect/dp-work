@@ -37,12 +37,7 @@ function parseMessage(raw: string): SidecarToClient {
   )
     return message;
   if (!text(message.sessionId)) throw new Error("转写消息缺少会话标识。");
-  if (
-    message.type === "asr.ready" &&
-    text(message.requestId) &&
-    ["mock", "doubao"].includes(message.mode)
-  )
-    return message;
+  if (message.type === "asr.ready" && text(message.requestId)) return message;
   if (
     message.type === "asr.stopped" &&
     text(message.requestId) &&

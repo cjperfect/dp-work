@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } f
 import path from "node:path";
 import { mkdirSync, readFileSync } from "node:fs";
 import type { DesktopInfo } from "@dp-work/contracts";
-import { desktopPort, developmentUrl, isAppUrl } from "./config";
+import { desktopPort, developmentUrl, isAppUrl, canCaptureMicrophone } from "./config";
 import { startWebServer, waitForWeb } from "./server";
 import { ensureAgentWorkspace, migrateProfile, persistencePaths } from "./persistence";
 
@@ -69,10 +69,24 @@ async function createWindow(url: string): Promise<void> {
     if (!isAppUrl(target, origin)) event.preventDefault();
   });
   window.webContents.on("will-attach-webview", (event) => event.preventDefault());
-  window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) =>
-    callback(false),
+  window.webContents.session.setPermissionRequestHandler(
+    (contents, permission, callback, details) => {
+      const mediaTypes = "mediaTypes" in details ? details.mediaTypes : undefined;
+      callback(
+        contents === window?.webContents &&
+          permission === "media" &&
+          details.isMainFrame &&
+          canCaptureMicrophone(details.requestingUrl, origin, mediaTypes),
+      );
+    },
   );
-  window.webContents.session.setPermissionCheckHandler(() => false);
+  window.webContents.session.setPermissionCheckHandler(
+    (contents, permission, requestingOrigin, details) =>
+      contents === window?.webContents &&
+      permission === "media" &&
+      details.isMainFrame &&
+      canCaptureMicrophone(requestingOrigin, origin, [details.mediaType ?? "unknown"]),
+  );
   window.once("ready-to-show", () => window?.show());
   window.on("closed", () => {
     window = null;

@@ -1,5 +1,6 @@
 """ASR 协议、SQLite 提交顺序和连接生命周期测试。"""
 from contextlib import closing
+import asyncio
 import json
 import sqlite3
 import tempfile
@@ -12,6 +13,35 @@ from starlette.websockets import WebSocketDisconnect
 
 from src.main import app
 from src.meetings import repository
+
+STEP_SECONDS = 0.01
+
+
+class TestRecognizer:
+    """测试替身，不作为应用的识别模式发布。"""
+    def __init__(self):
+        self.stopped = asyncio.Event()
+
+    async def open(self):
+        pass
+
+    async def send_audio(self, audio):
+        pass
+
+    async def finish(self):
+        self.stopped.set()
+
+    async def close(self):
+        self.stopped.set()
+
+    async def events(self):
+        yield dict(key=0, text="测试转写", speakerId="speaker-1", startMs=0, endMs=10, isFinal=False)
+        try:
+            await asyncio.wait_for(self.stopped.wait(), STEP_SECONDS)
+        except TimeoutError:
+            pass
+        yield dict(key=0, text="测试转写", speakerId="speaker-1", startMs=0, endMs=20, isFinal=True)
+
 
 AUDIO = dict(format="pcm", sampleRate=16000, channels=1, bitsPerSample=16)
 
@@ -37,23 +67,22 @@ class AsrWebSocketTests(unittest.TestCase):
         self.db = Path(self.temporary.name) / "dp.db"
         for target, value in [
             ("src.meetings.repository.DB_PATH", self.db),
-            ("src.meetings.temporary.TEMP_DIR", Path(self.temporary.name) / "temp"),
-            ("src.transport.websocket.MOCK_ASR", True),
-            ("src.providers.asr.mock.STEP_SECONDS", 0.01),
+            ("src.meetings.repository.TEMP_DIR", Path(self.temporary.name) / "temp"),
         ]:
             patcher = patch(target, value)
             patcher.start()
             self.addCleanup(patcher.stop)
+        self.enterContext(patch("src.transport.websocket.DoubaoRecognizer", side_effect=TestRecognizer))
         self.client = self.enterContext(TestClient(app))
 
-    @patch("src.providers.asr.mock.STEP_SECONDS", 1)
+    @patch(f"{__name__}.STEP_SECONDS", 1)
     def test_final_is_committed_before_emission_and_stop_drains_the_current_segment(self):
         with self.client.websocket_connect("/ws", headers={"origin": "http://localhost:3000"}) as ws:
             ws.send_json(start())
             ready = ws.receive_json()
             self.assertEqual(ready["type"], "asr.ready")
             self.assertEqual(ready["requestId"], "start-1")
-            self.assertEqual(ready["mode"], "mock")
+            self.assertNotIn("mode", ready)
             partial, _ = until(ws, "asr.transcript")
             self.assertFalse(partial["segment"]["isFinal"])
             temporary = Path(self.temporary.name) / "temp/asr/meeting-1" / ready["sessionId"] / "0.json"
@@ -135,12 +164,15 @@ class AsrWebSocketTests(unittest.TestCase):
                 self.assertEqual(repository.pending_count("meeting-1"), 0)
                 self.assertTrue(list((Path(self.temporary.name) / "temp/asr/meeting-1").rglob("*.json")))
 
-    def test_unimplemented_provider_fails_explicitly_instead_of_losing_audio(self):
-        with patch("src.transport.websocket.MOCK_ASR", False):
+    @patch("src.providers.asr.doubao.DoubaoSettings.from_config")
+    def test_missing_credentials_fail_explicitly_instead_of_losing_audio(self, settings):
+        from src.providers.asr.doubao import DoubaoSettings, DoubaoRecognizer
+        settings.return_value = DoubaoSettings()
+        with patch("src.transport.websocket.DoubaoRecognizer", return_value=DoubaoRecognizer(DoubaoSettings())):
             with self.client.websocket_connect("/ws") as ws:
                 ws.send_json(start())
                 message = ws.receive_json()
-                self.assertEqual(message["code"], "PROVIDER_NOT_READY")
+                self.assertEqual(message["code"], "PROVIDER_AUTH_MISSING")
                 self.assertEqual(app.state.asr_meetings, {})
 
     def test_external_page_cannot_connect(self):
@@ -149,7 +181,7 @@ class AsrWebSocketTests(unittest.TestCase):
                 pass
 
 
-    @patch("src.providers.asr.mock.STEP_SECONDS", 1)
+    @patch(f"{__name__}.STEP_SECONDS", 1)
     def test_disconnect_preserves_the_unconfirmed_temporary_file(self):
         with self.client.websocket_connect("/ws") as ws:
             ws.send_json(start())

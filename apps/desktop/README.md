@@ -65,3 +65,5 @@ scripts/        开发启动、Web 产物准备和生产预览
 ```
 
 Renderer 启用沙箱和上下文隔离，关闭 Node.js 集成。页面通过 `window.desktop?.getInfo()` 读取桌面信息，类型定义在 `packages/contracts/src/desktop.ts`。IPC 仅允许主窗口的同源主框架调用。
+
+会议转写需要单独运行 `pnpm dev:sidecar`，并在 Sidecar `.env` 配置豆包语音凭证。桌面端只允许当前应用主页面访问麦克风；macOS 包已配置麦克风用途说明与录音 entitlement，系统授权由用户确认。

@@ -5,9 +5,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
-from ..config import MOCK_ASR
 from ..meetings.session import AsrSession
-from ..providers.asr.mock import MockRecognizer
 from ..providers.asr.doubao import DoubaoRecognizer, AsrProviderError
 from .schemas import Start, control_message
 
@@ -75,12 +73,12 @@ async def asr_websocket(websocket: WebSocket):
                 if request.meetingId in active:
                     await error("MEETING_BUSY", "该会议已有转写连接。", request, True)
                     continue
-                provider = MockRecognizer() if MOCK_ASR else DoubaoRecognizer()
+                provider = DoubaoRecognizer()
                 session = AsrSession(request.meetingId, send, provider)
                 active[request.meetingId] = session
                 await session.prepare()
                 await send(dict(type="asr.ready", requestId=request.requestId,
-                                meetingId=request.meetingId, sessionId=session.session_id, mode=session.provider.mode))
+                                meetingId=request.meetingId, sessionId=session.session_id))
                 await session.sync_status()
                 session.task = asyncio.create_task(session.run())
             else:

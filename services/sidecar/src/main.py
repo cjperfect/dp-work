@@ -3,8 +3,9 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from .config import MOCK_ASR, PORT
+from .config import PORT, VOLC_API_KEY
 from .meetings.repository import init_db
 from .transport.websocket import router
 
@@ -21,13 +22,16 @@ async def lifespan(app):
 
 
 app = FastAPI(title="dp-work sidecar", version="0.1.0", lifespan=lifespan)
+app.add_middleware(CORSMiddleware,
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?",
+    allow_methods=["GET"], allow_headers=[])
 app.include_router(router)
 
 
 @app.get("/health")
 async def health():
-    """查询当前协议联调状态。"""
-    return {"ok": True, "asrMode": "mock" if MOCK_ASR else "doubao", "cloudSyncEnabled": False}
+    """查询语音服务模式和凭证配置状态。"""
+    return {"ok": True, "configured": bool(VOLC_API_KEY), "cloudSyncEnabled": False}
 
 
 if __name__ == "__main__":

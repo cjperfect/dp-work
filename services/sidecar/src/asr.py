@@ -4,7 +4,7 @@
 - definite=false → 中间结果（前端更新当前行，不落库）
 - definite=true  → 分句定型（落本地 SQLite，status=pending）
 
-凭证经环境变量注入：VOLC_ACCESSKEY / VOLC_SECRETKEY / VOLC_APPID / VOLC_CLUSTER。
+此文件为历史占位；当前识别实现见 providers/asr/doubao.py，使用 VOLC_API_KEY。
 """
 from __future__ import annotations
 

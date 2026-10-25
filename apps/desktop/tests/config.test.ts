@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { desktopPort, developmentUrl, isAppUrl } from "../src/config";
+import { desktopPort, developmentUrl, isAppUrl, canCaptureMicrophone } from "../src/config";
 
 test("development windows only load local HTTP pages", () => {
   assert.equal(developmentUrl("http://localhost:3000"), "http://localhost:3000/");
@@ -33,4 +33,12 @@ test("desktop origin uses a stable valid port", () => {
   assert.equal(desktopPort("34732"), 34732);
   for (const value of ["0", "80", "65536", "abc", "1234.5"])
     assert.throws(() => desktopPort(value));
+});
+
+test("only the app origin can capture microphone audio", () => {
+  const origin = "http://localhost:3000";
+  assert.equal(canCaptureMicrophone(`${origin}/meetings/active`, origin, ["audio"]), true);
+  assert.equal(canCaptureMicrophone("https://example.com", origin, ["audio"]), false);
+  for (const media of [undefined, [], ["video"], ["audio", "video"], ["unknown"]])
+    assert.equal(canCaptureMicrophone(origin, origin, media), false);
 });

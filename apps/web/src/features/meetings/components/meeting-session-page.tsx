@@ -144,7 +144,7 @@ export function MeetingSessionPage() {
               <h1 className="text-lg font-semibold">{draft.meeting.title}</h1>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              {ended ? "会议已结束" : live ? "会议进行中" : "会议已暂停"} · 模拟转写
+              {ended ? "会议已结束" : live ? "会议进行中" : "会议已暂停"} · 豆包实时转写
             </p>
           </div>
         </div>
@@ -256,8 +256,8 @@ export function MeetingSessionPage() {
           : !live
             ? "转写已暂停"
             : asr.status === "live"
-              ? "模拟识别中 · 未采集麦克风音频"
-              : "点击开始转写，预览模拟识别效果。"}
+              ? "麦克风录音中 · 正在实时识别"
+              : "点击开始转写，使用麦克风记录会议。"}
         {asr.sync && ` · 本地待同步 ${asr.sync.pendingCount} 个片段`}
       </p>
       {asr.error && (
