@@ -64,3 +64,13 @@ test("an unavailable API does not invent an authorized connection", async () => 
   assert.equal(useConnectorStore.getState().connectors[0].status, "disconnected");
   assert.match(useConnectorStore.getState().error, /服务不可用/);
 });
+
+test("display-only consumers reuse cached status while explicit refresh still requests API", async () => {
+  const request = mockHttpRequest(async () => Response.json({ code: 0, data: disconnected }));
+  await loadConnectors(1);
+  await loadConnectors(1, false);
+  await loadConnectors(1, false);
+  assert.equal(request.mock.callCount(), 1);
+  await loadConnectors(1);
+  assert.equal(request.mock.callCount(), 2);
+});

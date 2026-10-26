@@ -1,12 +1,20 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { Background, Controls, ReactFlow, Position, type ReactFlowInstance } from "@xyflow/react";
+import {
+  Background,
+  Controls,
+  ReactFlow,
+  Position,
+  useNodesState,
+  type ReactFlowInstance,
+  type Node,
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { minutesOutline } from "../lib/mind-map";
 export function MinutesMindMap({ title, content }: { title: string; content: string }) {
   const deferred = useDeferredValue(content);
   const [instance, setInstance] = useState<ReactFlowInstance | null>(null);
   const outline = useMemo(() => minutesOutline(title, deferred), [title, deferred]);
-  const nodes = useMemo(
+  const initialNodes = useMemo<Node[]>(
     () =>
       outline.map((point) => ({
         id: point.id,
@@ -29,6 +37,16 @@ export function MinutesMindMap({ title, content }: { title: string; content: str
       })),
     [outline],
   );
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  useEffect(() => {
+    setNodes((current) => {
+      const positions = new Map(current.map((node) => [node.id, node.position]));
+      return initialNodes.map((node) => ({
+        ...node,
+        position: positions.get(node.id) ?? node.position,
+      }));
+    });
+  }, [initialNodes, setNodes]);
   const edges = useMemo(
     () =>
       outline
@@ -55,7 +73,8 @@ export function MinutesMindMap({ title, content }: { title: string; content: str
         edges={edges}
         onInit={setInstance}
         fitView
-        nodesDraggable={false}
+        nodesDraggable
+        onNodesChange={onNodesChange}
         nodesConnectable={false}
         deleteKeyCode={null}
         minZoom={0.15}

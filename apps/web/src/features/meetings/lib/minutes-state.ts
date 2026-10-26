@@ -6,10 +6,13 @@ export function generationStatus(meeting: Meeting): GenerationStatus {
   if (meeting.minutes_status === 0) return "generating";
   return "idle";
 }
-export function meetingCategory(meeting: Meeting): "pending" | "generating" | "archived" {
-  if (meeting.status === "archived") return "archived";
-  return generationStatus(meeting) === "idle" ? "pending" : "generating";
+export function meetingCategory(meeting: Meeting): "pending" | "archived" {
+  return meeting.status === "archived" ? "archived" : "pending";
+}
+export function showOriginalMeeting(meeting: Meeting) {
+  return meeting.status !== "archived" && generationStatus(meeting) !== "ready";
 }
 export function canEditMinutes(meeting: Meeting) {
-  return meetingCategory(meeting) === "pending";
+  const status = generationStatus(meeting);
+  return meeting.status !== "archived" && status !== "generating" && status !== "failed";
 }

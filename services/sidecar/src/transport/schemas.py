@@ -20,6 +20,8 @@ class Start(Message):
     requestId: str = Field(min_length=1, max_length=128)
     meetingId: str = Field(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_-]+$")
     audio: AudioFormat
+    nextSeq: StrictInt = Field(ge=0, le=9_007_199_254_740_991)
+    offsetMs: StrictInt = Field(ge=0, le=9_007_199_254_740_991)
 
 
 class Stop(Message):

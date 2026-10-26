@@ -29,8 +29,7 @@ function setup(overrides = {}, timeout = 1000) {
   const socket = new Socket();
   const received = [],
     statuses = [],
-    errors = [],
-    sync = [];
+    errors = [];
   const client = new AsrClient(
     "meeting-1",
     "ws://localhost:8001/ws",
@@ -38,16 +37,15 @@ function setup(overrides = {}, timeout = 1000) {
       onTranscript: (message) => received.push(message),
       onStatus: (status) => statuses.push(status),
       onError: (message) => errors.push(message),
-      onSync: (message) => sync.push(message),
       ...overrides,
     },
     () => socket,
     timeout,
   );
-  return { client, socket, received, statuses, errors, sync };
+  return { client, socket, received, statuses, errors };
 }
 async function connect(env) {
-  const start = env.client.start();
+  const start = env.client.start({ nextSeq: 0, offsetMs: 0 });
   env.socket.open();
   const command = JSON.parse(env.socket.sent[0]);
   env.socket.message({
@@ -80,7 +78,7 @@ function transcript(changes = {}) {
 
 test("audio waits for ready and is sent as binary PCM rather than Base64 JSON", async () => {
   const env = setup();
-  const start = env.client.start();
+  const start = env.client.start({ nextSeq: 0, offsetMs: 0 });
   assert.equal(env.client.sendAudio(new ArrayBuffer(6400)), false);
   env.socket.open();
   const command = JSON.parse(env.socket.sent[0]);
@@ -156,7 +154,7 @@ test("messages from another meeting or recognition session are ignored", async (
 
 test("provider errors reject startup and surface the safe server message", async () => {
   const env = setup();
-  const pending = env.client.start();
+  const pending = env.client.start({ nextSeq: 0, offsetMs: 0 });
   env.socket.open();
   env.socket.message({
     type: "asr.error",
@@ -171,7 +169,7 @@ test("provider errors reject startup and surface the safe server message", async
 
 test("missing ready and unexpected disconnect do not leave the client spinning", async () => {
   const env = setup({}, 10);
-  await assert.rejects(env.client.start(), /超时/);
+  await assert.rejects(env.client.start({ nextSeq: 0, offsetMs: 0 }), /超时/);
   assert.equal(env.statuses.at(-1), "error");
   const next = setup();
   await connect(next);
@@ -211,4 +209,35 @@ test("transcript merge deduplicates revisions and never replaces confirmed text 
   assert.equal(draft.dirtyEntries.length, 1);
   assert.equal(draft.segments[0].text, "讨论知识库设计。");
   assert.equal(applyAsrTranscript(draft, { ...final, meetingId: "other" }), draft);
+});
+
+test("reconnection sends the API sequence and time offset instead of reading a local database", async () => {
+  const env = setup();
+  const start = env.client.start({ nextSeq: 12, offsetMs: 6500 });
+  env.socket.open();
+  const command = JSON.parse(env.socket.sent[0]);
+  assert.equal(command.nextSeq, 12);
+  assert.equal(command.offsetMs, 6500);
+  env.socket.message({
+    type: "asr.ready",
+    meetingId: "meeting-1",
+    sessionId: "resume",
+    requestId: command.requestId,
+  });
+  await start;
+  env.client.close();
+});
+
+test("API persistence failure surfaces an error instead of reporting a successful stop", async () => {
+  const env = setup({
+    onTranscript: async () => {
+      throw new Error("片段保存失败");
+    },
+  });
+  await connect(env);
+  const stopped = env.client.stop();
+  env.socket.message(transcript({ isFinal: true }));
+  await assert.rejects(stopped, /片段保存失败/);
+  assert.equal(env.statuses.at(-1), "error");
+  assert.match(env.errors.at(-1), /片段保存失败/);
 });

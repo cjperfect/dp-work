@@ -30,7 +30,7 @@ export function applyFeishuStatus(owner: number, feishu: FeishuStatus) {
   });
 }
 
-export async function loadConnectors(owner: number | null): Promise<void> {
+export async function loadConnectors(owner: number | null, refresh = true): Promise<void> {
   if (owner === null) {
     version += 1;
     useConnectorStore.setState({
@@ -45,6 +45,8 @@ export async function loadConnectors(owner: number | null): Promise<void> {
   if (useAuthStore.getState().user?.id !== owner) return;
   const active = inflight.get(owner);
   if (active) return active;
+  const cached = useConnectorStore.getState();
+  if (!refresh && cached.owner === owner && cached.feishu) return;
   const current = ++version;
   const same = useConnectorStore.getState().owner === owner;
   useConnectorStore.setState({
@@ -73,26 +75,21 @@ export async function loadConnectors(owner: number | null): Promise<void> {
   }
 }
 
-export function useConnectors() {
+export function useConnectors({ watchAuthorization = false } = {}) {
   const owner = useAuthStore((state) => state.user?.id ?? null);
   const state = useConnectorStore();
   const flow = state.owner === owner ? state.feishu?.flow : null;
   const waiting = flow?.state === "starting" || flow?.state === "waiting";
   useEffect(() => {
-    void loadConnectors(owner);
-    const refresh = () => {
-      void loadConnectors(owner);
-    };
-    window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
-  }, [owner]);
+    void loadConnectors(owner, watchAuthorization);
+  }, [owner, watchAuthorization]);
   useEffect(() => {
-    if (!waiting || owner === null) return;
+    if (!watchAuthorization || !waiting || owner === null) return;
     const timer = setInterval(() => {
       void loadConnectors(owner);
     }, 2000);
     return () => clearInterval(timer);
-  }, [waiting, owner]);
+  }, [waiting, owner, watchAuthorization]);
   const current = state.owner === owner;
   return {
     connectors: current ? state.connectors : EMPTY,

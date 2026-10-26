@@ -1,13 +1,13 @@
+import { trackGenerations } from "@/stores/meeting-generation";
 import { create } from "zustand";
 import { useCallback, useEffect, useState } from "react";
 import { useAuthStore } from "@/stores/auth";
-import { emptyWorkspace, type Workspace } from "@/apis/meetings";
+import { type Workspace } from "@/apis/meetings";
 import {
+  acceptServerWorkspace,
   isPending,
-  listDrafts,
   localDraft,
   readDraft,
-  replaceFromServer,
   saveDraft,
   type Draft,
 } from "@/features/meetings/lib/workspace-storage";
@@ -19,6 +19,7 @@ export const useMeetingCache = create<{ records: Record<string, Cached> }>()(() 
 const key = (accountId: number, id: string) => `${accountId}:${id}`;
 export function publish(draft: Draft, localSaved = true) {
   if (useAuthStore.getState().user?.id !== draft.accountId) return;
+  trackGenerations([draft.meeting]);
   const id = key(draft.accountId, draft.meeting.id);
   useMeetingCache.setState((state) => {
     const old = state.records[id];
@@ -35,6 +36,8 @@ export async function persist(draft: Draft) {
   publish(draft, false);
   try {
     const stored = await saveDraft(draft);
+    const current = useMeetingCache.getState().records[key(draft.accountId, draft.meeting.id)];
+    if (current?.version === stored.version) stored.temporary = current.temporary;
     publish(stored);
     return stored;
   } catch (error) {
@@ -47,51 +50,21 @@ export async function loadWorkspace(
   id: string,
   active: () => boolean = () => true,
 ) {
+  const current = useMeetingCache.getState().records[key(accountId, id)];
+  if (current && (!current.localSaved || isPending(current))) return current;
   const stored = await readDraft(accountId, id);
-  if (stored) {
-    publish(stored);
-    return stored;
-  }
-  // 业务 API 已下线：已有记录以本地为准，避免重新进入时将已结束的会议重置。
-  const server = emptyWorkspace(id, accountId);
-  if (!active()) return localDraft(server);
-  const fresh = await replaceFromServer(server);
-  publish(fresh);
-  return fresh;
+  if (!stored) throw new Error("会议不存在或已删除。");
+  if (active()) publish(stored);
+  return stored;
 }
 const flights = new Map<number, Promise<void>>();
 export function syncNow(accountId: number): Promise<void> {
   const running = flights.get(accountId);
   if (running) return running;
   const operation = (async () => {
-    // 业务 API 已下线：本地即权威，直接清除待同步标记，不发起请求。
-    const drafts = await listDrafts(accountId);
-    for (let row of drafts) {
-      if (
-        row.meeting.generation_status === "generating" &&
-        row.meeting.generation_ready_at &&
-        row.meeting.generation_ready_at <= Date.now()
-      ) {
-        row = await saveDraft({
-          ...row,
-          meeting: { ...row.meeting, generation_status: "ready", minutes_status: 1 },
-          minutes: row.minutes ? { ...row.minutes, status: 1 } : null,
-          version: row.version + 1,
-        });
-        publish(row);
-      }
-      if (!isPending(row)) continue;
-      const draft = await readDraft(accountId, row.meeting.id);
-      if (!draft) continue;
-      const stored = await saveDraft({
-        ...draft,
-        dirtyControls: false,
-        dirtyMinutes: false,
-        dirtyEntries: [],
-        flight: null,
-        error: null,
-      });
-      publish(stored);
+    const records = Object.values(useMeetingCache.getState().records);
+    for (const row of records) {
+      if (row.accountId === accountId && (!row.localSaved || isPending(row))) await persist(row);
     }
   })();
   flights.set(accountId, operation);
@@ -103,13 +76,9 @@ export function syncNow(accountId: number): Promise<void> {
   return operation;
 }
 export async function flushMeeting(accountId: number, id: string) {
-  // 先等待已发出的批次，再发送期间新增的内容；全部来自持久化 outbox。
-  for (let batch = 0; batch < 20; batch++) {
-    await syncNow(accountId);
-    const draft = await readDraft(accountId, id);
-    if (!draft || !isPending(draft)) return draft;
-  }
-  throw new Error("仍有记录待同步，请稍后重试。");
+  const current = useMeetingCache.getState().records[key(accountId, id)];
+  if (current && (!current.localSaved || isPending(current))) await persist(current);
+  return readDraft(accountId, id);
 }
 export function useWorkspace(id: string | undefined) {
   const accountId = useAuthStore((state) => state.user?.id);
@@ -159,14 +128,7 @@ export function useWorkspace(id: string | undefined) {
     }
     setLoading(true);
     setError(null);
-    const load = editable
-      ? loadWorkspace(accountId, id, () => alive)
-      : (async () => {
-          const stored = await readDraft(accountId, id);
-          // 业务 API 已下线：无本地草稿时用本地空工作区。
-          const record = stored ?? localDraft(emptyWorkspace(id, accountId));
-          if (alive) publish(record, !!stored);
-        })();
+    const load = loadWorkspace(accountId, id, () => alive);
     void load
       .catch((cause) => {
         if (alive) setError(cause instanceof Error ? cause.message : "无法加载会议");
@@ -182,11 +144,7 @@ export function useWorkspace(id: string | undefined) {
     if (!id || !accountId) return;
     let alive = true;
     const refresh = () => {
-      void readDraft(accountId, id)
-        .then((stored) => {
-          if (alive && stored) publish(stored);
-        })
-        .catch(() => {});
+      void loadWorkspace(accountId, id, () => alive).catch(() => {});
     };
     window.addEventListener("focus", refresh);
     return () => {
@@ -234,5 +192,16 @@ export function useWorkspace(id: string | undefined) {
   return { draft, loading, error, change, preview, retry, accountId, editable };
 }
 export function cacheCreated(workspace: Workspace) {
-  return persist(localDraft(workspace));
+  const draft = localDraft(workspace);
+  publish(draft);
+  return Promise.resolve(draft);
+}
+
+export function cacheServerWorkspace(workspace: Workspace) {
+  const previous =
+    useMeetingCache.getState().records[key(workspace.meeting.owner_id, workspace.meeting.id)];
+  if (previous && previous.meeting.revision > workspace.meeting.revision) return previous;
+  const draft = acceptServerWorkspace(workspace, (previous?.version ?? 0) + 1);
+  publish(draft);
+  return draft;
 }

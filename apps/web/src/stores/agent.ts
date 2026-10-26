@@ -317,9 +317,12 @@ export async function selectThread(code: AgentId, id: string) {
     if (owned(owner)) useAgentStore.setState({ switching: false });
   }
 }
-export async function ensureAgentChat(code: AgentId) {
-  await loadAgents();
-  const owner = currentOwner();
+export async function ensureAgentChat(code: AgentId, force = false) {
+  const owner = useAuthStore.getState().user?.id;
+  if (!owner) return;
+  await loadAgents(force);
+  // 初始化过程中退出或切换账号时，丢弃旧账号的恢复任务。
+  if (!owned(owner)) return;
   const rows = await loadThreads(code);
   if (!owned(owner)) return;
   const state = useAgentStore.getState();

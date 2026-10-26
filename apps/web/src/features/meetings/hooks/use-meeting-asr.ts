@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { WsAsrTranscript, WsAsrSync } from "@dp-work/contracts";
+import type { WsAsrTranscript } from "@dp-work/contracts";
+import { getMeeting, elapsed } from "@/apis/meetings";
+import { useAuthStore } from "@/stores/auth";
 import { getSidecarAsrConfig } from "@/apis/sidecar";
 import { SIDECAR_WS } from "@/features/meetings/constants/meeting";
 import { AsrClient, type AsrStatus } from "../lib/asr-client";
@@ -17,7 +19,6 @@ export function useMeetingAsr(
   callback.current = onTranscript;
   const [status, setStatus] = useState<AsrStatus>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [sync, setSync] = useState<WsAsrSync | null>(null);
   useEffect(() => {
     let alive = true;
     const current = new AsrClient(meetingId, SIDECAR_WS, {
@@ -30,14 +31,10 @@ export function useMeetingAsr(
         recorder.current = null;
         if (alive) setError(message);
       },
-      onSync: (value) => {
-        if (alive) setSync(value);
-      },
     });
     client.current = current;
     setStatus("idle");
     setError(null);
-    setSync(null);
     return () => {
       alive = false;
       recorder.current?.close();
@@ -60,6 +57,17 @@ export function useMeetingAsr(
       if (!active()) return;
       if (!config.configured)
         throw new Error("豆包 ASR 凭证尚未配置，请填写 Sidecar .env 后重启服务。");
+      const owner = useAuthStore.getState().user?.id;
+      if (!owner) throw new Error("请先登录。");
+      const workspace = await getMeeting(owner, meetingId);
+      if (!active()) return;
+      if (!workspace || workspace.meeting.status !== "active")
+        throw new Error("会议不存在或尚未恢复，请重新加载后重试。");
+      const nextSeq = workspace.segments.reduce((next, row) => Math.max(next, row.seq + 1), 0);
+      const lastEnd = workspace.segments.reduce(
+        (end, row) => Math.max(end, row.end_ms ?? row.start_ms),
+        0,
+      );
       capture = new PcmRecorder(
         (chunk) => current.sendAudio(chunk),
         (cause) => {
@@ -77,7 +85,10 @@ export function useMeetingAsr(
         capture?.close();
         return;
       }
-      await current.start();
+      await current.start({
+        nextSeq,
+        offsetMs: Math.max(lastEnd, Math.floor(elapsed(workspace.meeting))),
+      });
       if (!active()) {
         capture?.close();
         return;
@@ -93,7 +104,7 @@ export function useMeetingAsr(
       setStatus("error");
       throw cause;
     }
-  }, []);
+  }, [meetingId]);
 
   const stop = useCallback(async () => {
     revision.current++;
@@ -117,5 +128,5 @@ export function useMeetingAsr(
     recorder.current = null;
     client.current?.close();
   }, []);
-  return { status, error, sync, start, stop, close };
+  return { status, error, start, stop, close };
 }

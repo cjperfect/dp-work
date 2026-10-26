@@ -20,6 +20,7 @@ import { Route as AppMeetingsIndexRouteImport } from "./routes/_app/meetings/ind
 import { Route as AppMeetingsActiveRouteImport } from "./routes/_app/meetings/active";
 import { Route as AppMeetingsMinutesRouteImport } from "./routes/_app/meetings/minutes";
 import { Route as AppSkillsIndexRouteImport } from "./routes/_app/skills/index";
+import { Route as SharedMeetingRecordsTokenRouteImport } from "./routes/shared/meeting-records/$token";
 import { Route as SharedMeetingsTokenRouteImport } from "./routes/shared/meetings/$token";
 import { Route as AppKnowledgeKbIdIndexRouteImport } from "./routes/_app/knowledge/$kbId/index";
 import { Route as AppKnowledgeKbIdNewRouteImport } from "./routes/_app/knowledge/$kbId/new";
@@ -80,6 +81,12 @@ const AppSkillsIndexRoute = AppSkillsIndexRouteImport.update({
   path: "/skills/",
   getParentRoute: () => AppRouteRoute,
 } as any);
+const SharedMeetingRecordsTokenRoute =
+  SharedMeetingRecordsTokenRouteImport.update({
+    id: "/shared/meeting-records/$token",
+    path: "/shared/meeting-records/$token",
+    getParentRoute: () => rootRouteImport,
+  } as any);
 const SharedMeetingsTokenRoute = SharedMeetingsTokenRouteImport.update({
   id: "/shared/meetings/$token",
   path: "/shared/meetings/$token",
@@ -115,6 +122,7 @@ export interface FileRoutesByFullPath {
   "/product": typeof AppProductRoute;
   "/meetings/active": typeof AppMeetingsActiveRoute;
   "/meetings/minutes": typeof AppMeetingsMinutesRoute;
+  "/shared/meeting-records/$token": typeof SharedMeetingRecordsTokenRoute;
   "/shared/meetings/$token": typeof SharedMeetingsTokenRoute;
   "/connectors/": typeof AppConnectorsIndexRoute;
   "/knowledge/": typeof AppKnowledgeIndexRoute;
@@ -132,6 +140,7 @@ export interface FileRoutesByTo {
   "/": typeof AppIndexRoute;
   "/meetings/active": typeof AppMeetingsActiveRoute;
   "/meetings/minutes": typeof AppMeetingsMinutesRoute;
+  "/shared/meeting-records/$token": typeof SharedMeetingRecordsTokenRoute;
   "/shared/meetings/$token": typeof SharedMeetingsTokenRoute;
   "/connectors": typeof AppConnectorsIndexRoute;
   "/knowledge": typeof AppKnowledgeIndexRoute;
@@ -151,6 +160,7 @@ export interface FileRoutesById {
   "/_app/": typeof AppIndexRoute;
   "/_app/meetings/active": typeof AppMeetingsActiveRoute;
   "/_app/meetings/minutes": typeof AppMeetingsMinutesRoute;
+  "/shared/meeting-records/$token": typeof SharedMeetingRecordsTokenRoute;
   "/shared/meetings/$token": typeof SharedMeetingsTokenRoute;
   "/_app/connectors/": typeof AppConnectorsIndexRoute;
   "/_app/knowledge/": typeof AppKnowledgeIndexRoute;
@@ -170,6 +180,7 @@ export interface FileRouteTypes {
     | "/product"
     | "/meetings/active"
     | "/meetings/minutes"
+    | "/shared/meeting-records/$token"
     | "/shared/meetings/$token"
     | "/connectors/"
     | "/knowledge/"
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | "/"
     | "/meetings/active"
     | "/meetings/minutes"
+    | "/shared/meeting-records/$token"
     | "/shared/meetings/$token"
     | "/connectors"
     | "/knowledge"
@@ -205,6 +217,7 @@ export interface FileRouteTypes {
     | "/_app/"
     | "/_app/meetings/active"
     | "/_app/meetings/minutes"
+    | "/shared/meeting-records/$token"
     | "/shared/meetings/$token"
     | "/_app/connectors/"
     | "/_app/knowledge/"
@@ -220,6 +233,7 @@ export interface RootRouteChildren {
   AppRouteRoute: typeof AppRouteRouteWithChildren;
   authSignInRoute: typeof authSignInRoute;
   authSignUpRoute: typeof authSignUpRoute;
+  SharedMeetingRecordsTokenRoute: typeof SharedMeetingRecordsTokenRoute;
   SharedMeetingsTokenRoute: typeof SharedMeetingsTokenRoute;
 }
 
@@ -302,6 +316,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AppSkillsIndexRouteImport;
       parentRoute: typeof AppRouteRoute;
     };
+    "/shared/meeting-records/$token": {
+      id: "/shared/meeting-records/$token";
+      path: "/shared/meeting-records/$token";
+      fullPath: "/shared/meeting-records/$token";
+      preLoaderRoute: typeof SharedMeetingRecordsTokenRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/shared/meetings/$token": {
       id: "/shared/meetings/$token";
       path: "/shared/meetings/$token";
@@ -378,6 +399,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRouteRoute: AppRouteRouteWithChildren,
   authSignInRoute: authSignInRoute,
   authSignUpRoute: authSignUpRoute,
+  SharedMeetingRecordsTokenRoute: SharedMeetingRecordsTokenRoute,
   SharedMeetingsTokenRoute: SharedMeetingsTokenRoute,
 };
 export const routeTree = rootRouteImport

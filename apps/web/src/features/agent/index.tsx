@@ -9,7 +9,7 @@ import { useConnectors } from "@/stores/connectors";
 import { useAuthStore } from "@/stores/auth";
 import type { AgentId } from "@/interfaces/app";
 import type { AgentConfig } from "@/types/agent";
-import { ensureAgentChat, loadAgents, saveAgent, useAgentStore } from "@/stores/agent";
+import { ensureAgentChat, saveAgent, useAgentStore } from "@/stores/agent";
 import { useAgentCode } from "@/features/agent/hooks/use-agent-code";
 export { AGENTS } from "./constants/agents";
 export type { AgentMeta } from "./constants/agents";
@@ -34,18 +34,45 @@ export function AgentPage({ agentId }: { agentId: AgentId }) {
     state.owner === owner ? state.agents.find((row) => row.code === agentId) : undefined;
   const selected = state.selected[agentId];
   const [error, setError] = useState<string | null>(null);
-  const [retry, setRetry] = useState(0);
+  const [reloading, setReloading] = useState(false);
   const needsChat = selected === null;
   useEffect(() => {
     let alive = true;
     setError(null);
+    if (!owner) return;
     void ensureAgentChat(agentId).catch((cause) => {
       if (alive) setError(cause instanceof Error ? cause.message : "无法恢复会话");
     });
     return () => {
       alive = false;
     };
-  }, [agentId, owner, retry, needsChat]);
+  }, [agentId, owner, needsChat]);
+  async function reloadChat() {
+    if (!owner || reloading) return;
+    setReloading(true);
+    setError(null);
+    try {
+      await ensureAgentChat(agentId, true);
+    } catch (cause) {
+      if (useAuthStore.getState().user?.id === owner)
+        setError(cause instanceof Error ? cause.message : "无法恢复会话，请重试。");
+    } finally {
+      setReloading(false);
+    }
+  }
+  if (!owner)
+    return (
+      <div className="grid h-full place-content-center gap-4 p-6 text-center">
+        <p className="text-sm text-muted-foreground">请登录后使用 Agent 会话。</p>
+        <Link
+          to="/sign-in"
+          search={{ redirect: agentId === "general" ? "/" : "/product" }}
+          className={buttonVariants()}
+        >
+          前往登录
+        </Link>
+      </div>
+    );
   if (!agent || error || state.error)
     return (
       <div className="grid h-full place-content-center gap-4 p-6 text-center">
@@ -56,14 +83,8 @@ export function AgentPage({ agentId }: { agentId: AgentId }) {
           {error ?? state.error ?? "正在恢复 Agent 工作空间…"}
         </p>
         {(error || state.error) && (
-          <Button
-            onClick={() => {
-              void loadAgents(true)
-                .then(() => setRetry((v) => v + 1))
-                .catch(() => {});
-            }}
-          >
-            重新加载
+          <Button disabled={reloading} onClick={() => void reloadChat()}>
+            {reloading ? "正在重新加载…" : "重新加载"}
           </Button>
         )}
       </div>

@@ -87,13 +87,18 @@ async def get_document(owner_id: int, base_id: int, document_id: str) -> Knowled
 async def save_document(owner_id: int, base_id: int, document_id: str, body: KnowledgeDocumentSave) -> KnowledgeDocumentOut:
     """自动保存文档，在事务提交后返回成功。"""
     async with session.transaction() as conn:
-        repository = KnowledgeRepository(conn)
-        if not await repository.owns_base(owner_id, base_id):
-            raise ApiError(ApiCode.NOT_FOUND, "知识库不存在", 404)
-        record = await repository.save_document(base_id, document_id, body.model_dump())
-        if record is None:
-            raise ApiError(ApiCode.NOT_FOUND, "文档不存在", 404)
-        return KnowledgeDocumentOut.model_validate(record)
+        return await save_document_in_transaction(conn, owner_id, base_id, document_id, body)
+
+
+async def save_document_in_transaction(conn, owner_id: int, base_id: int, document_id: str, body: KnowledgeDocumentSave) -> KnowledgeDocumentOut:
+    """在调用方事务内校验权限并写入文档，供跨模块归档使用。"""
+    repository = KnowledgeRepository(conn)
+    if not await repository.owns_base(owner_id, base_id):
+        raise ApiError(ApiCode.NOT_FOUND, "知识库不存在", 404)
+    record = await repository.save_document(base_id, document_id, body.model_dump())
+    if record is None:
+        raise ApiError(ApiCode.NOT_FOUND, "文档不存在", 404)
+    return KnowledgeDocumentOut.model_validate(record)
 
 
 async def _remove_file(key: str) -> None:

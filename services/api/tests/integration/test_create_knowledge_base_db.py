@@ -12,7 +12,7 @@ from app.modules.users import service as users_service
 from app.modules.users.models import User
 
 
-def test_authenticated_creation_commits_to_sqlite():
+def test_authenticated_creation_commits_to_postgresql():
     async def case():
         await session.init_db()
         owners = []

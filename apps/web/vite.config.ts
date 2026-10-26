@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
     (target.protocol !== "https:" && !(target.protocol === "http:" && local))
   )
     throw new Error("API_BASE_URL 必须使用 HTTPS；本机回环地址允许 HTTP。");
-  const proxy = { "/api": { target: apiBase, changeOrigin: true } };
+  const proxy = { "/api": { target: apiBase, changeOrigin: true, ws: true } };
   return {
     plugins: [
       TanStackRouterVite({
@@ -24,7 +24,10 @@ export default defineConfig(({ mode }) => {
       }),
       react(),
     ],
-    resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
+    resolve: {
+      dedupe: ["yjs", "y-protocols", "y-prosemirror"],
+      alias: { "@": path.resolve(import.meta.dirname, "src") },
+    },
     server: { port: Number(process.env.PORT ?? 3000), strictPort: true, proxy },
     preview: { proxy },
     build: { target: "es2022" },

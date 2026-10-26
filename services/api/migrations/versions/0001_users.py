@@ -1,10 +1,10 @@
-"""users 表（最终结构基线，ORM 风格，SQLite 方言）。
+"""users 表（最终结构基线，ORM 风格，兼容 PostgreSQL）。
 
 压缩自原 0001~0007 演进链：删除 display_name 与 legacy_id、
 updated_at 等字段变更已直接体现在最终建表语句里。
 演进历史保留在 migrations/archive/ 仅供审计。
 
-SQLite：integer 自增主键、CURRENT_TIMESTAMP 默认值；
+Integer 自增主键、CURRENT_TIMESTAMP 默认值；
 updated_at 由应用层维护（无数据库触发器）。
 """
 

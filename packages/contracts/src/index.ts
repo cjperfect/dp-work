@@ -53,6 +53,8 @@ export interface WsAsrStart {
   requestId: string;
   meetingId: string;
   audio: AsrAudioFormat;
+  nextSeq: number;
+  offsetMs: number;
 }
 
 export interface WsAsrStop {
@@ -68,7 +70,7 @@ export interface WsAsrReady {
   sessionId: string;
 }
 
-/** isFinal=true 的片段已由 Sidecar 保存到 SQLite。 */
+/** isFinal=true 表示 ASR 确认；客户端仍需调用 API 保存。 */
 export interface WsAsrTranscript {
   type: "asr.transcript";
   meetingId: string;
@@ -84,13 +86,6 @@ export interface WsAsrStopped {
   lastFinalSeq: number;
 }
 
-export interface WsAsrSync {
-  type: "asr.sync";
-  meetingId: string;
-  pendingCount: number;
-  status: "pending" | "syncing" | "synced" | "failed";
-}
-
 export interface WsAsrError {
   type: "asr.error";
   requestId?: string;
@@ -102,7 +97,7 @@ export interface WsAsrError {
 
 /** 音频通过独立的二进制 WebSocket 帧发送，PCM16 小端，建议每帧 200ms。 */
 export type ClientToSidecar = WsAsrStart | WsAsrStop;
-export type SidecarToClient = WsAsrReady | WsAsrTranscript | WsAsrStopped | WsAsrSync | WsAsrError;
+export type SidecarToClient = WsAsrReady | WsAsrTranscript | WsAsrStopped | WsAsrError;
 
 /* ============ api 服务（POST /api/segments） ============ */
 

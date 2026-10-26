@@ -15,10 +15,10 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 # ---- 数据库 ----
-# SQLite 单文件数据库（本地化部署）；可用环境变量 DATABASE_URL 覆盖路径
+# PostgreSQL 业务数据库；生产环境通过 DATABASE_URL 指定连接信息
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
-    f"sqlite+aiosqlite:///{Path(__file__).resolve().parents[2] / 'data/dp_work.db'}",
+    "postgresql+asyncpg://chenjiang:chenjiang@127.0.0.1:5432/dp_work",
 )
 
 # ---- 认证 / JWT ----
@@ -36,7 +36,7 @@ CORS_ORIGINS = [
     o.strip()
     for o in os.environ.get(
         "CORS_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000",
+        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3300,http://127.0.0.1:3300",
     ).split(",")
     if o.strip()
 ]
@@ -46,3 +46,9 @@ CREDENTIAL_PRIVATE_KEY_FILE = os.environ.get(
     "CREDENTIAL_PRIVATE_KEY_FILE",
     str(Path(__file__).resolve().parents[4] / ".dp-work/keys/auth-transport.pem"),
 )
+
+# ---- 会议纪要生成执行服务 ----
+SIDECAR_API_URL = os.environ.get("SIDECAR_API_URL", "http://127.0.0.1:8001").rstrip("/")
+SIDECAR_INTERNAL_TOKEN = os.environ.get("SIDECAR_INTERNAL_TOKEN", "").strip()
+MINUTES_TASK_TIMEOUT = float(os.environ.get("MINUTES_TASK_TIMEOUT", "210"))
+MINUTES_WORKER_ENABLED = os.environ.get("MINUTES_WORKER_ENABLED", "1") == "1"

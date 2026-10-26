@@ -27,7 +27,7 @@ export function SharedMinutesPage() {
         if (!alive) return;
         setWorkspace(draft);
         setContent(draft.minutes?.content ?? "");
-        setBlocks(draft.minutes?.blocks);
+        setBlocks(draft.minutes?.blocks ?? undefined);
         setCanEdit(share.permission === "edit" && canEditMinutes(draft.meeting));
       })
       .catch((cause) => {

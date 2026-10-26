@@ -91,3 +91,57 @@ test("desktop proxies authenticated JSON requests and preserves backend status",
     await rm(temporary, { recursive: true, force: true });
   }
 });
+
+for (const socketPath of ["/api/meetings/events", "/api/meetings/demo-record/record/events"]) {
+  test(`desktop forwards authenticated meeting WebSocket ${socketPath}`, async () => {
+    const { createHash } = await import("node:crypto");
+    const temporary = await mkdtemp(path.join(tmpdir(), "dp-ws-"));
+    const api = http.createServer();
+    const peers = new Set<import("node:stream").Duplex>();
+    api.on("upgrade", (request, socket) => {
+      peers.add(socket);
+      socket.on("close", () => peers.delete(socket));
+      assert.equal(request.url, socketPath);
+      const accept = createHash("sha1")
+        .update(request.headers["sec-websocket-key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+        .digest("base64");
+      socket.write(
+        `HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`,
+      );
+      const payload = Buffer.from('{"type":"ping"}');
+      socket.write(Buffer.concat([Buffer.from([0x81, payload.length]), payload]));
+    });
+    await new Promise<void>((resolve) => api.listen(0, "127.0.0.1", resolve));
+    let server: Server | undefined;
+    let socket: WebSocket | undefined;
+    try {
+      await writeFile(path.join(temporary, "index.html"), "<main>app</main>");
+      server = await startWebServer(
+        temporary,
+        0,
+        `http://127.0.0.1:${(api.address() as { port: number }).port}`,
+      );
+      socket = new WebSocket(
+        `ws://127.0.0.1:${(server.address() as { port: number }).port}${socketPath}`,
+      );
+      const message = await new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("WebSocket proxy timed out")), 3000);
+        socket!.onmessage = (event) => {
+          clearTimeout(timer);
+          resolve(String(event.data));
+        };
+        socket!.onerror = () => {
+          clearTimeout(timer);
+          reject(new Error("WebSocket proxy failed"));
+        };
+      });
+      assert.equal(message, '{"type":"ping"}');
+    } finally {
+      socket?.close();
+      for (const peer of peers) peer.destroy();
+      if (server) await close(server);
+      await close(api);
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
+}

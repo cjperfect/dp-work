@@ -13,8 +13,9 @@ import {
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { duration, elapsed, generateMinutes, applyGeneratedMinutes } from "@/apis/meetings";
-import { useWorkspace } from "@/stores/meetings";
+import { duration, elapsed, generateMinutes } from "@/apis/meetings";
+import { useWorkspace, cacheServerWorkspace } from "@/stores/meetings";
+import { readDraft } from "../lib/workspace-storage";
 import { control } from "../lib/recording";
 import { useMeetingAsr } from "../hooks/use-meeting-asr";
 import { applyAsrTranscript } from "../lib/asr-transcript";
@@ -22,7 +23,7 @@ import { SaveStatus } from "./workspace-parts";
 
 export function MeetingSessionPage() {
   const { id } = useSearch({ from: "/_app/meetings/active" });
-  const { draft, loading, error, change, preview, retry, editable } = useWorkspace(id);
+  const { draft, loading, error, change, preview, retry, editable, accountId } = useWorkspace(id);
   const asr = useMeetingAsr(id ?? "", (message) => {
     if (message.segment.isFinal) return change((current) => applyAsrTranscript(current, message));
     preview((current) => applyAsrTranscript(current, message));
@@ -36,6 +37,28 @@ export function MeetingSessionPage() {
   const scroll = useRef<HTMLDivElement>(null);
   const actionLock = useRef(false);
   const [generating, setGenerating] = useState(false);
+  const { start: startAsr, close: closeAsr } = asr;
+  const autoStart = !!id && editable && !loading && !error && draft?.meeting.status === "active";
+  useEffect(() => {
+    if (!autoStart) return;
+    let active = true;
+    // 延后启动，避免 StrictMode 重放 Effect 时重复申请麦克风。
+    queueMicrotask(() => {
+      if (!active) return;
+      void (async () => {
+        try {
+          await retry();
+          if (active) await startAsr();
+        } catch (cause) {
+          if (active) setActionError(cause instanceof Error ? cause.message : "启动转写失败。");
+        }
+      })();
+    });
+    return () => {
+      active = false;
+      closeAsr();
+    };
+  }, [autoStart, startAsr, closeAsr, retry]);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -49,6 +72,7 @@ export function MeetingSessionPage() {
   async function startTranscription() {
     setActionError(null);
     try {
+      await retry();
       await asr.start();
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "启动转写失败。");
@@ -68,7 +92,6 @@ export function MeetingSessionPage() {
         }));
       } else {
         await change((current) => control(current, "active"));
-        await asr.start();
       }
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "暂停或恢复失败。");
@@ -97,15 +120,25 @@ export function MeetingSessionPage() {
     }
   }
   async function generate() {
-    if (!draft || !editable || actionLock.current || draft.meeting.status !== "ended") return;
+    if (
+      !draft ||
+      !editable ||
+      !accountId ||
+      !id ||
+      actionLock.current ||
+      draft.meeting.status !== "ended"
+    )
+      return;
     actionLock.current = true;
     setGenerating(true);
     setActionError(null);
     try {
       await retry();
-      const result = await generateMinutes(draft);
-      await change((current) => applyGeneratedMinutes(current, result));
-      await navigate({ to: "/meetings", search: { view: "generating" } });
+      const current = await readDraft(accountId, id);
+      if (!current) throw new Error("会议不存在或已删除。");
+      const result = await generateMinutes(current);
+      cacheServerWorkspace({ ...current, meeting: result.meeting });
+      await navigate({ to: "/meetings", search: { view: "pending" } });
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "生成请求失败，请重试");
     } finally {
@@ -125,6 +158,8 @@ export function MeetingSessionPage() {
   if (!draft) return <p className="p-8 text-muted-foreground">正在恢复会议记录…</p>;
   const live = draft.meeting.status === "active";
   const ended = draft.meeting.status === "ended" || draft.meeting.status === "archived";
+  const canRetry =
+    asr.status === "error" || (!!actionError && ["idle", "stopped"].includes(asr.status));
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 px-5 py-5 md:px-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -153,13 +188,13 @@ export function MeetingSessionPage() {
             <Clock3 className="size-4 text-muted-foreground" />
             {duration(elapsed(draft.meeting, now))}
           </span>
-          {!ended && live && ["idle", "stopped", "error"].includes(asr.status) && (
+          {!ended && live && canRetry && (
             <Button
               variant="outline"
               disabled={!editable || busy}
               onClick={() => void startTranscription()}
             >
-              {asr.status === "error" ? "重试转写" : "开始转写"}
+              重试转写
             </Button>
           )}
           {["connecting", "stopping"].includes(asr.status) && (
@@ -257,8 +292,11 @@ export function MeetingSessionPage() {
             ? "转写已暂停"
             : asr.status === "live"
               ? "麦克风录音中 · 正在实时识别"
-              : "点击开始转写，使用麦克风记录会议。"}
-        {asr.sync && ` · 本地待同步 ${asr.sync.pendingCount} 个片段`}
+              : canRetry
+                ? "转写未启动，请重试。"
+                : !editable
+                  ? "只读模式，不启动录音。"
+                  : "正在准备麦克风和实时转写…"}
       </p>
       {asr.error && (
         <p role="alert" className="text-sm text-destructive">

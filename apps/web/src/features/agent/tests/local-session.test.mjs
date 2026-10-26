@@ -103,3 +103,24 @@ test("a history item selects its own Agent without a previously selected convers
   assert.equal(getThreadAgentCode(generalId), undefined);
   await assert.rejects(selectThreadById(generalId), /会话不存在/);
 });
+
+test("logged-out page initialization does not create a session or report a retry error", async () => {
+  useAuthStore.setState({ user: null });
+  await ensureAgentChat("general");
+  await ensureAgentChat("general", true);
+  assert.equal(useAgentStore.getState().owner, null);
+  assert.deepEqual(useAgentStore.getState().selected, {});
+});
+
+test("sign-out during initialization discards the old task and a new login can reload", async () => {
+  const previous = ensureAgentChat("general");
+  useAuthStore.setState({ user: null });
+  resetAgents();
+  await previous;
+  assert.deepEqual(useAgentStore.getState().selected, {});
+  useAuthStore.setState({ user: { id: 456, username: "new-user" } });
+  await ensureAgentChat("general", true);
+  const current = useAgentStore.getState();
+  assert.equal(current.owner, 456);
+  assert.ok(current.selected.general);
+});

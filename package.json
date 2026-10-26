@@ -30,7 +30,10 @@
     "package:desktop:dir": "pnpm --filter @dp-work/desktop package:dir",
     "dev:sidecar": "cd services/sidecar && .venv/bin/python -m uvicorn src.main:app --reload --host 127.0.0.1 --port 8001",
     "test:sidecar": "cd services/sidecar && .venv/bin/python -m unittest discover -s tests -v",
-    "setup:feishu-cli": "node node_modules/@larksuite/cli/scripts/install.js"
+    "setup:feishu-cli": "node node_modules/@larksuite/cli/scripts/install.js",
+    "db:up": "docker-compose up -d postgres",
+    "db:down": "docker-compose down",
+    "db:logs": "docker-compose logs -f postgres"
   },
   "lint-staged": {
     "*.{js,mjs,cjs,ts,tsx}": [

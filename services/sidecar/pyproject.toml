@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dp-work-sidecar"
 version = "0.1.0"
-description = "豆包流式 ASR + 本地 SQLite 实时转写保存 + 待同步队列（Sidecar）"
+description = "豆包流式 ASR 与转写事件推送（Sidecar）"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110",
@@ -17,3 +17,6 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 include = ["src*"]
+
+[tool.setuptools.package-data]
+"src.meetings" = ["prompts/*.md"]

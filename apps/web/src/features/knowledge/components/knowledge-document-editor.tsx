@@ -10,6 +10,7 @@ import { useKnowledgeDocuments } from "@/features/knowledge/hooks/use-knowledge-
 import { useKnowledgeBases } from "@/features/knowledge/hooks/use-knowledge-bases";
 import { saveKnowledgeDocument } from "@/stores/knowledge";
 import type { EditorDocumentInput } from "../lib/knowledge-repository";
+import { VectorizeDocumentButton } from "./vectorize-document-button";
 import type { KbFile, KnowledgeBase } from "../constants/knowledge-data";
 
 function savedDate(value: string | null): Date | null {
@@ -314,6 +315,7 @@ function DocumentForm({
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          {initialFile && <VectorizeDocumentButton name={displayTitle} />}
           <span role={error ? "alert" : "status"} title={error ?? undefined}>
             {error ? "保存失败" : saving || dirty ? "保存中…" : lastSaved ? "" : "尚未保存"}
           </span>

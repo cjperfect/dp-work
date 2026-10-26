@@ -3,7 +3,7 @@ import { realpath, stat } from "node:fs/promises";
 import http, { type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import https from "node:https";
 import path from "node:path";
-import { pipeline } from "node:stream";
+import { pipeline, type Duplex } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { apiBaseUrl } from "./config";
 
@@ -94,6 +94,48 @@ function proxyApi(request: IncomingMessage, response: ServerResponse, base: stri
   pipeline(request, upstream, () => {});
 }
 
+/** 转发会议状态 WebSocket，不把登录凭证放入 URL。 */
+function proxyApiSocket(
+  request: IncomingMessage,
+  socket: Duplex,
+  head: Buffer,
+  base: string,
+): void {
+  const target = new URL(base.replace(/\/$/, "") + request.url);
+  const upstream = (target.protocol === "https:" ? https : http).request(target, {
+    headers: {
+      ...forwardedHeaders(request.headers),
+      host: target.host,
+      connection: "Upgrade",
+      upgrade: "websocket",
+    },
+  });
+  upstream.setTimeout(10000, () => upstream.destroy(new Error("WebSocket handshake timeout")));
+  upstream.on("upgrade", (response, remote, responseHead) => {
+    upstream.setTimeout(0);
+    remote.setTimeout(0);
+    socket.write(`HTTP/1.1 ${response.statusCode} ${response.statusMessage}\r\n`);
+    for (let index = 0; index < response.rawHeaders.length; index += 2)
+      socket.write(`${response.rawHeaders[index]}: ${response.rawHeaders[index + 1]}\r\n`);
+    socket.write("\r\n");
+    if (responseHead.length) socket.write(responseHead);
+    if (head.length) remote.write(head);
+    remote.on("error", () => socket.destroy());
+    socket.on("error", () => remote.destroy());
+    socket.on("close", () => remote.destroy());
+    remote.on("close", () => socket.destroy());
+    socket.pipe(remote).pipe(socket);
+  });
+  upstream.on("response", (response) => {
+    response.resume();
+    socket.destroy();
+  });
+  upstream.on("error", () => socket.destroy());
+  socket.on("close", () => upstream.destroy());
+  socket.on("error", () => upstream.destroy());
+  upstream.end();
+}
+
 /** 提供静态资源、页面路由回退和 API 代理。 */
 export async function startWebServer(
   root: string,
@@ -168,6 +210,20 @@ export async function startWebServer(
       if (request.method === "HEAD") response.end();
       else pipeline(createReadStream(resolved), response, () => {});
     })().catch(() => reply(response, 500, "页面加载失败。"));
+  });
+  server.on("upgrade", (request, socket, head) => {
+    const port = (server.address() as { port: number }).port;
+    if (
+      ![`127.0.0.1:${port}`, `localhost:${port}`].includes(request.headers.host ?? "") ||
+      !(
+        request.url === "/api/meetings/events" ||
+        /^\/api\/meetings\/[a-zA-Z0-9_-]{1,128}\/record\/events$/.test(request.url ?? "")
+      )
+    ) {
+      socket.destroy();
+      return;
+    }
+    proxyApiSocket(request, socket, head, base);
   });
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);

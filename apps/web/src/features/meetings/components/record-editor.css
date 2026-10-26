@@ -1,0 +1,22 @@
+.bn-editor .meeting-collaboration-cursor-avatar {
+  position: absolute;
+  left: -11px;
+  top: -26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 15%);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  font-style: normal;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: auto;
+  z-index: 5;
+}

@@ -9,8 +9,10 @@ from app.modules.auth.router import router as auth_router
 from app.modules.knowledge.router import router as knowledge_router
 from app.modules.connectors.router import router as connectors_router
 
+from app.modules.meetings.router import router as meetings_router
+
 api_router = APIRouter()
-for router in (auth_router, knowledge_router, connectors_router):
+for router in (auth_router, knowledge_router, connectors_router, meetings_router):
     api_router.include_router(router)
 
 

@@ -35,6 +35,7 @@ import { useKnowledgeDocuments } from "@/features/knowledge/hooks/use-knowledge-
 import { useKnowledgeBases } from "@/features/knowledge/hooks/use-knowledge-bases";
 import { useAuthStore } from "@/stores/auth";
 import { useDocumentPdf } from "@/features/knowledge/hooks/use-document-pdf";
+import { VectorizeDocumentButton } from "./vectorize-document-button";
 import { PdfPreview } from "@/features/knowledge/components/pdf-preview";
 import { LazyBlockNoteEditor as BlockNoteEditor } from "@/components/editor/lazy-blocknote-editor";
 import { getKbFiles, removeUploadedFile } from "@/stores/knowledge-upload";
@@ -451,7 +452,8 @@ export function KnowledgeBaseDetailPage() {
       </Popover>
 
       <p className="text-muted-foreground text-xs">
-        上传支持 Markdown 与 PDF；在线文档修改后自动保存。
+        右键文档可查看更多操作：编辑、向量化、删除。上传支持 Markdown 与
+        PDF；在线文档修改后自动保存。
       </p>
     </div>
   );
@@ -525,18 +527,24 @@ export function KnowledgeFilePage() {
             <span>更新于 {file.updatedAt}</span>
           </p>
         </div>
-        {file.source === "editor" && (
-          <Button
-            variant="outline"
-            nativeButton={false}
-            render={
-              <Link to="/knowledge/$kbId/edit/$fileId" params={{ kbId: kb.id, fileId: file.id }} />
-            }
-          >
-            <Pencil className="size-4" />
-            编辑文档
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <VectorizeDocumentButton name={file.name} />
+          {file.source === "editor" && (
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={
+                <Link
+                  to="/knowledge/$kbId/edit/$fileId"
+                  params={{ kbId: kb.id, fileId: file.id }}
+                />
+              }
+            >
+              <Pencil className="size-4" />
+              编辑文档
+            </Button>
+          )}
+        </div>
       </header>
 
       <section className="flex min-h-0 flex-1 flex-col rounded-xl border bg-card">

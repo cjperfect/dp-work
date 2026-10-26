@@ -30,3 +30,16 @@ export function control(draft: Draft, status: "active" | "paused" | "ended"): Dr
     },
   };
 }
+
+/** 修改原始转写正文，保留片段标识、说话人和时间。 */
+export function updateTranscriptText(draft: Draft, id: string, text: string): Draft {
+  const entry = draft.segments.find((row) => row.id === id);
+  if (!entry || entry.text === text) return draft;
+  return {
+    ...draft,
+    segments: draft.segments.map((row) =>
+      row.id === id ? { ...row, text, revision: (row.revision ?? 1) + 1 } : row,
+    ),
+    dirtyEntries: [...new Set([...draft.dirtyEntries, id])],
+  };
+}

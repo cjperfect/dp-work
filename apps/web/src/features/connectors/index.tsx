@@ -21,7 +21,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { UPCOMING_CONNECTORS } from "@/features/connectors/constants/connectors";
 
 export function ConnectorsPage() {
-  const { connectors, feishu, loading, error, reload } = useConnectors();
+  const { connectors, feishu, loading, error, reload } = useConnectors({
+    watchAuthorization: true,
+  });
   const owner = useAuthStore((state) => state.user?.id ?? null);
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);

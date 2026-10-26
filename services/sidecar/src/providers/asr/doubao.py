@@ -9,6 +9,7 @@ import logging
 import struct
 from typing import Any, TypedDict
 from uuid import uuid4
+from urllib.parse import urlparse
 
 from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import InvalidStatus, ConnectionClosed
@@ -32,7 +33,6 @@ FLAG_FINAL = 2
 FLAG_EVENT = 4
 SERIALIZATION_JSON = 1
 COMPRESSION_GZIP = 1
-ASR_URL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
 
 
 class TranscriptEvent(TypedDict):
@@ -56,14 +56,18 @@ class DoubaoSettings:
     api_key: str = ""
     resource_id: str = "volc.seedasr.sauc.duration"
     speaker_info: bool = True
+    base_url: str = config.VOLC_BASE_URL
 
     @classmethod
     def from_config(cls) -> "DoubaoSettings":
         return cls(api_key=config.VOLC_API_KEY, resource_id=config.VOLC_RESOURCE_ID,
-                   speaker_info=config.VOLC_SPEAKER_INFO)
+                   speaker_info=config.VOLC_SPEAKER_INFO, base_url=config.VOLC_BASE_URL)
 
     def headers(self) -> dict[str, str]:
         """构造仅用于上游握手的鉴权头。"""
+        url = urlparse(self.base_url)
+        if url.scheme != "wss" or not url.hostname or url.username or url.password or url.query or url.fragment:
+            raise AsrProviderError("PROVIDER_CONFIG_ERROR", "请配置有效的 VOLC_BASE_URL，使用不带凭证的 wss:// 地址。")
         if not self.resource_id:
             raise AsrProviderError("PROVIDER_CONFIG_ERROR", "请配置豆包语音资源 ID。")
         if not self.api_key:
@@ -159,7 +163,7 @@ class DoubaoRecognizer:
         headers = self.settings.headers()
         try:
             async with asyncio.timeout(STARTUP_TIMEOUT):
-                self.socket = await self.connector(ASR_URL, additional_headers=headers,
+                self.socket = await self.connector(self.settings.base_url, additional_headers=headers,
                     open_timeout=STARTUP_TIMEOUT, close_timeout=CLOSE_TIMEOUT, max_size=MAX_PAYLOAD, max_queue=8,
                     compression=None, proxy=None)
                 log_id = self.socket.response.headers.get("X-Tt-Logid")

@@ -11,7 +11,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useAuthStore } from "@/stores/auth";
-import { emptyWorkspace, type Workspace } from "@/apis/meetings";
+import { createMeeting } from "@/apis/meetings";
 import { cacheCreated } from "@/stores/meetings";
 function localTime() {
   const date = new Date();
@@ -38,14 +38,12 @@ export function MeetingCreateDialog({
     setBusy(true);
     setError(null);
     try {
-      // 业务 API 已下线：本地创建会议工作区，不发起请求。
-      const workspace: Workspace = emptyWorkspace(
-        crypto.randomUUID(),
-        accountId ?? 0,
-        title.trim(),
-      );
-      workspace.meeting.resumed_at = new Date().toISOString();
-      workspace.meeting.scheduled_at = new Date(time).toISOString();
+      if (!accountId) throw new Error("请先登录。");
+      const workspace = await createMeeting(accountId, {
+        id: crypto.randomUUID(),
+        title: title.trim(),
+        scheduled_at: new Date(time).toISOString(),
+      });
       await cacheCreated(workspace);
       onOpenChange(false);
       setTitle("");

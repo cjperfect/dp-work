@@ -6,7 +6,7 @@ import type { StoredKnowledgeBase } from "@/features/knowledge/lib/knowledge-rep
 
 const EMPTY: StoredKnowledgeBase[] = [];
 
-export function useKnowledgeBases() {
+export function useKnowledgeBases(enabled = true) {
   const accountId = useAuthStore((state) => localAccountId(state.user));
   const state = useKnowledgeStore();
   useEffect(() => {
@@ -14,13 +14,14 @@ export function useKnowledgeBases() {
       resetKnowledgeBases();
       return;
     }
+    if (!enabled) return;
     void loadKnowledgeBases(accountId);
     const refresh = () => {
       void loadKnowledgeBases(accountId, true);
     };
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
-  }, [accountId]);
+  }, [accountId, enabled]);
   const current = state.accountId === accountId;
   return {
     bases: current ? state.bases : EMPTY,

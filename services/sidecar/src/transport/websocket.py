@@ -74,12 +74,11 @@ async def asr_websocket(websocket: WebSocket):
                     await error("MEETING_BUSY", "该会议已有转写连接。", request, True)
                     continue
                 provider = DoubaoRecognizer()
-                session = AsrSession(request.meetingId, send, provider)
+                session = AsrSession(request.meetingId, send, provider, next_seq=request.nextSeq, offset_ms=request.offsetMs)
                 active[request.meetingId] = session
                 await session.prepare()
                 await send(dict(type="asr.ready", requestId=request.requestId,
                                 meetingId=request.meetingId, sessionId=session.session_id))
-                await session.sync_status()
                 session.task = asyncio.create_task(session.run())
             else:
                 if not session or request.meetingId != session.meeting_id:
@@ -87,9 +86,8 @@ async def asr_websocket(websocket: WebSocket):
                     continue
                 await session.stop()
                 if session.failed:
-                    await error("TRANSCRIPT_FAILED", "最后一批转写未能保存，请重试。", request, True)
+                    await error("TRANSCRIPT_FAILED", "最后一批转写未能完成，请重试。", request, True)
                     continue
-                await session.sync_status()
                 await send(dict(type="asr.stopped", requestId=request.requestId,
                                 meetingId=session.meeting_id, sessionId=session.session_id,
                                 lastFinalSeq=session.last_final_seq))

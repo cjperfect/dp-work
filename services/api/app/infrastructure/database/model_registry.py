@@ -3,6 +3,10 @@
 from app.modules.users.models import User
 from app.modules.knowledge.models import KnowledgeBase, KnowledgeDocument
 
+from app.modules.meetings.models import Meeting, MeetingSegment, MeetingMinutes, MeetingGenerationJob
+
+from app.modules.meetings.record_models import MeetingRecord, MeetingRecordVersion
+
 from .base import Base
 
-__all__ = ["Base", "User", "KnowledgeBase", "KnowledgeDocument"]
+__all__ = ["Base", "User", "KnowledgeBase", "KnowledgeDocument", "Meeting", "MeetingSegment", "MeetingMinutes", "MeetingGenerationJob", "MeetingRecord", "MeetingRecordVersion"]

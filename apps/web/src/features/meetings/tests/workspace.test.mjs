@@ -1,264 +1,235 @@
 import "fake-indexeddb/auto";
-import { IDBObjectStore } from "fake-indexeddb";
 import assert from "node:assert/strict";
-import { beforeEach, afterEach, mock, test } from "node:test";
+import { beforeEach, afterEach, test } from "node:test";
 import { useAuthStore } from "../../../stores/auth.ts";
-import { elapsed, duration } from "../../../apis/meetings.ts";
-import { confirmTemporary, control } from "../lib/recording.ts";
+import { emptyWorkspace, elapsed, duration } from "../../../apis/meetings.ts";
 import {
-  acknowledge,
   isPending,
-  listDrafts,
   localDraft,
-  prepareFlight,
   readDraft,
   saveDraft,
+  removeDraft,
+  listSavedMeetings,
 } from "../lib/workspace-storage.ts";
-import { persist, syncNow, useMeetingCache } from "../../../stores/meetings.ts";
-let account = 100;
-let token;
-const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
-const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-function workspace() {
-  return {
-    meeting: {
-      id: crypto.randomUUID(),
-      owner_id: account,
-      title: "Review",
-      status: "paused",
-      elapsed_ms: 5000,
-      resumed_at: null,
-      revision: 0,
-    },
-    segments: [],
-    minutes: { content: "", status: 0, archived_document_id: null },
-  };
-}
+import { persist, syncNow, loadWorkspace, useMeetingCache } from "../../../stores/meetings.ts";
+import { updateTranscriptText } from "../lib/recording.ts";
+import { meetingApiFixture } from "./api-fixture.mjs";
+import { mockHttpRequest } from "../../../lib/testing/mock-http.mjs";
+let owner = 200;
+let workspace, api;
 beforeEach(() => {
-  account++;
-  token = `token-${account}`;
-  Object.defineProperty(globalThis, "window", { configurable: true, value: {} });
-  Object.defineProperty(globalThis, "localStorage", {
-    configurable: true,
-    value: { getItem: () => token },
-  });
-  useAuthStore.setState({ user: { id: account, username: "tester" } });
+  owner++;
+  useAuthStore.setState({ user: { id: owner, username: "tester" } });
   useMeetingCache.setState({ records: {} });
+  workspace = emptyWorkspace(crypto.randomUUID(), owner, "评审会议");
+  api = meetingApiFixture([workspace]);
 });
 afterEach(() => {
-  mock.restoreAll();
   useAuthStore.setState({ user: null });
-  if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
-  else delete globalThis.window;
-  if (originalStorage) Object.defineProperty(globalThis, "localStorage", originalStorage);
-  else delete globalThis.localStorage;
 });
-const ok = (data) => Response.json({ code: 0, data });
 
-test("clock counts active time, freezes while paused, and excludes pause duration", () => {
-  const time = Date.parse("2026-10-24T00:00:00Z");
+test("clock includes active time and excludes paused duration", () => {
+  const now = Date.parse("2026-10-24T00:00:00Z");
   assert.equal(
     elapsed(
-      { elapsed_ms: 5000, status: "active", resumed_at: new Date(time).toISOString() },
-      time + 3000,
+      { elapsed_ms: 5000, status: "active", resumed_at: new Date(now).toISOString() },
+      now + 3000,
     ),
     8000,
   );
   assert.equal(
-    elapsed({ elapsed_ms: 8000, status: "paused", resumed_at: null }, time + 60000),
+    elapsed({ elapsed_ms: 8000, status: "paused", resumed_at: null }, now + 60000),
     8000,
   );
   assert.equal(duration(3661000), "01:01:01");
-  const draft = localDraft(workspace());
-  assert.equal(control(draft, "active").meeting.elapsed_ms, 5000);
 });
-test("temporary words are recoverable locally and only confirmed records enter the outbox", async () => {
-  const draft = localDraft(workspace());
-  draft.temporary = { speaker: " Alice ", text: " Draft words " };
-  await saveDraft(draft);
-  const recovered = await readDraft(account, draft.meeting.id);
-  assert.equal(recovered.temporary.text, " Draft words ");
-  assert.equal(isPending(recovered), false);
-  const confirmed = confirmTemporary(recovered);
-  assert.equal(confirmed.segments[0].text, "Draft words");
-  assert.equal(confirmed.segments[0].speaker, "Alice");
-  assert.equal(confirmed.segments[0].start_ms, 5000);
-  assert.equal(confirmed.segments[0].seq, 0);
-  assert.equal(confirmed.temporary.text, "");
-  assert.equal(isPending(confirmed), true);
-});
-test("persistent flights reuse the exact sync ID after reload or lost responses", async () => {
-  const draft = confirmTemporary({
-    ...localDraft(workspace()),
-    temporary: { speaker: "A", text: "One" },
-    version: 1,
-  });
-  await saveDraft(draft);
-  const sent = await prepareFlight(account, draft.meeting.id);
-  const reloaded = await readDraft(account, draft.meeting.id);
-  const resent = await prepareFlight(account, draft.meeting.id);
-  assert.equal(sent.flight.payload.sync_id, reloaded.flight.payload.sync_id);
-  assert.deepEqual(sent.flight, resent.flight);
-  assert.equal(sent.flight.payload.expected_revision, 0);
-});
-test("edits arriving during a sync survive acknowledgment and use the new server revision", async () => {
-  const draft = confirmTemporary({
-    ...localDraft(workspace()),
-    temporary: { speaker: "A", text: "One" },
-    version: 1,
-  });
-  await saveDraft(draft);
-  const sent = await prepareFlight(account, draft.meeting.id);
-  const edited = {
-    ...sent,
-    version: 2,
-    dirtyMinutes: true,
-    minutes: { ...sent.minutes, content: "New draft" },
-    segments: sent.segments.map((row) => ({ ...row, text: "Corrected" })),
-  };
-  await saveDraft(edited);
-  const server = {
-    ...workspace(),
-    meeting: { ...draft.meeting, revision: 1 },
-    segments: draft.segments,
-    minutes: draft.minutes,
-  };
-  const ack = await acknowledge(sent, server);
-  assert.equal(ack.segments[0].text, "Corrected");
-  assert.equal(ack.minutes.content, "New draft");
-  assert.equal(ack.meeting.revision, 1);
-  assert.equal(isPending(ack), true);
-  const next = await prepareFlight(account, draft.meeting.id);
-  assert.equal(next.flight.payload.expected_revision, 1);
-  assert.equal(next.flight.payload.segments[0].text, "Corrected");
-  const done = await acknowledge(next, {
-    ...server,
-    meeting: { ...server.meeting, revision: 2 },
-    segments: edited.segments,
-    minutes: edited.minutes,
-  });
-  assert.equal(isPending(done), false);
-});
-test("batches contain at most 200 changed segments and remaining records stay pending", async () => {
-  const draft = localDraft(workspace());
-  draft.segments = Array.from({ length: 205 }, (_, seq) => ({
-    id: crypto.randomUUID(),
-    seq,
-    speaker: null,
-    text: `Entry ${seq}`,
-    start_ms: seq,
-  }));
-  draft.dirtyEntries = draft.segments.map((row) => row.id);
-  draft.version = 1;
-  await saveDraft(draft);
-  const first = await prepareFlight(account, draft.meeting.id);
-  assert.equal(first.flight.payload.segments.length, 200);
-  const ack = await acknowledge(first, {
-    ...draft,
-    meeting: { ...draft.meeting, revision: 1 },
-    segments: draft.segments.slice(0, 200),
-  });
-  assert.equal(ack.dirtyEntries.length, 5);
-  assert.equal(ack.segments.length, 205);
-  const last = await prepareFlight(account, draft.meeting.id);
-  assert.equal(last.flight.payload.segments.length, 5);
-});
-test("older local writes cannot restore an acknowledged batch or erase newer text", async () => {
-  const draft = confirmTemporary({
-    ...localDraft(workspace()),
-    temporary: { speaker: "", text: "One" },
-    version: 1,
-  });
-  await saveDraft(draft);
-  const sent = await prepareFlight(account, draft.meeting.id);
-  await acknowledge(sent, { ...draft, meeting: { ...draft.meeting, revision: 1 } });
-  await saveDraft(draft);
-  const stored = await readDraft(account, draft.meeting.id);
-  assert.equal(stored.meeting.revision, 1);
-  assert.equal(isPending(stored), false);
-});
-test("failed network sync keeps the persistent outbox and succeeds with the same batch on retry", async () => {
-  const draft = confirmTemporary({
-    ...localDraft(workspace()),
-    temporary: { speaker: "", text: "Recoverable" },
-    version: 1,
-  });
-  await persist(draft);
-  const fetch = mock.method(globalThis, "fetch", async () => {
-    throw new TypeError("offline");
-  });
-  await assert.rejects(syncNow(account), /连接失败/);
-  const failed = await readDraft(account, draft.meeting.id);
-  assert.equal(isPending(failed), true);
-  assert.match(failed.error, /连接失败/);
-  const syncId = failed.flight.payload.sync_id;
-  fetch.mock.mockImplementation(async (url, init) => {
-    assert.equal(JSON.parse(init.body).sync_id, syncId);
-    return ok({ ...draft, meeting: { ...draft.meeting, revision: 1 } });
-  });
-  await syncNow(account);
-  assert.equal(isPending(await readDraft(account, draft.meeting.id)), false);
-});
-test("local commit failures are shown as unsaved and never sent to the server", async () => {
-  const draft = confirmTemporary({
-    ...localDraft(workspace()),
-    temporary: { speaker: "", text: "Must not disappear" },
-    version: 1,
-  });
-  mock.method(IDBObjectStore.prototype, "put", () => {
-    throw new DOMException("quota", "QuotaExceededError");
-  });
-  await assert.rejects(persist(draft));
-  const cached = Object.values(useMeetingCache.getState().records)[0];
-  assert.equal(cached.localSaved, false);
-  assert.match(cached.error, /本地保存失败|quota/);
-  assert.equal(await readDraft(account, draft.meeting.id), undefined);
-});
-test("local records are partitioned by account and a late response cannot publish into another login", async () => {
-  const draft = localDraft(workspace());
-  await saveDraft(draft);
-  assert.equal((await listDrafts(account)).length, 1);
-  assert.deepEqual(await listDrafts(account + 1), []);
-  assert.equal(await readDraft(account + 1, draft.meeting.id), undefined);
-});
-
-test("a stale server load cannot erase a newer locally committed draft", async () => {
-  const { replaceFromServer } = await import("../lib/workspace-storage.ts");
-  const server = workspace();
-  const draft = localDraft(server);
+test("serial saves use the last acknowledged revision and retain the newest edit", async () => {
+  const draft = localDraft(workspace);
   draft.version = 1;
   draft.dirtyMinutes = true;
-  draft.minutes = { ...draft.minutes, content: "New unsynced words" };
-  await saveDraft(draft);
-  const loaded = await replaceFromServer(server);
-  assert.equal(loaded.minutes.content, "New unsynced words");
-  assert.equal(isPending(loaded), true);
-});
-test("a late response after switching accounts does not populate the new account cache", async () => {
-  const draft = confirmTemporary({
-    ...localDraft(workspace()),
-    temporary: { speaker: "", text: "Private" },
-    version: 1,
+  draft.minutes = {
+    content: "第一稿",
+    blocks: [{ type: "paragraph" }],
+    status: 1,
+    archived_document_id: null,
+  };
+  const first = saveDraft(draft);
+  const second = saveDraft({
+    ...draft,
+    version: 2,
+    minutes: { ...draft.minutes, content: "第二稿" },
   });
-  await persist(draft);
-  let respond;
-  let started;
+  await Promise.all([first, second]);
+  const saved = await readDraft(owner, workspace.meeting.id);
+  assert.equal(saved.minutes.content, "第二稿");
+  assert.deepEqual(saved.minutes.blocks, draft.minutes.blocks);
+  assert.equal(saved.meeting.revision, 3);
+  assert.equal(isPending(saved), false);
+  const puts = api.transport.mock.calls.filter((call) => call.arguments[1].method === "PUT");
+  assert.deepEqual(
+    puts.map((call) => JSON.parse(call.arguments[1].body).expected_revision),
+    [1, 2],
+  );
+});
+test("older snapshots cannot overwrite a newer saved version", async () => {
+  const draft = {
+    ...localDraft(workspace),
+    version: 2,
+    meeting: { ...workspace.meeting, title: "新标题" },
+  };
+  await saveDraft(draft);
+  await saveDraft({ ...localDraft(workspace), version: 1 });
+  assert.equal((await readDraft(owner, workspace.meeting.id)).meeting.title, "新标题");
+});
+test("failed writes stay unsaved, focus reads preserve edits, and retry persists them", async () => {
+  const draft = {
+    ...localDraft(workspace),
+    version: 1,
+    dirtyControls: true,
+    meeting: { ...workspace.meeting, status: "ended" },
+  };
+  mockHttpRequest(async () => {
+    throw new Error("offline");
+  });
+  await assert.rejects(persist(draft));
+  let cached = useMeetingCache.getState().records[`${owner}:${workspace.meeting.id}`];
+  assert.equal(cached.localSaved, false);
+  assert.equal(cached.meeting.status, "ended");
+  assert.equal((await loadWorkspace(owner, workspace.meeting.id)).meeting.status, "ended");
+  api = meetingApiFixture([workspace]);
+  await syncNow(owner);
+  cached = useMeetingCache.getState().records[`${owner}:${workspace.meeting.id}`];
+  assert.equal(cached.localSaved, true);
+  assert.equal(cached.error, null);
+  assert.equal(isPending(cached), false);
+  assert.equal(api.records.get(workspace.meeting.id).meeting.status, "ended");
+});
+test("version conflicts are reported without overwriting another page", async () => {
+  api.records.get(workspace.meeting.id).meeting.revision = 5;
+  await assert.rejects(persist({ ...localDraft(workspace), version: 1 }), /其他页面/);
+  assert.equal(api.records.get(workspace.meeting.id).meeting.revision, 5);
+  assert.equal(
+    useMeetingCache.getState().records[`${owner}:${workspace.meeting.id}`].localSaved,
+    false,
+  );
+});
+test("deletion removes the server record and stale saves cannot recreate it", async () => {
+  await removeDraft(owner, workspace.meeting.id);
+  assert.equal(await readDraft(owner, workspace.meeting.id), undefined);
+  await assert.rejects(saveDraft(localDraft(workspace)), /会议不存在/);
+  await assert.rejects(loadWorkspace(owner, workspace.meeting.id), /会议不存在/);
+});
+test("requests and late responses cannot cross account boundaries", async () => {
+  await assert.rejects(readDraft(owner + 1, workspace.meeting.id), /登录状态/);
+  let respond, started;
   const waiting = new Promise((resolve) => {
     started = resolve;
   });
-  mock.method(globalThis, "fetch", () => {
+  mockHttpRequest(async () => {
     started();
     return new Promise((resolve) => {
       respond = resolve;
     });
   });
-  const operation = syncNow(account);
+  const operation = persist(localDraft(workspace));
   await waiting;
-  useAuthStore.setState({ user: { id: account + 1, username: "other" } });
-  token = "other-token";
+  useAuthStore.setState({ user: { id: owner + 1 } });
   useMeetingCache.setState({ records: {} });
-  respond(ok({ ...draft, meeting: { ...draft.meeting, revision: 1 } }));
-  await assert.rejects(operation, /账号已切换/);
+  respond(Response.json({ code: 0, data: workspace }));
+  await assert.rejects(operation, /登录状态/);
   assert.deepEqual(useMeetingCache.getState().records, {});
-  assert.equal(isPending(await readDraft(account, draft.meeting.id)), true);
+});
+test("legacy drafts migrate once and only disappear from IndexedDB after success", async () => {
+  const legacy = emptyWorkspace(crypto.randomUUID(), owner, "旧会议");
+  const db = await new Promise((resolve, reject) => {
+    const request = indexedDB.open("dp-meeting-workspaces", 2);
+    request.onupgradeneeded = () => {
+      const store = request.result.createObjectStore("drafts", {
+        keyPath: ["accountId", "meeting.id"],
+      });
+      store.createIndex("account", "accountId");
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction("drafts", "readwrite");
+    tx.objectStore("drafts").put(localDraft(legacy));
+    tx.oncomplete = resolve;
+    tx.onerror = reject;
+  });
+  const list = await listSavedMeetings(owner);
+  assert.equal(
+    list.some((row) => row.id === legacy.meeting.id),
+    true,
+  );
+  assert.equal(api.records.get(legacy.meeting.id).meeting.title, "旧会议");
+  const count = await new Promise((resolve) => {
+    const request = db
+      .transaction("drafts")
+      .objectStore("drafts")
+      .count([owner, legacy.meeting.id]);
+    request.onsuccess = () => resolve(request.result);
+  });
+  assert.equal(count, 0);
+  db.close();
+  await removeDraft(owner, legacy.meeting.id);
+  assert.equal(
+    (await listSavedMeetings(owner)).some((row) => row.id === legacy.meeting.id),
+    false,
+  );
+});
+
+test("concurrent meeting list loads share one request and the next visit refreshes", async () => {
+  const [first, second] = await Promise.all([listSavedMeetings(owner), listSavedMeetings(owner)]);
+  assert.deepEqual(first, second);
+  assert.equal(
+    api.transport.mock.calls.filter((call) => call.arguments[0] === "/api/meetings").length,
+    1,
+  );
+  await listSavedMeetings(owner);
+  assert.equal(
+    api.transport.mock.calls.filter((call) => call.arguments[0] === "/api/meetings").length,
+    2,
+  );
+});
+
+test("a failed shared meeting list request does not block subsequent retries", async () => {
+  const request = mockHttpRequest(async () => {
+    throw new Error("offline");
+  });
+  const result = await Promise.allSettled([listSavedMeetings(owner), listSavedMeetings(owner)]);
+  assert.equal(request.mock.callCount(), 1);
+  assert.ok(result.every((row) => row.status === "rejected"));
+  meetingApiFixture([workspace]);
+  assert.equal((await listSavedMeetings(owner))[0].id, workspace.meeting.id);
+});
+
+test("editing original text persists its revision without changing speaker, time, or minutes", async () => {
+  workspace.segments = [
+    {
+      id: "asr-original",
+      seq: 3,
+      revision: 2,
+      speaker: "说话人 1",
+      text: "识别错误",
+      start_ms: 1234,
+      end_ms: 4567,
+    },
+  ];
+  workspace.minutes = { content: "独立的纪要草稿", status: 1, archived_document_id: null };
+  meetingApiFixture([workspace]);
+  const draft = localDraft(workspace);
+  const edited = updateTranscriptText(draft, "asr-original", "修正后的正文");
+  assert.equal(edited.segments[0].revision, 3);
+  assert.deepEqual(edited.dirtyEntries, ["asr-original"]);
+  assert.equal(updateTranscriptText(edited, "asr-original", "修正后的正文"), edited);
+  await saveDraft({ ...edited, version: 1 });
+  const restored = await readDraft(owner, workspace.meeting.id);
+  assert.deepEqual(restored.segments[0], {
+    ...workspace.segments[0],
+    revision: 3,
+    text: "修正后的正文",
+  });
+  assert.deepEqual(restored.minutes, workspace.minutes);
 });

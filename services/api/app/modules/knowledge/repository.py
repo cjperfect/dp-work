@@ -1,8 +1,6 @@
-from datetime import datetime, timezone
-
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.sqlite import insert
+from sqlalchemy.dialects.postgresql import insert
 
 from app.core.pagination import PageParams
 from app.infrastructure.database.pagination import paginate
@@ -48,9 +46,8 @@ class KnowledgeRepository:
             .values(
                 name=name,
                 description=description,
-                # 应用层维护 updated_at：SQLite 无触发器且 CURRENT_TIMESTAMP 仅秒级，
-                # 使用 Python 时间戳保证微秒精度，PG 下触发器会再覆盖为更精确值。
-                updated_at=datetime.now(timezone.utc),
+                # 应用层统一维护修改时间。
+                updated_at=func.clock_timestamp(),
             )
             .returning(KnowledgeBase)
         )
@@ -90,7 +87,7 @@ class KnowledgeRepository:
 
     async def save_document(self, base_id: int, document_id: str, values: dict) -> KnowledgeDocument | None:
         """按文档 ID 幂等创建或更新，禁止跨知识库覆盖。"""
-        now = datetime.now(timezone.utc)
+        now = func.clock_timestamp()
         statement = insert(KnowledgeDocument).values(
             id=document_id, knowledge_base_id=base_id, **values, updated_at=now
         )
@@ -124,7 +121,7 @@ class KnowledgeRepository:
         removed = await self.session.scalar(statement) is not None
         if removed:
             await self.session.execute(update(KnowledgeBase).where(KnowledgeBase.id == base_id)
-                                      .values(updated_at=datetime.now(timezone.utc)))
+                                      .values(updated_at=func.clock_timestamp()))
         return removed
 
 
@@ -134,5 +131,5 @@ class KnowledgeRepository:
         self.session.add(record)
         await self.session.flush()
         await self.session.execute(update(KnowledgeBase).where(KnowledgeBase.id == base_id)
-                                   .values(updated_at=datetime.now(timezone.utc)))
+                                   .values(updated_at=func.clock_timestamp()))
         return record

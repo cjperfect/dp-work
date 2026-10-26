@@ -1,4 +1,4 @@
-import type { SidecarToClient, WsAsrTranscript, WsAsrSync } from "@dp-work/contracts";
+import type { SidecarToClient, WsAsrTranscript } from "@dp-work/contracts";
 
 export type AsrStatus = "idle" | "connecting" | "live" | "stopping" | "stopped" | "error";
 
@@ -11,7 +11,6 @@ type Pending = {
 type Callbacks = {
   onTranscript: (message: WsAsrTranscript) => unknown | Promise<unknown>;
   onStatus: (status: AsrStatus) => void;
-  onSync: (message: WsAsrSync) => void;
   onError: (message: string) => void;
 };
 
@@ -30,12 +29,6 @@ function parseMessage(raw: string): SidecarToClient {
   )
     return message;
   if (!text(message.meetingId)) throw new Error("转写消息缺少会议标识。");
-  if (
-    message.type === "asr.sync" &&
-    integer(message.pendingCount) &&
-    ["pending", "syncing", "synced", "failed"].includes(message.status)
-  )
-    return message;
   if (!text(message.sessionId)) throw new Error("转写消息缺少会话标识。");
   if (message.type === "asr.ready" && text(message.requestId)) return message;
   if (
@@ -113,7 +106,7 @@ export class AsrClient {
     this.callbacks.onError(cause.message);
   }
 
-  start(): Promise<void> {
+  start(position: { nextSeq: number; offsetMs: number }): Promise<void> {
     if (!this.meetingId) return Promise.reject(new Error("缺少会议标识。"));
     if (this.socket) return Promise.reject(new Error("转写连接已存在。"));
     this.sessionId = null;
@@ -131,6 +124,7 @@ export class AsrClient {
             type: "asr.start",
             requestId,
             meetingId: this.meetingId,
+            ...position,
             audio: { format: "pcm", sampleRate: 16000, channels: 1, bitsPerSample: 16 },
           }),
         );
@@ -172,8 +166,6 @@ export class AsrClient {
       this.sessionId = message.sessionId;
       this.setStatus("live");
       this.settle("pendingStart");
-    } else if (message.type === "asr.sync") {
-      this.callbacks.onSync(message);
     } else if (message.sessionId === this.sessionId) {
       if (message.type === "asr.transcript") await this.callbacks.onTranscript(message);
       else if (message.requestId === this.pendingStop?.requestId) {

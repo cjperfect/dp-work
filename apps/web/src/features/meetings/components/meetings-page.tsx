@@ -5,19 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { trackGenerations, forgetGeneration } from "@/stores/meeting-generation";
 import { useAuthStore } from "@/stores/auth";
+import { useGenerationEvents } from "../hooks/use-generation-events";
 import { MeetingCreateDialog } from "./meeting-create-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { meetingCategory, generationStatus } from "../lib/minutes-state";
 import { STATUS_LABELS, type Meeting } from "@/apis/meetings";
 import { useMeetingCache } from "@/stores/meetings";
-import { seedMockMeetings } from "../lib/mock-meetings";
-import { isPending, listDrafts, removeDraft } from "../lib/workspace-storage";
+import { listSavedMeetings, removeDraft } from "../lib/workspace-storage";
 
-type Category = "pending" | "generating" | "archived";
+type Category = "pending" | "archived";
 const CATEGORIES: { key: Category; label: string }[] = [
   { key: "pending", label: "待生成" },
-  { key: "generating", label: "AI会议纪要生成中" },
   { key: "archived", label: "已归档" },
 ];
 
@@ -25,7 +25,6 @@ export function MeetingsPage() {
   const { view } = useSearch({ from: "/_app/meetings/" });
   const accountId = useAuthStore((s) => s.user?.id);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [pending, setPending] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -41,40 +40,36 @@ export function MeetingsPage() {
     if (!accountId) return;
     setLoading(true);
     setError(null);
-    void (async () => {
-      await seedMockMeetings(accountId);
-      const local = await listDrafts(accountId).catch(() => []);
-      try {
-        // 业务 API 已下线：列表只来自本地草稿，不发起请求。
-        const merged = new Map(local.map((draft) => [draft.meeting.id, draft.meeting]));
+    void listSavedMeetings(accountId)
+      .then((rows) => {
         if (alive) {
-          setMeetings([...merged.values()]);
-          setPending(local.filter(isPending).map((row) => row.meeting.id));
+          trackGenerations(rows);
+          setMeetings(rows);
         }
-      } catch (cause) {
-        if (alive) {
-          setMeetings(local.map((row) => row.meeting));
-          setPending(local.filter(isPending).map((row) => row.meeting.id));
-          setError(cause instanceof Error ? cause.message : "无法加载会议");
-        }
-      } finally {
+      })
+      .catch((cause) => {
+        if (alive) setError(cause instanceof Error ? cause.message : "无法加载会议");
+      })
+      .finally(() => {
         if (alive) setLoading(false);
-      }
-    })().catch((cause) => {
-      if (alive) {
-        setError(cause instanceof Error ? cause.message : "无法读取本地演示数据。");
-        setLoading(false);
-      }
-    });
-    const refresh = () => setRevision((r) => r + 1);
-    window.addEventListener("focus", refresh);
-    const timer = setInterval(refresh, 3000);
+      });
     return () => {
       alive = false;
-      window.removeEventListener("focus", refresh);
-      clearInterval(timer);
     };
   }, [accountId, revision]);
+  useGenerationEvents(
+    meetings.some((row) => generationStatus(row) === "generating"),
+    (updates, snapshot) => {
+      setMeetings((current) =>
+        snapshot
+          ? updates
+          : current.map(
+              (row) =>
+                updates.find((next) => next.id === row.id && next.revision >= row.revision) ?? row,
+            ),
+      );
+    },
+  );
   const rows = meetings.filter((row) =>
     `${row.title} ${row.participants.join(" ")}`
       .toLocaleLowerCase()
@@ -86,7 +81,6 @@ export function MeetingsPage() {
   const categoryRows = rows.filter((row) => inCategory(row, category));
   const counts = {
     pending: rows.filter((row) => inCategory(row, "pending")).length,
-    generating: rows.filter((row) => inCategory(row, "generating")).length,
     archived: rows.filter((row) => inCategory(row, "archived")).length,
   };
   async function remove() {
@@ -95,8 +89,8 @@ export function MeetingsPage() {
     setBusy(true);
     setActionError(null);
     try {
-      // 业务 API 已下线：仅本地移除。
       await removeDraft(accountId, deleting.id);
+      forgetGeneration(deleting.id);
       useMeetingCache.setState((state) => {
         const records = { ...state.records };
         delete records[`${accountId}:${deleting.id}`];
@@ -199,7 +193,7 @@ export function MeetingsPage() {
                   </h2>
                   <div className="mb-3 flex flex-wrap items-center gap-2">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${row.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-muted text-muted-foreground"}`}
+                      className={`rounded-full px-2 py-0.5 text-xs ${generationStatus(row) === "generating" ? "bg-blue-50 text-blue-700" : row.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-muted text-muted-foreground"}`}
                     >
                       {row.status === "archived"
                         ? "已归档"
@@ -211,9 +205,6 @@ export function MeetingsPage() {
                               ? "已生成"
                               : STATUS_LABELS[row.status]}
                     </span>
-                    {pending.includes(row.id) && (
-                      <span className="text-xs text-amber-700">待同步</span>
-                    )}
                   </div>
                   <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <Clock3 className="size-3" />
