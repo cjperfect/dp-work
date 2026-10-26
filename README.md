@@ -46,14 +46,16 @@ dp-work 从三个环节解决这个问题：
 
 ## 技术栈
 
-| 层         | 技术                                                                                  |
-| ---------- | ------------------------------------------------------------------------------------- |
-| 前端       | React 19 · TypeScript · Vite · TanStack Router · Tailwind CSS · shadcn/ui · zustand   |
-| 聊天与编辑 | assistant-ui（对话界面）· BlockNote（富文本编辑器）· React Flow / Mermaid（思维导图） |
-| 后端 API   | Python · FastAPI · SQLAlchemy · Alembic · SQLite                                      |
-| 实时服务   | WebSocket（ASR 实时转写与状态推送）· Sidecar 服务                                     |
-| 桌面端     | Electron（可选）                                                                      |
-| 工程化     | pnpm monorepo（apps · packages · services）· ESLint · Prettier · Husky                |
+| 层         | 技术                                                                                                    |
+| ---------- | ------------------------------------------------------------------------------------------------------- |
+| 前端       | React 19 · TypeScript · Vite · TanStack Router · Tailwind CSS · shadcn/ui · zustand                     |
+| 聊天与编辑 | assistant-ui（对话界面）· BlockNote（富文本编辑器，基于 Tiptap）· React Flow（思维导图）                |
+| 协同编辑   | Yjs（CRDT 实时协同）· WebSocket（多人协作通道）                                                         |
+| 后端 API   | Python · FastAPI · SQLAlchemy · Alembic · PostgreSQL                                                    |
+| 实时服务   | WebSocket（ASR 实时转写与状态推送）· Sidecar 服务                                                       |
+| AI 能力    | 豆包 ASR（实时语音转写）· 火山方舟大模型（会议纪要生成 / Agent 对话）· 火山方舟向量模型（知识库向量化） |
+| 桌面端     | Electron（可选）                                                                                        |
+| 工程化     | pnpm monorepo（apps · packages · services）· ESLint · Prettier · Husky                                  |
 
 ---
 
@@ -62,29 +64,43 @@ dp-work 从三个环节解决这个问题：
 ### 前置依赖
 
 - Node.js ≥ 20、pnpm
-- Python 3.11+（后端 API）
-- （可选）本地 Ollama：提供 embedding（如 `qwen3-embedding`，默认 `localhost:11434`），需自行启动
+- Python 3.11+ 与 uv（后端 API 依赖管理）
 
 ### 1. 安装依赖
 
 ```bash
 pnpm install
 
-# 后端 Python 环境（一次性）
+# 后端 Python 环境（一次性，后端 API 使用 uv）
 cd services/api
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-cd ../..
+uv sync
+
+# AI 引擎端（一次性，sidecar 使用 uv）
+cd ../sidecar
+uv sync
 ```
 
-### 2. 初始化数据库
+### 2. 配置环境变量
 
 ```bash
-pnpm migrate   # Alembic 自动建表（SQLite）
+# 后端环境变量（一次性，按需修改数据库连接、模型 Key 等）
+cp services/api/.env.example services/api/.env
+
+# Sidecar 环境变量（一次性，按需修改 ASR / 模型 Key 等）
+cp services/sidecar/.env.example services/sidecar/.env
 ```
 
-### 3. 启动后端服务
+### 3. 初始化数据库
+
+```bash
+# 启动 PostgreSQL（首次或未运行时）
+pnpm db:up
+
+# Alembic 自动建表（PostgreSQL）
+pnpm migrate
+```
+
+### 4. 启动后端服务
 
 ```bash
 # API 服务（:8000）
@@ -94,20 +110,20 @@ pnpm dev:api
 pnpm dev:sidecar
 ```
 
-### 4. 启动前端
+### 5. 启动前端
 
 ```bash
 # Web 端（http://localhost:3000）
 pnpm dev:web
 ```
 
-### 5. 启动桌面端（可选）
+### 6. 启动桌面端（可选）
 
 ```bash
 pnpm dev:desktop   # Electron 客户端
 ```
 
-> 日常开发推荐：终端 1 跑 `pnpm dev:api`，终端 2 跑 `pnpm dev:web`，浏览器打开 `http://localhost:3000`。
+> 日常开发推荐：终端 1 跑 `pnpm dev:api`，终端 2 跑 `pnpm dev:sidecar`，终端 3 跑 `pnpm dev:web`，浏览器打开 `http://localhost:3000`。
 
 ---
 
@@ -120,7 +136,7 @@ dp-work/
 │   └── desktop/      # Electron 桌面端（可选）
 ├── packages/         # 共享包（contracts / api-client / ui 等）
 ├── services/
-│   ├── api/          # 后端 API（FastAPI + SQLite）
+│   ├── api/          # 后端 API（FastAPI + PostgreSQL）
 │   └── sidecar/      # 实时转写与模型代理服务
 └── docs/             # 架构与设计文档
 ```
