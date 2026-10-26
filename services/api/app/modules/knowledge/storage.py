@@ -34,11 +34,11 @@ def file_path(key: str) -> Path:
 
 
 async def save_upload(owner_id: int, base_id: int, upload: UploadSource) -> dict:
-    """流式保存 Markdown 或 PDF，校验大小、编码与文件格式。"""
+    """流式保存 TXT、Markdown、PDF 或 Word，校验大小、编码与文件格式。"""
     filename = (upload.filename or "").replace("\\", "/").split("/")[-1].strip()
     extension = Path(filename).suffix.lower().lstrip(".")
-    if not filename or "\x00" in filename or extension not in ("md", "pdf"):
-        raise ApiError(ApiCode.PARAM_ERROR, "仅支持上传 Markdown（.md）和 PDF（.pdf）文件。", 400)
+    if not filename or "\x00" in filename or extension not in ("txt", "md", "markdown", "pdf", "doc", "docx"):
+        raise ApiError(ApiCode.PARAM_ERROR, "仅支持上传 TXT、Markdown、PDF 和 Word 文件。", 400)
     document_id = f"upload-{uuid4()}"
     key = f"{owner_id}/{base_id}/{document_id}.{extension}"
     target = file_path(key)
@@ -59,18 +59,24 @@ async def save_upload(owner_id: int, base_id: int, upload: UploadSource) -> dict
         if not size:
             raise ApiError(ApiCode.PARAM_ERROR, "不能上传空文件。", 400)
         content = ""
-        if extension == "md":
+        if extension in ("txt", "md", "markdown"):
             try:
                 content = await asyncio.to_thread(staging.read_text, encoding="utf-8-sig")
             except UnicodeDecodeError as cause:
-                raise ApiError(ApiCode.PARAM_ERROR, "Markdown 文件请使用 UTF-8 编码。", 400) from cause
-        else:
+                raise ApiError(ApiCode.PARAM_ERROR, "文本文件请使用 UTF-8 编码。", 400) from cause
+        elif extension == "pdf":
             with staging.open("rb") as stream:
                 if not stream.read(5) == b"%PDF-":
                     raise ApiError(ApiCode.PARAM_ERROR, "文件内容不是有效的 PDF 格式。", 400)
+        elif extension in ("doc", "docx"):
+            with staging.open("rb") as stream:
+                signature = stream.read(8)
+            expected = b"PK\x03\x04" if extension == "docx" else b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+            if not signature.startswith(expected):
+                raise ApiError(ApiCode.PARAM_ERROR, "文件内容不是有效的 Word 格式。", 400)
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         await asyncio.to_thread(os.replace, staging, target)
-        return dict(id=document_id, title=Path(filename).stem, source="upload", file_type=extension,
+        return dict(id=document_id, title=Path(filename).stem, source="upload", file_type="md" if extension == "markdown" else extension,
                     original_name=filename, byte_size=size, content=content, storage_key=key)
     finally:
         await upload.close()

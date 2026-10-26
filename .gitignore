@@ -62,3 +62,6 @@ services/api/data/
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Python editable install metadata
+*.egg-info/

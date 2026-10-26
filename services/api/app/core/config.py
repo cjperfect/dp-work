@@ -52,3 +52,7 @@ SIDECAR_API_URL = os.environ.get("SIDECAR_API_URL", "http://127.0.0.1:8001").rst
 SIDECAR_INTERNAL_TOKEN = os.environ.get("SIDECAR_INTERNAL_TOKEN", "").strip()
 MINUTES_TASK_TIMEOUT = float(os.environ.get("MINUTES_TASK_TIMEOUT", "210"))
 MINUTES_WORKER_ENABLED = os.environ.get("MINUTES_WORKER_ENABLED", "1") == "1"
+
+# ---- 文档解析任务 ----
+DOCUMENT_PARSE_WORKER_ENABLED = os.environ.get("DOCUMENT_PARSE_WORKER_ENABLED", "1") == "1"
+DOCUMENT_PARSE_TIMEOUT = float(os.environ.get("DOCUMENT_PARSE_TIMEOUT", "1200"))

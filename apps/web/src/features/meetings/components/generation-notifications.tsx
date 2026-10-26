@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth";
 import {
@@ -20,7 +19,6 @@ function OwnerNotifications({ owner }: { owner: number }) {
   const pending = useMeetingGenerationStore((state) =>
     Object.values(state.pending).some((task) => task.ownerId === owner),
   );
-  const navigate = useNavigate();
   useEffect(
     () => () => {
       toast.dismiss();
@@ -39,12 +37,6 @@ function OwnerNotifications({ owner }: { owner: number }) {
           id,
           description: meeting.title,
           duration: 6000,
-          action: {
-            label: "查看",
-            onClick: () => {
-              void navigate({ to: "/meetings/minutes", search: { id: meeting.id } });
-            },
-          },
         });
       } else {
         toast.error("会议纪要生成失败", {

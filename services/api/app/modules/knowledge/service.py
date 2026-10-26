@@ -154,5 +154,8 @@ async def get_source_file(owner_id: int, base_id: int, document_id: str) -> tupl
         path = storage.file_path(record.storage_key)
         if not path.is_file():
             raise ApiError(ApiCode.NOT_FOUND, "源文件不存在", 404)
-        mime = "application/pdf" if record.file_type == "pdf" else "text/markdown; charset=utf-8"
+        mime = {
+            "pdf": "application/pdf", "md": "text/markdown; charset=utf-8", "txt": "text/plain; charset=utf-8",
+            "doc": "application/msword", "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }.get(record.file_type, "application/octet-stream")
         return path, record.original_name, mime

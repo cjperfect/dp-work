@@ -165,7 +165,13 @@ type ServerKnowledgeDocument = {
   content: string;
   blocks: KbFile["blocks"] | null;
   source?: "editor" | "upload";
-  file_type?: "md" | "pdf";
+  file_type?: "txt" | "md" | "pdf" | "doc" | "docx";
+  parse_status?: KbFile["parseStatus"];
+  parse_content?: string | null;
+  parse_error?: string | null;
+  parsed_at?: string | null;
+  parse_blocks?: KbFile["blocks"] | null;
+  vectorized_at?: string | null;
   original_name?: string | null;
   byte_size?: number;
   created_at: string;
@@ -192,6 +198,12 @@ function toKnowledgeDocument(
     name: value.original_name ?? `${value.title}.md`,
     type: value.file_type ?? "md",
     source: value.source ?? "editor",
+    parseStatus: value.parse_status ?? "unparsed",
+    parsedContent: value.parse_content ?? undefined,
+    parseError: value.parse_error ?? undefined,
+    parsedAt: value.parsed_at ?? undefined,
+    parsedBlocks: value.parse_blocks ?? undefined,
+    vectorizedAt: value.vectorized_at ?? undefined,
     storage: "server",
     status: "published",
     content: value.content,
@@ -303,7 +315,8 @@ export async function uploadKnowledgeDocumentRequest(
   file: File,
   onProgress?: (percent: number) => void,
 ): Promise<KbFile> {
-  if (!/\.(md|pdf)$/i.test(file.name)) throw new Error("仅支持 Markdown 与 PDF 文件。");
+  if (!/\.(txt|md|markdown|pdf|doc|docx)$/i.test(file.name))
+    throw new Error("仅支持 TXT、Markdown、PDF 和 Word 文件。");
   if (file.size > MAX_UPLOAD_SIZE) throw new Error("单个文件不能超过 20 MB。");
   const form = new FormData();
   form.append("file", file);
@@ -334,4 +347,31 @@ export async function downloadKnowledgeDocumentRequest(
   );
   if (!(data instanceof Blob)) throw new Error("源文件数据无效。");
   return data;
+}
+
+export async function parseKnowledgeDocumentRequest(
+  accountId: string,
+  baseId: string,
+  documentId: string,
+): Promise<KbFile> {
+  const { data, user } = await knowledgeRequest(
+    accountId,
+    `/${serverId(baseId)}/documents/${encodeURIComponent(documentId)}/parse`,
+    { method: "POST" },
+  );
+  return toKnowledgeDocument(data as ServerKnowledgeDocument, baseId, user.username);
+}
+
+export async function saveParsedDocumentRequest(
+  accountId: string,
+  baseId: string,
+  documentId: string,
+  input: { content: string; blocks: KbFile["blocks"]; expected_parsed_at: string },
+): Promise<KbFile> {
+  const { data, user } = await knowledgeRequest(
+    accountId,
+    `/${serverId(baseId)}/documents/${encodeURIComponent(documentId)}/parsed`,
+    { method: "PUT", data: input },
+  );
+  return toKnowledgeDocument(data as ServerKnowledgeDocument, baseId, user.username);
 }

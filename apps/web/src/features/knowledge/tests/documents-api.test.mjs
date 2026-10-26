@@ -12,6 +12,7 @@ import {
   uploadKnowledgeDocumentRequest,
   downloadKnowledgeDocumentRequest,
   loadKnowledgeDocumentsRequest,
+  parseKnowledgeDocumentRequest,
 } from "../../../apis/knowledge.ts";
 import {
   appendUploadedFile,
@@ -236,4 +237,51 @@ test("PDF bytes are fetched with a bearer header rather than a token in the URL"
     new Headers(request.mock.calls[0].arguments[1].headers).get("Authorization"),
     "Bearer test-token",
   );
+});
+
+test("TXT, Markdown and Word uploads retain their source type", async () => {
+  const request = mockHttpRequest(async (_url, init) => {
+    const file = init.body.get("file");
+    const type = file.name.endsWith(".markdown") ? "md" : file.name.split(".").at(-1);
+    return Response.json({
+      code: 0,
+      data: {
+        ...doc,
+        source: "upload",
+        file_type: type,
+        original_name: file.name,
+      },
+    });
+  });
+  for (const extension of ["txt", "markdown", "doc", "docx"]) {
+    const file = new File(["fixture"], `source.${extension}`);
+    const result = await uploadKnowledgeDocumentRequest("user:12", base.id, file);
+    assert.equal(result.name, file.name);
+    assert.equal(result.type, extension === "markdown" ? "md" : extension);
+  }
+  assert.equal(request.mock.callCount(), 4);
+});
+
+test("PDF parsing submits a protected task and maps durable result fields", async () => {
+  const request = mockHttpRequest(async () =>
+    Response.json({
+      code: 0,
+      data: {
+        ...doc,
+        file_type: "pdf",
+        parse_status: "parsed",
+        parse_content: "| A | B |",
+        parsed_at: "2026-10-26T01:00:00Z",
+        parse_error: null,
+      },
+    }),
+  );
+  const file = await parseKnowledgeDocumentRequest("user:12", base.id, doc.id);
+  const [url, init] = request.mock.calls[0].arguments;
+  assert.equal(url, "/api/knowledge-bases/1/documents/editor-doc/parse");
+  assert.equal(init.method, "POST");
+  assert.equal(new Headers(init.headers).get("Authorization"), "Bearer test-token");
+  assert.equal(file.parseStatus, "parsed");
+  assert.equal(file.parsedContent, "| A | B |");
+  assert.equal(file.content, doc.content);
 });

@@ -35,3 +35,6 @@ ARK_TIMEOUT_SECONDS = float(os.environ.get("ARK_TIMEOUT_SECONDS", "180"))
 ARK_MAX_TOKENS = int(os.environ.get("ARK_MAX_TOKENS", "8192"))
 MINUTES_MAX_INPUT_CHARS = int(os.environ.get("MINUTES_MAX_INPUT_CHARS", "120000"))
 SIDECAR_INTERNAL_TOKEN = os.environ.get("SIDECAR_INTERNAL_TOKEN", "").strip()
+
+# ---- PDF 文档解析 ----
+PDF_PARSE_TIMEOUT = float(os.environ.get("PDF_PARSE_TIMEOUT", "90"))

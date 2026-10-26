@@ -1,8 +1,10 @@
 """供 API 服务调用的内部模型接口。"""
 import secrets
-from typing import Annotated
-from fastapi import APIRouter, Header, HTTPException
+from typing import Annotated, Literal
+from fastapi import APIRouter, Header, HTTPException, Request, Query
 from .. import config
+from ..knowledge.parsers import dispatcher
+from ..knowledge.parsers.pdf import MAX_SOURCE_BYTES
 from ..meetings.minutes import generate
 from ..meetings.schemas import MinutesInput, MinutesOutput
 from ..providers.llm.schemas import ModelError
@@ -26,3 +28,21 @@ async def generate_minutes(body: MinutesInput, x_internal_token: Annotated[str |
         return await generate(body)
     except ModelError as cause:
         raise HTTPException(502, detail={"code": cause.code, "message": str(cause)}) from cause
+
+
+@router.post("/knowledge/parse", summary="解析 TXT、Markdown、PDF 或 DOCX 文档")
+async def parse_document(request: Request, x_internal_token: Annotated[str | None, Header()] = None,
+                         file_type: Annotated[Literal["pdf", "txt", "md", "docx"], Query()] = "pdf"):
+    """接收源文件字节，返回解析正文，不启用 OCR。"""
+    authorize(x_internal_token)
+    content = bytearray()
+    async for chunk in request.stream():
+        content.extend(chunk)
+        if len(content) > MAX_SOURCE_BYTES:
+            raise HTTPException(413, detail={"message": "文件不能超过 20 MB。"})
+    if file_type == "pdf" and not content.startswith(b"%PDF-"):
+        raise HTTPException(400, detail={"message": "文件内容不是有效 PDF。"})
+    try:
+        return await dispatcher.parse_document(bytes(content), file_type)
+    except dispatcher.ParseError as cause:
+        raise HTTPException(422, detail={"message": str(cause)}) from cause

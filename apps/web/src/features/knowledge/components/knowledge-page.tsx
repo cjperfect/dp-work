@@ -1,13 +1,18 @@
+import { toast } from "sonner";
+import { ParsedDocumentEditor } from "./parsed-document-editor";
 import { localAccountId } from "@/features/auth/lib/auth";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
-import { useState, useRef, type ChangeEvent } from "react";
+import { useState, useRef, useCallback, type ChangeEvent } from "react";
 import {
   ArrowLeft,
+  ChevronRight,
+  Info,
   FilePlus2,
   FileText,
   Pencil,
   ScanText,
+  Network,
   Trash2,
   Loader2,
   Upload,
@@ -35,7 +40,8 @@ import { useKnowledgeDocuments } from "@/features/knowledge/hooks/use-knowledge-
 import { useKnowledgeBases } from "@/features/knowledge/hooks/use-knowledge-bases";
 import { useAuthStore } from "@/stores/auth";
 import { useDocumentPdf } from "@/features/knowledge/hooks/use-document-pdf";
-import { VectorizeDocumentButton } from "./vectorize-document-button";
+import { useDocumentParsing, parseStatusLabel } from "../hooks/use-document-parsing";
+import { ParseDocumentButton } from "./parse-document-button";
 import { PdfPreview } from "@/features/knowledge/components/pdf-preview";
 import { LazyBlockNoteEditor as BlockNoteEditor } from "@/components/editor/lazy-blocknote-editor";
 import { getKbFiles, removeUploadedFile } from "@/stores/knowledge-upload";
@@ -50,7 +56,6 @@ export { KnowledgePage } from "./knowledge-list-page";
 /** 知识库详情页（/knowledge/$kbId）：文件列表，支持上传 md / pdf */
 export function KnowledgeBaseDetailPage() {
   const { kbId } = useParams({ from: "/_app/knowledge/$kbId/" });
-  const navigate = useNavigate();
   const { bases, loading, error, reload } = useKnowledgeBases();
   const documents = useKnowledgeDocuments(kbId);
   // 后端知识库/文档接口不可用或未接入时，降级为本地 mock + 本地上传数据，页面始终可看
@@ -66,7 +71,7 @@ export function KnowledgeBaseDetailPage() {
   );
   const accountId = useAuthStore((state) => localAccountId(state.user));
   const [uploadMsg, setUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [vectorNotice, setVectorNotice] = useState<{ kbId: string; text: string } | null>(null);
+  const parsing = useDocumentParsing(kbId);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogErr, setDialogErr] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -213,12 +218,6 @@ export function KnowledgeBaseDetailPage() {
         </p>
       )}
 
-      {vectorNotice?.kbId === kbId && (
-        <p role="status" className="text-xs text-muted-foreground">
-          {vectorNotice.text}
-        </p>
-      )}
-
       <Dialog
         open={dialogOpen}
         onOpenChange={(open) => {
@@ -229,7 +228,7 @@ export function KnowledgeBaseDetailPage() {
           <DialogHeader>
             <DialogTitle>上传文件</DialogTitle>
             <DialogDescription>
-              支持 Markdown 与 PDF，单次选择一个文件，最大 20 MB。
+              支持 TXT、Markdown、PDF、Word，单次选择一个文件，最大 20 MB。
             </DialogDescription>
           </DialogHeader>
           <div
@@ -273,13 +272,15 @@ export function KnowledgeBaseDetailPage() {
             <p role="status" className="text-sm font-medium">
               {uploading ? `上传中… ${uploadProgress}%` : "点击选择文件，或将文件拖拽到此处"}
             </p>
-            <p className="text-xs text-muted-foreground">支持 .md / .pdf，最大 20 MB</p>
+            <p className="text-xs text-muted-foreground">
+              支持 TXT / Markdown / PDF / Word，最大 20 MB
+            </p>
           </div>
           <input
             ref={inputRef}
             type="file"
             disabled={uploading}
-            accept=".md,.pdf"
+            accept=".txt,.md,.markdown,.pdf,.doc,.docx"
             className="hidden"
             onChange={onPickFile}
           />
@@ -290,6 +291,41 @@ export function KnowledgeBaseDetailPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <aside
+        aria-label="知识库使用指南"
+        className="rounded-xl border border-sky-200 bg-sky-50/70 px-5 py-4 dark:border-sky-900 dark:bg-sky-950/30"
+      >
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-sky-950 dark:text-sky-100">
+          <Info className="size-4 text-sky-600 dark:text-sky-400" />
+          知识库使用步骤
+        </div>
+        <ol className="flex flex-wrap items-center gap-x-3 gap-y-3">
+          {["上传文件 / 新建文档", "解析文档", "向量化", "在 Agent 中关联此知识库"].map(
+            (step, index) => (
+              <li key={step} className="flex items-center gap-3">
+                {index > 0 && <ChevronRight aria-hidden="true" className="size-4 text-sky-400" />}
+                <span className="flex items-center gap-2 text-sm font-medium text-sky-950 dark:text-sky-100">
+                  <span
+                    aria-hidden="true"
+                    className="flex size-5 shrink-0 items-center justify-center rounded-full bg-sky-700 text-[11px] font-semibold text-white"
+                  >
+                    {index + 1}
+                  </span>
+                  {step}
+                </span>
+              </li>
+            ),
+          )}
+        </ol>
+        <p className="mt-3 text-xs leading-6 text-sky-800 dark:text-sky-200">
+          完成后即可在 Agent 中使用。点击文档可查看或编辑，右键可解析、向量化或删除。
+        </p>
+        <p className="text-xs leading-6 text-sky-700/80 dark:text-sky-300/80">
+          上传支持 TXT、Markdown、PDF、Word；目前支持 TXT、Markdown、PDF、DOCX 解析，旧版 DOC
+          请先另存为 DOCX。在线文档修改后自动保存。
+        </p>
+      </aside>
 
       <section>
         <h2 className="mb-3 flex items-center gap-2 text-sm font-medium">
@@ -320,7 +356,7 @@ export function KnowledgeBaseDetailPage() {
                 >
                   <Link
                     to={
-                      file.source === "editor"
+                      file.source === "editor" && !file.id.startsWith("meeting-")
                         ? "/knowledge/$kbId/edit/$fileId"
                         : "/knowledge/$kbId/files/$fileId"
                     }
@@ -329,11 +365,16 @@ export function KnowledgeBaseDetailPage() {
                     className="group relative flex h-full min-w-0 flex-col items-center rounded-2xl px-3 pb-3 pt-9 text-center outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <span
-                      title="该文档尚未向量化"
+                      title={file.parseError ?? parseStatusLabel(file)}
                       className="absolute right-2 top-2 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
                     >
-                      未向量化
+                      {parseStatusLabel(file)}
                     </span>
+                    {(file.parseStatus === "queued" || file.parseStatus === "parsing") && (
+                      <span className="absolute left-2 top-2 text-[10px] text-muted-foreground">
+                        解析中…
+                      </span>
+                    )}
                     <div
                       aria-hidden="true"
                       className={`mb-3 flex size-14 shrink-0 items-center justify-center rounded-2xl ${meta.badge}`}
@@ -357,24 +398,22 @@ export function KnowledgeBaseDetailPage() {
                 </ContextMenuTrigger>
                 <ContextMenuContent aria-label={`${file.name}的操作`}>
                   <ContextMenuItem
-                    disabled={file.source !== "editor"}
-                    title={file.source !== "editor" ? "上传文件暂不支持在线编辑" : undefined}
-                    onClick={() =>
-                      void navigate({
-                        to: "/knowledge/$kbId/edit/$fileId",
-                        params: { kbId, fileId: file.id },
-                      })
+                    disabled={
+                      parsing.submitting ||
+                      file.parseStatus === "queued" ||
+                      file.parseStatus === "parsing" ||
+                      file.parseStatus === "parsed"
                     }
-                  >
-                    <Pencil />
-                    编辑
-                  </ContextMenuItem>
-                  <ContextMenuItem
-                    onClick={() =>
-                      setVectorNotice({ kbId, text: `「${file.name}」的向量化服务尚未接入。` })
-                    }
+                    onClick={() => void parsing.start(file)}
                   >
                     <ScanText />
+                    解析文档
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    disabled={file.parseStatus !== "parsed" || !file.parsedContent?.trim()}
+                    onClick={() => toast.info("向量化服务尚未接入，请先在解析后文档中检查内容。")}
+                  >
+                    <Network />
                     向量化
                   </ContextMenuItem>
                   <ContextMenuItem
@@ -450,16 +489,11 @@ export function KnowledgeBaseDetailPage() {
           </div>
         </PopoverContent>
       </Popover>
-
-      <p className="text-muted-foreground text-xs">
-        右键文档可查看更多操作：编辑、向量化、删除。上传支持 Markdown 与
-        PDF；在线文档修改后自动保存。
-      </p>
     </div>
   );
 }
 
-/** 文档查看页（/knowledge/$kbId/files/$fileId）：源文件只读 + 解析结果富文本可编辑 */
+/** 文档查看页：分别展示源文档和处理后的文档。 */
 export function KnowledgeFilePage() {
   const { kbId, fileId } = useParams({ from: "/_app/knowledge/$kbId/files/$fileId" });
 
@@ -468,6 +502,11 @@ export function KnowledgeFilePage() {
   const documents = useKnowledgeDocuments(kbId);
   const file = [...documents.files, ...getKbFiles(kbId)].find((f) => f.id === fileId);
   const pdf = useDocumentPdf(kbId, file);
+  const [parsedSaveBlocked, setParsedSaveBlocked] = useState(false);
+  const onParsedSaveStateChange = useCallback(
+    (blocked: boolean) => setParsedSaveBlocked(blocked),
+    [],
+  );
 
   if (loading || error || documents.loading || documents.error)
     return (
@@ -528,7 +567,19 @@ export function KnowledgeFilePage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <VectorizeDocumentButton name={file.name} />
+          <ParseDocumentButton baseId={kbId} file={file} />
+          <Button
+            disabled={
+              file.parseStatus !== "parsed" || parsedSaveBlocked || !file.parsedContent?.trim()
+            }
+            title={
+              parsedSaveBlocked ? "请等待解析文档保存完成" : "先解析并检查文档内容，再进行向量化"
+            }
+            onClick={() => toast.info("向量化服务尚未接入，解析文档已保存。")}
+          >
+            <Network className="size-4" />
+            向量化
+          </Button>
           {file.source === "editor" && (
             <Button
               variant="outline"
@@ -550,8 +601,8 @@ export function KnowledgeFilePage() {
       <section className="flex min-h-0 flex-1 flex-col rounded-xl border bg-card">
         <Tabs defaultValue="source" className="flex min-h-0 flex-1 flex-col">
           <TabsList className="mx-4 mt-4 w-fit">
-            <TabsTrigger value="source">源文件</TabsTrigger>
-            <TabsTrigger value="rendered">解析结果</TabsTrigger>
+            <TabsTrigger value="source">源文档</TabsTrigger>
+            <TabsTrigger value="rendered">解析后文档</TabsTrigger>
           </TabsList>
           <TabsContent value="source" className="min-h-0 flex-1 overflow-auto">
             {isPdf ? (
@@ -565,7 +616,7 @@ export function KnowledgeFilePage() {
                   {pdf.error ?? "正在读取 PDF…"}
                 </div>
               )
-            ) : file.content ? (
+            ) : file.content || file.blocks?.length ? (
               <BlockNoteEditor
                 initialContent={file.blocks}
                 markdown={file.blocks ? undefined : file.content}
@@ -580,19 +631,29 @@ export function KnowledgeFilePage() {
             )}
           </TabsContent>
           <TabsContent value="rendered" className="min-h-0 flex-1 overflow-auto">
-            {file.type === "md" ? (
-              <div className="min-h-0 flex-1">
-                <BlockNoteEditor
-                  initialContent={file.blocks}
-                  markdown={file.blocks ? undefined : (file.content ?? "")}
-                  editable={false}
-                  className="px-4 py-4"
-                />
-              </div>
+            {file.parseStatus === "parsed" ? (
+              <ParsedDocumentEditor
+                key={file.id}
+                baseId={kbId}
+                file={file}
+                onSaveStateChange={onParsedSaveStateChange}
+              />
             ) : (
-              <div className="text-muted-foreground flex h-full min-h-64 flex-col items-center justify-center gap-2">
-                <Icon className="size-8" />
-                <p className="text-sm">该 PDF 暂无解析结果，待接入文档解析后展示 Markdown 内容</p>
+              <div className="flex h-full min-h-64 flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+                <span className="flex size-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                  <ScanText className="size-5" />
+                </span>
+                <p className="text-sm font-medium">
+                  {file.parseStatus === "queued" || file.parseStatus === "parsing"
+                    ? "正在解析文档…"
+                    : file.parseStatus === "failed"
+                      ? "解析失败"
+                      : "暂无解析后文档"}
+                </p>
+                <p className="max-w-sm text-xs leading-6 text-muted-foreground">
+                  {file.parseError ??
+                    "点击解析文档提取正文，TXT、Markdown 保留原有内容格式；图片与 OCR 暂不处理。"}
+                </p>
               </div>
             )}
           </TabsContent>

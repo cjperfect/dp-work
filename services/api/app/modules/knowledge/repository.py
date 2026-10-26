@@ -1,4 +1,4 @@
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update, case, cast, Text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
 
@@ -93,7 +93,16 @@ class KnowledgeRepository:
         )
         statement = statement.on_conflict_do_update(
             index_elements=[KnowledgeDocument.id],
-            set_={**values, "updated_at": now},
+            set_={**values, "updated_at": now, **{
+                field: case((
+                    or_(KnowledgeDocument.content.is_distinct_from(values["content"]),
+                        KnowledgeDocument.title.is_distinct_from(values["title"]),
+                        cast(KnowledgeDocument.blocks, Text).is_distinct_from(cast(statement.excluded.blocks, Text))),
+                    "unparsed" if field == "parse_status" else None),
+                    else_=getattr(KnowledgeDocument, field))
+                for field in ("parse_blocks", "vectorized_at", "parse_status", "parse_content", "parse_metadata", "parse_error",
+                              "parsed_at", "parse_started_at", "parse_claim_token", "parse_lease_until")
+            }},
             where=(KnowledgeDocument.knowledge_base_id == base_id) & (KnowledgeDocument.source == "editor"),
         ).returning(KnowledgeDocument)
         record = await self.session.scalar(statement)

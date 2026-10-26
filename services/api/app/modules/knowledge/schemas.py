@@ -73,8 +73,23 @@ class KnowledgeDocumentOut(KnowledgeDocumentSave):
     id: str
     knowledge_base_id: int
     source: Literal["editor", "upload"] = "editor"
-    file_type: Literal["md", "pdf"] = "md"
+    file_type: Literal["txt", "md", "pdf", "doc", "docx"] = "md"
     original_name: str | None = None
     byte_size: int = 0
     created_at: datetime
     updated_at: datetime
+
+    parse_status: Literal["unparsed", "queued", "parsing", "parsed", "failed"] = "unparsed"
+    parse_content: str | None = None
+    parse_error: str | None = None
+    parsed_at: datetime | None = None
+    parse_blocks: list[dict[str, Any]] | None = None
+    vectorized_at: datetime | None = None
+
+
+class ParsedDocumentSave(BaseModel):
+    """保存人工修订的解析正文。"""
+    model_config = ConfigDict(extra="forbid")
+    content: str
+    blocks: list[dict[str, Any]] | None = None
+    expected_parsed_at: datetime

@@ -8,10 +8,12 @@ from app.core.responses import ApiResponse, ok
 from app.modules.auth.dependencies import get_current_user
 from app.modules.users.models import User
 
-from . import service
-from .schemas import (KnowledgeBaseCreate, KnowledgeBaseOut, KnowledgeBasePage, KnowledgeBaseUpdate, KnowledgeDocumentSave, KnowledgeDocumentOut)
+from . import service, parsing
+from .events import router as events_router
+from .schemas import (KnowledgeBaseCreate, KnowledgeBaseOut, KnowledgeBasePage, KnowledgeBaseUpdate, KnowledgeDocumentSave, KnowledgeDocumentOut, ParsedDocumentSave)
 
 router = APIRouter(prefix="/api/knowledge-bases", tags=["knowledge"])
+router.include_router(events_router)
 
 
 @router.post(
@@ -100,8 +102,8 @@ async def delete_document(base_id: BaseId, document_id: DocumentId, user: Curren
     return ok(message="文档已删除")
 
 
-@router.post("/{base_id}/documents/upload", response_model=ApiResponse[KnowledgeDocumentOut], summary="上传 Markdown 或 PDF")
-async def upload_document(base_id: BaseId, file: Annotated[UploadFile, File(description="Markdown 或 PDF，最大 20 MB")], user: CurrentUser):
+@router.post("/{base_id}/documents/upload", response_model=ApiResponse[KnowledgeDocumentOut], summary="上传 TXT、Markdown、PDF 或 Word")
+async def upload_document(base_id: BaseId, file: Annotated[UploadFile, File(description="TXT、Markdown、PDF 或 Word，最大 20 MB")], user: CurrentUser):
     """保存文件并返回列表所需的文档信息。"""
     return ok(await service.upload_document(user.id, base_id, file), message="文件上传成功")
 
@@ -111,3 +113,15 @@ async def get_source_file(base_id: BaseId, document_id: DocumentId, user: Curren
     """鉴权后提供源文件下载或预览。"""
     path, filename, mime = await service.get_source_file(user.id, base_id, document_id)
     return FileResponse(path, filename=filename, media_type=mime)
+
+
+@router.post("/{base_id}/documents/{document_id}/parse", response_model=ApiResponse[KnowledgeDocumentOut], summary="提交文档解析任务")
+async def parse_document(base_id: BaseId, document_id: DocumentId, user: CurrentUser):
+    """提交异步解析，查询文档接口获取进度与 Markdown 结果。"""
+    return ok(await parsing.request_parse(user.id, base_id, document_id), message="解析任务已提交")
+
+
+@router.put("/{base_id}/documents/{document_id}/parsed", response_model=ApiResponse[KnowledgeDocumentOut], summary="自动保存解析后文档")
+async def save_parsed_document(base_id: BaseId, document_id: DocumentId, body: ParsedDocumentSave, user: CurrentUser):
+    """保存人工调整后的正文和富文本块。"""
+    return ok(await parsing.save_parsed(user.id, base_id, document_id, body), message="解析文档已保存")

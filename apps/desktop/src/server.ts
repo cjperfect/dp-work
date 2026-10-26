@@ -217,6 +217,7 @@ export async function startWebServer(
       ![`127.0.0.1:${port}`, `localhost:${port}`].includes(request.headers.host ?? "") ||
       !(
         request.url === "/api/meetings/events" ||
+        request.url === "/api/knowledge-bases/events" ||
         /^\/api\/meetings\/[a-zA-Z0-9_-]{1,128}\/record\/events$/.test(request.url ?? "")
       )
     ) {

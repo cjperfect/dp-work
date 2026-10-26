@@ -92,8 +92,12 @@ test("desktop proxies authenticated JSON requests and preserves backend status",
   }
 });
 
-for (const socketPath of ["/api/meetings/events", "/api/meetings/demo-record/record/events"]) {
-  test(`desktop forwards authenticated meeting WebSocket ${socketPath}`, async () => {
+for (const socketPath of [
+  "/api/meetings/events",
+  "/api/knowledge-bases/events",
+  "/api/meetings/demo-record/record/events",
+]) {
+  test(`desktop forwards authenticated API WebSocket ${socketPath}`, async () => {
     const { createHash } = await import("node:crypto");
     const temporary = await mkdtemp(path.join(tmpdir(), "dp-ws-"));
     const api = http.createServer();
