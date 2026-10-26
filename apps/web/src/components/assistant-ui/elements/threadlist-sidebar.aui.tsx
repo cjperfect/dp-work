@@ -1,6 +1,6 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import type * as React from "react";
-import { BookOpen, Bot, Boxes, Package, Plug, Sparkles, Video } from "lucide-react";
+import { BookOpen, Bot, Boxes, Package, Plug, Sparkles, Video, Settings } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -82,7 +82,7 @@ export function ThreadListSidebar({ ...props }: React.ComponentProps<typeof Side
       </SidebarHeader>
       <SidebarContent className="aui-sidebar-content px-2">
         <SidebarGroup>
-          <SidebarGroupLabel>我的空间</SidebarGroupLabel>
+          <SidebarGroupLabel>{"我的空间"}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {SPACE_NAV.map((item) => {
@@ -114,7 +114,7 @@ export function ThreadListSidebar({ ...props }: React.ComponentProps<typeof Side
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel>我的 Agent</SidebarGroupLabel>
+          <SidebarGroupLabel>{"我的 Agent"}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {AGENT_NAV.map((item) => {
@@ -137,7 +137,7 @@ export function ThreadListSidebar({ ...props }: React.ComponentProps<typeof Side
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel>会话历史</SidebarGroupLabel>
+          <SidebarGroupLabel>{"会话历史"}</SidebarGroupLabel>
           <SidebarGroupContent>
             <ThreadList />
           </SidebarGroupContent>
@@ -145,6 +145,14 @@ export function ThreadListSidebar({ ...props }: React.ComponentProps<typeof Side
       </SidebarContent>
       {props.collapsible !== "none" && <SidebarRail />}
       <SidebarFooter className="aui-sidebar-footer border-t">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton isActive={pathname === "/settings"} render={<Link to="/settings" />}>
+              <Settings />
+              <span>{"设置"}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         {user && (
           <div className="flex items-center gap-2 px-2 py-1">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-xs font-medium">

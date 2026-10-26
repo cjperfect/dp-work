@@ -106,7 +106,7 @@ export class AsrClient {
     this.callbacks.onError(cause.message);
   }
 
-  start(position: { nextSeq: number; offsetMs: number }): Promise<void> {
+  start(position: { nextSeq: number; offsetMs: number; ticket?: string }): Promise<void> {
     if (!this.meetingId) return Promise.reject(new Error("缺少会议标识。"));
     if (this.socket) return Promise.reject(new Error("转写连接已存在。"));
     this.sessionId = null;

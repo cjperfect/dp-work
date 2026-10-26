@@ -13,10 +13,12 @@ from .transport.internal import router as internal_router
 async def lifespan(app):
     """管理转写任务生命周期。"""
     app.state.asr_meetings = {}
+    app.state.asr_tickets = {}
     yield
     for session in list(app.state.asr_meetings.values()):
         await session.close()
     app.state.asr_meetings.clear()
+    app.state.asr_tickets.clear()
 
 
 app = FastAPI(title="dp-work sidecar", version="0.1.0", lifespan=lifespan)

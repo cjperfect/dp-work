@@ -16,6 +16,7 @@ class AudioFormat(Message):
 
 
 class Start(Message):
+    ticket: str | None = Field(default=None, max_length=128)
     type: Literal["asr.start"]
     requestId: str = Field(min_length=1, max_length=128)
     meetingId: str = Field(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_-]+$")

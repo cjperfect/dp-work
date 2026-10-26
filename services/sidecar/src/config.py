@@ -27,10 +27,10 @@ VOLC_SPEAKER_INFO = os.environ.get("VOLC_SPEAKER_INFO", "1") == "1"
 # ---- 服务端口 ----
 PORT = int(os.environ.get("PORT", "8001"))
 
-# ---- 方舟会议纪要 ----
+# ---- 方舟大模型（Agent 与会议纪要共用） ----
 ARK_API_KEY = os.environ.get("ARK_API_KEY", "").strip()
-ARK_MODEL = os.environ.get("ARK_MODEL", "deepseek-v4-1-flash-261017").strip()
-ARK_BASE_URL = os.environ.get("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3").rstrip("/")
+ARK_MODEL = os.environ.get("ARK_MODEL", "").strip()
+ARK_BASE_URL = os.environ.get("ARK_BASE_URL", "").rstrip("/")
 ARK_TIMEOUT_SECONDS = float(os.environ.get("ARK_TIMEOUT_SECONDS", "180"))
 ARK_MAX_TOKENS = int(os.environ.get("ARK_MAX_TOKENS", "8192"))
 MINUTES_MAX_INPUT_CHARS = int(os.environ.get("MINUTES_MAX_INPUT_CHARS", "120000"))
@@ -38,3 +38,15 @@ SIDECAR_INTERNAL_TOKEN = os.environ.get("SIDECAR_INTERNAL_TOKEN", "").strip()
 
 # ---- PDF 文档解析 ----
 PDF_PARSE_TIMEOUT = float(os.environ.get("PDF_PARSE_TIMEOUT", "90"))
+
+# ---- Agent 执行限制 ----
+AGENT_MAX_STEPS = int(os.environ.get("AGENT_MAX_STEPS", "12"))
+
+# ---- 知识库文本向量化（与聊天模型配置分开） ----
+EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY", "").strip()
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "doubao-embedding-vision-251215").strip()
+EMBEDDING_BASE_URL = os.environ.get("EMBEDDING_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3").rstrip("/")
+EMBEDDING_DIMENSIONS = int(os.environ.get("EMBEDDING_DIMENSIONS", "1024"))
+EMBEDDING_TIMEOUT_SECONDS = float(os.environ.get("EMBEDDING_TIMEOUT_SECONDS", "30"))
+# API 内部检索回调地址；只由服务端环境指定，不接受浏览器提交。
+API_INTERNAL_URL = os.environ.get("API_INTERNAL_URL", "http://127.0.0.1:8000").rstrip("/")

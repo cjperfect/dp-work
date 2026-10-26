@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { beforeEach, afterEach, test } from "node:test";
 import { useAuthStore } from "../../../stores/auth.ts";
-import { consumeDocumentParseEvents } from "../../../stores/document-parsing.ts";
+import {
+  consumeDocumentParseEvents,
+  consumeDocumentVectorEvents,
+} from "../../../stores/document-parsing.ts";
 import { subscribeDocumentParseEvents } from "../lib/parse-events.ts";
 
 const globals = ["window", "localStorage", "WebSocket"];
@@ -97,4 +100,20 @@ test("global notification and page share a socket; account changes isolate old e
   useAuthStore.setState({ user: { id: 2 } });
   sockets[0].message({ type: "document.updated", document: row("parsed") });
   assert.equal(global.length, 2);
+});
+
+test("vector notifications track independent task IDs and do not repeat parse notifications", () => {
+  const vectorRow = (status, task = "vector-one", owner = 1) => ({
+    ...row("parsed", "parse-one", owner),
+    vector_status: status,
+    vector_task_id: task,
+  });
+  consumeDocumentParseEvents([row("parsed", "parse-one")], true);
+  assert.deepEqual(consumeDocumentVectorEvents([vectorRow("indexed", "old-vector")], true), []);
+  consumeDocumentVectorEvents([vectorRow("queued")], false);
+  assert.equal(consumeDocumentVectorEvents([vectorRow("indexed")], true).length, 1);
+  assert.deepEqual(consumeDocumentVectorEvents([vectorRow("indexed")], false), []);
+  assert.deepEqual(consumeDocumentParseEvents([vectorRow("indexed")], false), []);
+  assert.equal(consumeDocumentVectorEvents([vectorRow("failed", "retry-vector")], false).length, 1);
+  assert.deepEqual(consumeDocumentVectorEvents([vectorRow("indexed", "foreign", 2)], false), []);
 });

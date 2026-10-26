@@ -36,6 +36,7 @@ export function ChatComposerInput({ autoFocus }: { autoFocus: boolean }) {
   );
 }
 export function ChatSaveError() {
+  const aui = useAui();
   const code = useAgentCode();
   const state = useAgentStore();
   const id = state.selected[code];
@@ -53,7 +54,10 @@ export function ChatSaveError() {
             onClick={() => {
               if (id)
                 void (draft?.pending ? sendMessage(code, id, draft.text) : flushDraft(code, id))
-                  .then(() => setError(null))
+                  .then(() => {
+                    setError(null);
+                    if (draft?.pending) aui.composer.setText("");
+                  })
                   .catch((cause) => setError(cause instanceof Error ? cause.message : "重试失败"));
             }}
           >

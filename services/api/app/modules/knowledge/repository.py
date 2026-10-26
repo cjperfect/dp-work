@@ -98,14 +98,15 @@ class KnowledgeRepository:
                     or_(KnowledgeDocument.content.is_distinct_from(values["content"]),
                         KnowledgeDocument.title.is_distinct_from(values["title"]),
                         cast(KnowledgeDocument.blocks, Text).is_distinct_from(cast(statement.excluded.blocks, Text))),
-                    "unparsed" if field == "parse_status" else None),
+                    "unparsed" if field == "parse_status" else "unindexed" if field == "vector_status" else 0 if field in ("vector_done", "vector_total", "vector_attempts") else None),
                     else_=getattr(KnowledgeDocument, field))
                 for field in ("parse_blocks", "vectorized_at", "parse_status", "parse_content", "parse_metadata", "parse_error",
-                              "parsed_at", "parse_started_at", "parse_claim_token", "parse_lease_until")
+                              "parsed_at", "parse_started_at", "parse_claim_token", "parse_lease_until",
+                              "vector_status", "vector_error", "vector_task_id", "vector_started_at", "vector_claim_token", "vector_lease_until", "vector_profile", "vector_done", "vector_total", "vector_attempts")
             }},
             where=(KnowledgeDocument.knowledge_base_id == base_id) & (KnowledgeDocument.source == "editor"),
         ).returning(KnowledgeDocument)
-        record = await self.session.scalar(statement)
+        record = await self.session.scalar(statement.execution_options(populate_existing=True))
         if record is not None:
             await self.session.execute(update(KnowledgeBase).where(KnowledgeBase.id == base_id).values(updated_at=now))
         return record

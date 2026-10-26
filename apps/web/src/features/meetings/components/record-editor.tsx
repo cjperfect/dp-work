@@ -3,6 +3,7 @@ import "@blocknote/mantine/style.css";
 import "./record-editor.css";
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
+import { useResolvedTheme } from "@/hooks/use-resolved-theme";
 import { withCollaboration } from "@blocknote/core/yjs";
 import { zh } from "@blocknote/core/locales";
 import type * as Y from "yjs";
@@ -20,6 +21,7 @@ export function RecordEditor({
   editable: boolean;
   username: string;
 }) {
+  const theme = useResolvedTheme();
   const collaboratorId = provider?.awareness.getLocalState()?.collaborator?.id;
   const identity = typeof collaboratorId === "number" ? collaboratorId : username;
   const editor = useCreateBlockNote(
@@ -35,5 +37,5 @@ export function RecordEditor({
     }),
     [doc, provider],
   );
-  return <BlockNoteView editor={editor} theme="light" editable={editable} className="px-3 py-6" />;
+  return <BlockNoteView editor={editor} theme={theme} editable={editable} className="px-3 py-6" />;
 }

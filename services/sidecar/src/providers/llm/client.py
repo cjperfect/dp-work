@@ -7,8 +7,8 @@ from .schemas import ModelError, ModelSettings
 
 async def complete(messages: list[dict], settings: ModelSettings, transport=None) -> tuple[str, str]:
     """调用方舟并校验完整的文本结果，不回传上游原始错误。"""
-    if not settings.api_key or not settings.model:
-        raise ModelError("MODEL_NOT_CONFIGURED", "请配置 Sidecar 的 ARK_API_KEY 和 ARK_MODEL。")
+    if not settings.api_key or not settings.model or not settings.base_url:
+        raise ModelError("MODEL_NOT_CONFIGURED", "请配置 Sidecar 的 ARK_API_KEY、ARK_MODEL 和 ARK_BASE_URL。")
     url = urlparse(settings.base_url)
     if url.scheme != "https" or url.username or url.password or url.query or url.fragment:
         raise ModelError("MODEL_CONFIG_INVALID", "方舟模型地址必须使用不带凭证的 HTTPS 地址。")

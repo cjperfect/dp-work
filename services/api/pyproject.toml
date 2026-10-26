@@ -14,6 +14,7 @@ dependencies = [
     "markdown-it-py>=3,<5",
     "pycrdt>=0.14,<0.15",
     "asyncpg>=0.29,<1",
+    "pgvector>=0.4,<0.5",
     "sqlalchemy[asyncio]>=2.0,<3",
     "alembic>=1.13,<2",
     "pyjwt>=2.8",

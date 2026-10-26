@@ -24,6 +24,11 @@ export type KbFile = {
   parsedAt?: string;
   parsedBlocks?: PartialBlock[];
   vectorizedAt?: string;
+  vectorStatus?: "unindexed" | "queued" | "indexing" | "indexed" | "failed";
+  vectorError?: string;
+  vectorTaskId?: string;
+  vectorDone?: number;
+  vectorTotal?: number;
 };
 
 export type KnowledgeBase = {

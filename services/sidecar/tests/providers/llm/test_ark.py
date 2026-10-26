@@ -21,16 +21,16 @@ class ArkTests(unittest.IsolatedAsyncioTestCase):
         async def handler(request):
             requests.append(request)
             return Response(200, json={"model": "actual-model", "choices": [{"finish_reason": "stop", "message": {"content": CONTENT}}]})
-        result = await generate(source(), ModelSettings(api_key="test-secret"), MockTransport(handler))
+        result = await generate(source(), ModelSettings(api_key="test-secret", model="test-model", base_url="https://model.test/v3"), MockTransport(handler))
         self.assertEqual(result.content, CONTENT)
         self.assertEqual(result.source_revision, 3)
         self.assertEqual(result.prompt_version, "minutes-v1")
         self.assertEqual(result.model, "actual-model")
         request = requests[0]
-        self.assertEqual(str(request.url), "https://ark.cn-beijing.volces.com/api/v3/chat/completions")
+        self.assertEqual(str(request.url), "https://model.test/v3/chat/completions")
         self.assertEqual(request.headers["Authorization"], "Bearer test-secret")
         body = json.loads(request.content)
-        self.assertEqual(body["model"], "deepseek-v4-1-flash-261017")
+        self.assertEqual(body["model"], "test-model")
         self.assertFalse(body["stream"])
         self.assertIn("不得编造", body["messages"][0]["content"])
         self.assertIn("segment-1", body["messages"][1]["content"])
@@ -56,7 +56,7 @@ class ArkTests(unittest.IsolatedAsyncioTestCase):
         for status, body, code in responses:
             with self.subTest(code=code):
                 with self.assertRaises(ModelError) as error:
-                    await generate(source(), ModelSettings(api_key="fixture"), MockTransport(lambda request: Response(status, json=body)))
+                    await generate(source(), ModelSettings(api_key="fixture", model="test-model", base_url="https://model.test/v3"), MockTransport(lambda request: Response(status, json=body)))
                 self.assertEqual(error.exception.code, code)
                 self.assertNotIn("secret upstream", str(error.exception))
 

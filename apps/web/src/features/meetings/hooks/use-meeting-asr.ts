@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { WsAsrTranscript } from "@dp-work/contracts";
 import { getMeeting, elapsed } from "@/apis/meetings";
 import { useAuthStore } from "@/stores/auth";
-import { getSidecarAsrConfig } from "@/apis/sidecar";
+import { getSidecarAsrConfig, createAsrSession } from "@/apis/sidecar";
 import { SIDECAR_WS } from "@/features/meetings/constants/meeting";
 import { AsrClient, type AsrStatus } from "../lib/asr-client";
 import { PcmRecorder } from "../lib/pcm-recorder";
@@ -56,7 +56,7 @@ export function useMeetingAsr(
       const config = await getSidecarAsrConfig();
       if (!active()) return;
       if (!config.configured)
-        throw new Error("豆包 ASR 凭证尚未配置，请填写 Sidecar .env 后重启服务。");
+        throw new Error("豆包 ASR 凭证尚未配置，请前往设置中的会议转写填写。");
       const owner = useAuthStore.getState().user?.id;
       if (!owner) throw new Error("请先登录。");
       const workspace = await getMeeting(owner, meetingId);
@@ -85,7 +85,13 @@ export function useMeetingAsr(
         capture?.close();
         return;
       }
+      const { ticket } = await createAsrSession(meetingId);
+      if (!active()) {
+        capture?.close();
+        return;
+      }
       await current.start({
+        ticket,
         nextSeq,
         offsetMs: Math.max(lastEnd, Math.floor(elapsed(workspace.meeting))),
       });

@@ -1,23 +1,11 @@
-import axios from "axios";
-import { SIDECAR_WS } from "@/features/meetings/constants/meeting";
+import { request } from "@/lib/http";
 
-/** 检查转写服务与凭证配置，缺少配置时不占用麦克风。 */
-export async function getSidecarAsrConfig(): Promise<{
-  configured: boolean;
-}> {
-  const url = new URL(SIDECAR_WS);
-  url.protocol = url.protocol === "wss:" ? "https:" : "http:";
-  url.pathname = "/health";
-  url.search = "";
-  url.hash = "";
-  try {
-    const { data } = await axios.get(url.href, { timeout: 5000 });
-    if (typeof data?.configured !== "boolean")
-      throw new Error("转写服务版本不匹配，请重启 Sidecar。");
-    return { configured: data.configured };
-  } catch (cause) {
-    if (axios.isAxiosError(cause))
-      throw new Error("无法连接转写服务，请确认 Sidecar 已启动。", { cause });
-    throw cause;
-  }
+/** 检查当前用户实际生效的转写配置。 */
+export function getSidecarAsrConfig(): Promise<{ configured: boolean }> {
+  return request("/api/settings/asr/configured");
+}
+
+/** 获取短时连接票据；API Key 仅在 API 和 Sidecar 之间传递。 */
+export function createAsrSession(meetingId: string): Promise<{ ticket: string }> {
+  return request(`/api/settings/asr/session/${encodeURIComponent(meetingId)}`, { method: "POST" });
 }

@@ -30,8 +30,7 @@ def messages(body: MinutesInput) -> list[dict]:
 
 async def generate(body: MinutesInput, settings: ModelSettings | None = None, transport=None) -> MinutesOutput:
     """生成并校验 Markdown 纪要。"""
-    settings = settings or ModelSettings(api_key=config.ARK_API_KEY, model=config.ARK_MODEL,
-        base_url=config.ARK_BASE_URL, timeout=config.ARK_TIMEOUT_SECONDS, max_tokens=config.ARK_MAX_TOKENS)
+    settings = settings or ModelSettings.from_env()
     content, model = await complete(messages(body), settings, transport)
     lines = {line.strip() for line in content.splitlines()}
     if content.startswith("```") or not all(f"## {section}" in lines for section in SECTIONS):

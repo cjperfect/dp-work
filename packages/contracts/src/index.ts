@@ -50,6 +50,8 @@ export interface AsrSegment {
 
 export interface WsAsrStart {
   type: "asr.start";
+  /** 短时一次性连接票据；不包含上游密钥。 */
+  ticket?: string;
   requestId: string;
   meetingId: string;
   audio: AsrAudioFormat;

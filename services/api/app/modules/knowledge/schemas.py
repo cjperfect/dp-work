@@ -85,6 +85,11 @@ class KnowledgeDocumentOut(KnowledgeDocumentSave):
     parsed_at: datetime | None = None
     parse_blocks: list[dict[str, Any]] | None = None
     vectorized_at: datetime | None = None
+    vector_status: Literal["unindexed", "queued", "indexing", "indexed", "failed"] = "unindexed"
+    vector_error: str | None = None
+    vector_task_id: str | None = None
+    vector_done: int = 0
+    vector_total: int = 0
 
 
 class ParsedDocumentSave(BaseModel):
@@ -92,4 +97,10 @@ class ParsedDocumentSave(BaseModel):
     model_config = ConfigDict(extra="forbid")
     content: str
     blocks: list[dict[str, Any]] | None = None
+    expected_parsed_at: datetime
+
+
+class VectorizeDocument(BaseModel):
+    """固定已保存的解析正文版本。"""
+    model_config = ConfigDict(extra="forbid")
     expected_parsed_at: datetime

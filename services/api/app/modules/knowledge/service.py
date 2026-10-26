@@ -95,9 +95,14 @@ async def save_document_in_transaction(conn, owner_id: int, base_id: int, docume
     repository = KnowledgeRepository(conn)
     if not await repository.owns_base(owner_id, base_id):
         raise ApiError(ApiCode.NOT_FOUND, "知识库不存在", 404)
+    previous = await repository.get_document(base_id, document_id)
+    had_index = previous is not None and previous.vector_status != "unindexed"
     record = await repository.save_document(base_id, document_id, body.model_dump())
     if record is None:
         raise ApiError(ApiCode.NOT_FOUND, "文档不存在", 404)
+    if had_index and record.vector_status == "unindexed":
+        from .parsing import notify_parse
+        await notify_parse(conn, base_id, document_id)
     return KnowledgeDocumentOut.model_validate(record)
 
 

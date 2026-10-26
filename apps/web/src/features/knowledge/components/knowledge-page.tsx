@@ -44,7 +44,11 @@ import { useKnowledgeDocuments } from "@/features/knowledge/hooks/use-knowledge-
 import { useKnowledgeBases } from "@/features/knowledge/hooks/use-knowledge-bases";
 import { useAuthStore } from "@/stores/auth";
 import { useDocumentPdf } from "@/features/knowledge/hooks/use-document-pdf";
-import { useDocumentParsing, parseStatusLabel } from "../hooks/use-document-parsing";
+import {
+  useDocumentParsing,
+  useDocumentVectorization,
+  parseStatusLabel,
+} from "../hooks/use-document-parsing";
 import { ParseDocumentButton } from "./parse-document-button";
 import { EditableSourceEditor } from "./editable-source-editor";
 import { PdfPreview } from "@/features/knowledge/components/pdf-preview";
@@ -83,6 +87,7 @@ export function KnowledgeBaseDetailPage() {
   const accountId = useAuthStore((state) => localAccountId(state.user));
   const [uploadMsg, setUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const parsing = useDocumentParsing(kbId);
+  const vectorization = useDocumentVectorization(kbId);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogErr, setDialogErr] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -372,7 +377,7 @@ export function KnowledgeBaseDetailPage() {
                     className="group relative flex h-full min-w-0 flex-col items-center rounded-2xl px-3 pb-3 pt-9 text-center outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <span
-                      title={file.parseError ?? parseStatusLabel(file)}
+                      title={file.vectorError ?? file.parseError ?? parseStatusLabel(file)}
                       className={`absolute right-2 top-2 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
                         PARSE_STATUS_TONE[parseStatusLabel(file)] ??
                         "bg-muted text-muted-foreground"
@@ -380,6 +385,11 @@ export function KnowledgeBaseDetailPage() {
                     >
                       {parseStatusLabel(file)}
                     </span>
+                    {(file.vectorStatus === "queued" || file.vectorStatus === "indexing") && (
+                      <span className="absolute left-2 top-6 text-[10px] text-muted-foreground">
+                        向量化中 {file.vectorDone ?? 0}/{file.vectorTotal || "…"}
+                      </span>
+                    )}
                     {(file.parseStatus === "queued" || file.parseStatus === "parsing") && (
                       <span className="absolute left-2 top-2 text-[10px] text-muted-foreground">
                         解析中…
@@ -420,8 +430,14 @@ export function KnowledgeBaseDetailPage() {
                     解析文档
                   </ContextMenuItem>
                   <ContextMenuItem
-                    disabled={file.parseStatus !== "parsed" || !file.parsedContent?.trim()}
-                    onClick={() => toast.info("向量化服务尚未接入，请先在解析后文档中检查内容。")}
+                    disabled={
+                      vectorization.submitting ||
+                      file.parseStatus !== "parsed" ||
+                      !file.parsedContent?.trim() ||
+                      file.vectorStatus === "queued" ||
+                      file.vectorStatus === "indexing"
+                    }
+                    onClick={() => void vectorization.start(file)}
                   >
                     <Network />
                     向量化
@@ -510,6 +526,7 @@ export function KnowledgeFilePage() {
   const { bases, loading, error, reload } = useKnowledgeBases();
   const kb = bases.find((k) => k.id === kbId);
   const documents = useKnowledgeDocuments(kbId);
+  const vectorization = useDocumentVectorization(kbId);
   const file = [...documents.files, ...getKbFiles(kbId)].find((f) => f.id === fileId);
   const pdf = useDocumentPdf(kbId, file);
   const accountId = useAuthStore((state) => localAccountId(state.user));
@@ -652,15 +669,26 @@ export function KnowledgeFilePage() {
           <ParseDocumentButton baseId={kbId} file={file} />
           <Button
             disabled={
-              file.parseStatus !== "parsed" || parsedSaveBlocked || !file.parsedContent?.trim()
+              vectorization.submitting ||
+              file.parseStatus !== "parsed" ||
+              parsedSaveBlocked ||
+              !file.parsedContent?.trim() ||
+              file.vectorStatus === "queued" ||
+              file.vectorStatus === "indexing"
             }
             title={
               parsedSaveBlocked ? "请等待解析文档保存完成" : "先解析并检查文档内容，再进行向量化"
             }
-            onClick={() => toast.info("向量化服务尚未接入，解析文档已保存。")}
+            onClick={() => void vectorization.start(file)}
           >
             <Network className="size-4" />
-            向量化
+            {file.vectorStatus === "queued" || file.vectorStatus === "indexing"
+              ? `向量化中 ${file.vectorDone ?? 0}/${file.vectorTotal || "…"}`
+              : file.vectorStatus === "failed"
+                ? "重试向量化"
+                : file.vectorizedAt
+                  ? "重新向量化"
+                  : "向量化"}
           </Button>
         </div>
       </header>

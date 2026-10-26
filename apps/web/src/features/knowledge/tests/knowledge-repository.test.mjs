@@ -1,12 +1,13 @@
+import { mockHttpRequest } from "../../../lib/testing/mock-http.mjs";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, mock, test } from "node:test";
 import { useAuthStore } from "../../../stores/auth.ts";
 import {
-  createKnowledgeBase,
-  deleteKnowledgeBase,
-  listKnowledgeBases,
-  updateKnowledgeBase,
-} from "../lib/knowledge-repository.ts";
+  createKnowledgeBaseRequest as createKnowledgeBase,
+  deleteKnowledgeBaseRequest as deleteKnowledgeBase,
+  listAllKnowledgeBasesRequest as listKnowledgeBases,
+  updateKnowledgeBaseRequest as updateKnowledgeBase,
+} from "../../../apis/knowledge.ts";
 import {
   createKnowledgeBase as createInStore,
   loadKnowledgeBases,
@@ -32,7 +33,11 @@ function signIn(id = 1) {
   });
 }
 function ok(data) {
-  return Response.json({ code: 0, message: "ok", data });
+  return Response.json({
+    code: 0,
+    message: "ok",
+    data: Array.isArray(data) ? { item: data, total: data.length, page: 1, page_size: 100 } : data,
+  });
 }
 function failure(status, message) {
   return Response.json({ code: 1003, message, data: null }, { status });
@@ -45,10 +50,15 @@ function deferred() {
   return { promise, resolve };
 }
 beforeEach(() => {
+  const storage = new Map();
   Object.defineProperty(globalThis, "window", { configurable: true, value: {} });
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
-    value: { getItem: () => token },
+    value: {
+      getItem: (key) => (key === "dp-work.auth.token" ? token : (storage.get(key) ?? null)),
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: (key) => storage.delete(key),
+    },
   });
   resetKnowledgeBases();
   signIn();
@@ -64,10 +74,11 @@ afterEach(() => {
 });
 
 test("list reads the API with bearer credentials and maps server fields to the UI", async () => {
-  const fetch = mock.method(globalThis, "fetch", async () => ok([first]));
+  const fetch = mockHttpRequest(async () => ok([first]));
   const [base] = await listKnowledgeBases("user:1");
   assert.deepEqual(base, {
-    id: "11",
+    id: "server-11",
+    serverId: 11,
     accountId: "user:1",
     name: "Project",
     description: "Notes",
@@ -78,14 +89,13 @@ test("list reads the API with bearer credentials and maps server fields to the U
     updatedAt: first.updated_at,
   });
   const [url, init] = fetch.mock.calls[0].arguments;
-  assert.equal(url, "/api/knowledge-bases");
+  assert.equal(url, "/api/knowledge-bases?page=1&page_size=100");
   assert.equal(init.headers.Authorization, "Bearer token-1");
-  assert.equal(init.cache, "no-store");
-  assert.ok(init.signal instanceof AbortSignal);
+  assert.equal(init.method, "GET");
 });
 
 test("creation sends trimmed fields and uses only server-generated identity and timestamps", async () => {
-  const fetch = mock.method(globalThis, "fetch", async () => ok(first));
+  const fetch = mockHttpRequest(async () => ok(first));
   const created = await createKnowledgeBase("user:1", {
     name: " Project ",
     description: " Notes ",
@@ -94,15 +104,15 @@ test("creation sends trimmed fields and uses only server-generated identity and 
   assert.equal(url, "/api/knowledge-bases");
   assert.equal(init.method, "POST");
   assert.deepEqual(JSON.parse(init.body), { name: "Project", description: "Notes" });
-  assert.equal(created.id, "11");
+  assert.equal(created.id, "server-11");
   assert.equal(created.createdAt, first.created_at);
 });
 
 test("edit uses PUT and displays the committed server response", async () => {
-  const fetch = mock.method(globalThis, "fetch", async () =>
+  const fetch = mockHttpRequest(async () =>
     ok({ ...first, name: "Renamed", updated_at: "2026-10-24T02:00:00Z" }),
   );
-  const updated = await updateKnowledgeBase("user:1", "11", {
+  const updated = await updateKnowledgeBase("user:1", "server-11", {
     name: "Renamed",
     description: "Notes",
   });
@@ -113,24 +123,24 @@ test("edit uses PUT and displays the committed server response", async () => {
 });
 
 test("deletion uses DELETE and missing or inaccessible resources preserve the server message", async () => {
-  const fetch = mock.method(globalThis, "fetch", async () => ok({ id: 11 }));
-  await deleteKnowledgeBase("user:1", "11");
+  const fetch = mockHttpRequest(async () => ok({ id: 11 }));
+  await deleteKnowledgeBase("user:1", "server-11");
   assert.equal(fetch.mock.calls[0].arguments[1].method, "DELETE");
   fetch.mock.mockImplementation(async () => failure(404, "知识库不存在或无权访问"));
-  await assert.rejects(deleteKnowledgeBase("user:1", "11"), /不存在或无权访问/);
+  await assert.rejects(deleteKnowledgeBase("user:1", "server-11"), /不存在或无权访问/);
 });
 
 test("blank names, missing sessions and stale account requests do not reach the API", async () => {
-  const fetch = mock.method(globalThis, "fetch", async () => ok([]));
+  const fetch = mockHttpRequest(async () => ok([]));
   await assert.rejects(createKnowledgeBase("user:1", { name: "  ", description: "" }), /请输入/);
-  await assert.rejects(listKnowledgeBases("user:2"), /登录状态/);
+  await assert.rejects(listKnowledgeBases("user:2"), /登录/);
   token = null;
-  await assert.rejects(listKnowledgeBases("user:1"), /登录状态/);
+  await assert.rejects(listKnowledgeBases("user:1"), /登录/);
   assert.equal(fetch.mock.callCount(), 0);
 });
 
 test("failed saves do not insert phantom cards; retry succeeds after recovery", async () => {
-  const fetch = mock.method(globalThis, "fetch", async () => ok([]));
+  const fetch = mockHttpRequest(async () => ok([]));
   await loadKnowledgeBases("user:1");
   fetch.mock.mockImplementation(async () => failure(500, "数据库暂时不可用"));
   await assert.rejects(
@@ -140,11 +150,11 @@ test("failed saves do not insert phantom cards; retry succeeds after recovery", 
   assert.deepEqual(useKnowledgeStore.getState().bases, []);
   fetch.mock.mockImplementation(async () => ok(first));
   await createInStore("user:1", { name: "Project", description: "" });
-  assert.equal(useKnowledgeStore.getState().bases[0].id, "11");
+  assert.equal(useKnowledgeStore.getState().bases[0].id, "server-11");
 });
 
 test("network failures, non-JSON responses and expired sessions report recoverable errors", async () => {
-  const fetch = mock.method(globalThis, "fetch", async () => {
+  const fetch = mockHttpRequest(async () => {
     throw new TypeError("offline");
   });
   await assert.rejects(listKnowledgeBases("user:1"), /暂时无法连接/);
@@ -155,7 +165,7 @@ test("network failures, non-JSON responses and expired sessions report recoverab
 });
 
 test("refresh reloads server data and clears cached rows from another account", async () => {
-  const fetch = mock.method(globalThis, "fetch", async () => ok([first]));
+  const fetch = mockHttpRequest(async () => ok([first]));
   await loadKnowledgeBases("user:1");
   fetch.mock.mockImplementation(async () => ok([{ ...first, name: "Changed on another device" }]));
   await loadKnowledgeBases("user:1", true);
@@ -168,7 +178,7 @@ test("refresh reloads server data and clears cached rows from another account", 
 
 test("a response started by the old account cannot overwrite a newly loaded account", async () => {
   const old = deferred();
-  const fetch = mock.method(globalThis, "fetch", () => old.promise);
+  const fetch = mockHttpRequest(() => old.promise);
   const loading = loadKnowledgeBases("user:1");
   signIn(2);
   fetch.mock.mockImplementation(async () =>
@@ -183,15 +193,15 @@ test("a response started by the old account cannot overwrite a newly loaded acco
 });
 
 test("an older list response cannot erase a newer successful creation", async () => {
-  mock.method(globalThis, "fetch", async () => ok([]));
+  mockHttpRequest(async () => ok([]));
   await loadKnowledgeBases("user:1");
   const old = deferred();
-  mock.method(globalThis, "fetch", (url, init) =>
+  mockHttpRequest((url, init) =>
     init.method === "POST" ? Promise.resolve(ok(first)) : old.promise,
   );
   const loading = loadKnowledgeBases("user:1", true);
   await createInStore("user:1", { name: "Project", description: "" });
   old.resolve(ok([]));
   await loading;
-  assert.equal(useKnowledgeStore.getState().bases[0].id, "11");
+  assert.equal(useKnowledgeStore.getState().bases[0].id, "server-11");
 });

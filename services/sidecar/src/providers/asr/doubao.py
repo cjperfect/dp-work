@@ -1,7 +1,7 @@
 """豆包双向流式 ASR WebSocket 适配。"""
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import gzip
 from io import BytesIO
 import json
@@ -53,7 +53,7 @@ class AsrProviderError(Exception):
 
 @dataclass
 class DoubaoSettings:
-    api_key: str = ""
+    api_key: str = field(default="", repr=False)
     resource_id: str = "volc.seedasr.sauc.duration"
     speaker_info: bool = True
     base_url: str = config.VOLC_BASE_URL

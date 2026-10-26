@@ -4,6 +4,7 @@ import "@blocknote/mantine/style.css";
 import { useEffect, useRef } from "react";
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
+import { useResolvedTheme } from "@/hooks/use-resolved-theme";
 import { zh } from "@blocknote/core/locales";
 import type { BlockNoteEditor as Editor, PartialBlock } from "@blocknote/core";
 
@@ -33,6 +34,7 @@ export function BlockNoteEditor({
   onEditorReady,
   className,
 }: BlockNoteEditorProps) {
+  const theme = useResolvedTheme();
   const editor = useCreateBlockNote({
     dictionary: zh,
     // 仅在提供了有效初始块时恢复；否则用 BlockNote 默认空文档
@@ -87,7 +89,7 @@ export function BlockNoteEditor({
   return (
     <BlockNoteView
       editor={editor}
-      theme="light"
+      theme={theme}
       editable={editable}
       onChange={(ed) => {
         if (!editable || applying.current) return;

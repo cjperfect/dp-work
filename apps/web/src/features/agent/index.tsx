@@ -260,7 +260,9 @@ function AgentPanel({ agent }: { agent: AgentConfig }) {
             {error}
           </p>
         )}
-        <p>当前先保存配置与会话上下文。技能执行与模型回答将在后续接入。</p>
+        <p>
+          会话历史保存在当前设备。关联知识库后可检索已向量化的文档；技能执行与连接器工具将在后续接入。
+        </p>
       </div>
     </aside>
   );

@@ -34,6 +34,8 @@ async def request_parse(owner_id: int, base_id: int, document_id: str) -> Knowle
             return KnowledgeDocumentOut.model_validate(record)
         if record.file_type not in ("pdf", "txt", "md", "docx"):
             raise ApiError(ApiCode.PARAM_ERROR, "当前支持 TXT、Markdown、PDF 和 DOCX，旧版 DOC 暂不支持。", 400)
+        from .rag import invalidate
+        invalidate(record)
         record.parse_status = "queued"
         record.parse_error = record.parse_content = record.parse_metadata = record.parsed_at = None
         record.parse_blocks = record.vectorized_at = None
@@ -152,15 +154,20 @@ async def parse_states(owner_id: int, document_id: str | None = None) -> list[di
     """读取当前用户的解析任务元数据，供快照与事件推送使用。"""
     statement = select(KnowledgeDocument, KnowledgeBase.owner_id).join(
         KnowledgeBase, KnowledgeBase.id == KnowledgeDocument.knowledge_base_id
-    ).where(KnowledgeBase.owner_id == owner_id, KnowledgeDocument.parse_started_at.is_not(None))
+    ).where(KnowledgeBase.owner_id == owner_id)
     if document_id is not None:
         statement = statement.where(KnowledgeDocument.id == document_id)
+    else:
+        statement = statement.where(or_(KnowledgeDocument.parse_started_at.is_not(None), KnowledgeDocument.vector_task_id.is_not(None)))
     async with session.read_session() as db:
         rows = (await db.execute(statement)).all()
         return [{"id": row.id, "base_id": row.knowledge_base_id, "owner_id": owner,
                  "name": row.original_name or row.title, "status": row.parse_status,
-                 "task_id": row.parse_started_at.isoformat(),
-                 "error": row.parse_error, "parsed_at": row.parsed_at.isoformat() if row.parsed_at else None}
+                 "task_id": row.parse_started_at.isoformat() if row.parse_started_at else "",
+                 "error": row.parse_error, "parsed_at": row.parsed_at.isoformat() if row.parsed_at else None,
+                 "vector_status": row.vector_status, "vector_task_id": row.vector_task_id, "vector_error": row.vector_error,
+                 "vector_done": row.vector_done, "vector_total": row.vector_total,
+                 "vectorized_at": row.vectorized_at.isoformat() if row.vectorized_at else None}
                 for row, owner in rows]
 
 
@@ -181,6 +188,10 @@ async def save_parsed(owner_id: int, base_id: int, document_id: str, body) -> Kn
         if row.parse_content != body.content or row.parse_blocks != body.blocks:
             row.parse_content, row.parse_blocks = body.content, body.blocks
             row.parsed_at = datetime.now(timezone.utc)
-            row.vectorized_at = None
+            from .rag import invalidate
+            had_index = row.vector_status != "unindexed"
+            invalidate(row)
             await db.flush()
+            if had_index:
+                await notify_parse(db, base_id, document_id)
         return KnowledgeDocumentOut.model_validate(row)

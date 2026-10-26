@@ -8,9 +8,9 @@ from app.core.responses import ApiResponse, ok
 from app.modules.auth.dependencies import get_current_user
 from app.modules.users.models import User
 
-from . import service, parsing
+from . import service, parsing, rag
 from .events import router as events_router
-from .schemas import (KnowledgeBaseCreate, KnowledgeBaseOut, KnowledgeBasePage, KnowledgeBaseUpdate, KnowledgeDocumentSave, KnowledgeDocumentOut, ParsedDocumentSave)
+from .schemas import (KnowledgeBaseCreate, KnowledgeBaseOut, KnowledgeBasePage, KnowledgeBaseUpdate, KnowledgeDocumentSave, KnowledgeDocumentOut, ParsedDocumentSave, VectorizeDocument)
 
 router = APIRouter(prefix="/api/knowledge-bases", tags=["knowledge"])
 router.include_router(events_router)
@@ -125,3 +125,9 @@ async def parse_document(base_id: BaseId, document_id: DocumentId, user: Current
 async def save_parsed_document(base_id: BaseId, document_id: DocumentId, body: ParsedDocumentSave, user: CurrentUser):
     """保存人工调整后的正文和富文本块。"""
     return ok(await parsing.save_parsed(user.id, base_id, document_id, body), message="解析文档已保存")
+
+
+@router.post("/{base_id}/documents/{document_id}/vectorize", response_model=ApiResponse[KnowledgeDocumentOut], summary="提交文档向量化任务")
+async def vectorize_document(base_id: BaseId, document_id: DocumentId, body: VectorizeDocument, user: CurrentUser):
+    """按解析版本提交父子分块向量化任务。"""
+    return ok(await rag.enqueue(user.id, base_id, document_id, body.expected_parsed_at), message="向量任务已提交")

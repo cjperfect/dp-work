@@ -14,6 +14,7 @@ import { Route as authSignInRouteImport } from "./routes/(auth)/sign-in";
 import { Route as authSignUpRouteImport } from "./routes/(auth)/sign-up";
 import { Route as AppIndexRouteImport } from "./routes/_app/index";
 import { Route as AppProductRouteImport } from "./routes/_app/product";
+import { Route as AppSettingsRouteImport } from "./routes/_app/settings";
 import { Route as AppConnectorsIndexRouteImport } from "./routes/_app/connectors/index";
 import { Route as AppKnowledgeIndexRouteImport } from "./routes/_app/knowledge/index";
 import { Route as AppMeetingsIndexRouteImport } from "./routes/_app/meetings/index";
@@ -49,6 +50,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppProductRoute = AppProductRouteImport.update({
   id: "/product",
   path: "/product",
+  getParentRoute: () => AppRouteRoute,
+} as any);
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: "/settings",
+  path: "/settings",
   getParentRoute: () => AppRouteRoute,
 } as any);
 const AppConnectorsIndexRoute = AppConnectorsIndexRouteImport.update({
@@ -120,6 +126,7 @@ export interface FileRoutesByFullPath {
   "/sign-in": typeof authSignInRoute;
   "/sign-up": typeof authSignUpRoute;
   "/product": typeof AppProductRoute;
+  "/settings": typeof AppSettingsRoute;
   "/meetings/active": typeof AppMeetingsActiveRoute;
   "/meetings/minutes": typeof AppMeetingsMinutesRoute;
   "/shared/meeting-records/$token": typeof SharedMeetingRecordsTokenRoute;
@@ -137,6 +144,7 @@ export interface FileRoutesByTo {
   "/sign-in": typeof authSignInRoute;
   "/sign-up": typeof authSignUpRoute;
   "/product": typeof AppProductRoute;
+  "/settings": typeof AppSettingsRoute;
   "/": typeof AppIndexRoute;
   "/meetings/active": typeof AppMeetingsActiveRoute;
   "/meetings/minutes": typeof AppMeetingsMinutesRoute;
@@ -157,6 +165,7 @@ export interface FileRoutesById {
   "/(auth)/sign-in": typeof authSignInRoute;
   "/(auth)/sign-up": typeof authSignUpRoute;
   "/_app/product": typeof AppProductRoute;
+  "/_app/settings": typeof AppSettingsRoute;
   "/_app/": typeof AppIndexRoute;
   "/_app/meetings/active": typeof AppMeetingsActiveRoute;
   "/_app/meetings/minutes": typeof AppMeetingsMinutesRoute;
@@ -178,6 +187,7 @@ export interface FileRouteTypes {
     | "/sign-in"
     | "/sign-up"
     | "/product"
+    | "/settings"
     | "/meetings/active"
     | "/meetings/minutes"
     | "/shared/meeting-records/$token"
@@ -195,6 +205,7 @@ export interface FileRouteTypes {
     | "/sign-in"
     | "/sign-up"
     | "/product"
+    | "/settings"
     | "/"
     | "/meetings/active"
     | "/meetings/minutes"
@@ -214,6 +225,7 @@ export interface FileRouteTypes {
     | "/(auth)/sign-in"
     | "/(auth)/sign-up"
     | "/_app/product"
+    | "/_app/settings"
     | "/_app/"
     | "/_app/meetings/active"
     | "/_app/meetings/minutes"
@@ -272,6 +284,13 @@ declare module "@tanstack/react-router" {
       path: "/product";
       fullPath: "/product";
       preLoaderRoute: typeof AppProductRouteImport;
+      parentRoute: typeof AppRouteRoute;
+    };
+    "/_app/settings": {
+      id: "/_app/settings";
+      path: "/settings";
+      fullPath: "/settings";
+      preLoaderRoute: typeof AppSettingsRouteImport;
       parentRoute: typeof AppRouteRoute;
     };
     "/_app/connectors/": {
@@ -363,6 +382,7 @@ declare module "@tanstack/react-router" {
 
 interface AppRouteRouteChildren {
   AppProductRoute: typeof AppProductRoute;
+  AppSettingsRoute: typeof AppSettingsRoute;
   AppIndexRoute: typeof AppIndexRoute;
   AppMeetingsActiveRoute: typeof AppMeetingsActiveRoute;
   AppMeetingsMinutesRoute: typeof AppMeetingsMinutesRoute;
@@ -378,6 +398,7 @@ interface AppRouteRouteChildren {
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppProductRoute: AppProductRoute,
+  AppSettingsRoute: AppSettingsRoute,
   AppIndexRoute: AppIndexRoute,
   AppMeetingsActiveRoute: AppMeetingsActiveRoute,
   AppMeetingsMinutesRoute: AppMeetingsMinutesRoute,

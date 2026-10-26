@@ -19,13 +19,14 @@ import {
   getThreadAgentCode,
   removeThread,
   renameThread,
+  editMessage,
   sendMessage,
   useAgentStore,
 } from "@/stores/agent";
 import type { ChatThread } from "@/types/agent";
 
 /**
- * 本地数据源 adapter：会话列表与 CRUD 全部落在 agent-store（业务 API 已下线）。
+ * 会话历史 adapter：列表与 CRUD 暂存 agent-store，模型执行走 API。
  * 保持模块级稳定引用（assistant-ui 要求 adapter 跨渲染稳定），方法内用
  * getState() 读取最新状态，reload 时才重新 list()。
  */
@@ -114,6 +115,21 @@ function useThreadRuntimeHook() {
     isRunning: !!draft?.sending,
     onCancel: async () => {
       if (remoteId) cancelMessage(remoteId);
+    },
+    onEdit: async (message: AppendMessage) => {
+      const id = aui.threadListItem.getState().remoteId;
+      if (!id || !message.sourceId) throw new Error("会话或消息不存在，请重新加载。");
+      if (message.attachments?.length) throw new Error("附件上传尚未接入。");
+      const text = message.content
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n");
+      await editMessage(
+        getThreadAgentCode(id) ?? useAppStore.getState().agentId,
+        id,
+        message.sourceId,
+        text,
+      );
     },
     onNew: async (message: AppendMessage) => {
       if (message.attachments?.length) throw new Error("附件上传尚未接入。");

@@ -5,10 +5,16 @@ export type DocumentParseState = {
   base_id: number;
   owner_id: number;
   name: string;
-  status: "queued" | "parsing" | "parsed" | "failed";
+  status: "unparsed" | "queued" | "parsing" | "parsed" | "failed";
   task_id: string;
   error: string | null;
   parsed_at: string | null;
+  vector_status?: "unindexed" | "queued" | "indexing" | "indexed" | "failed";
+  vector_task_id?: string | null;
+  vector_error?: string | null;
+  vector_done?: number;
+  vector_total?: number;
+  vectorized_at?: string | null;
 };
 type Listener = (rows: DocumentParseState[], snapshot: boolean) => void;
 type Connection = {

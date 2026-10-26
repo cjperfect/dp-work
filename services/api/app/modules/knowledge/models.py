@@ -41,7 +41,7 @@ class KnowledgeBase(Base):
 class KnowledgeDocument(Base):
     """在线文档，保存富文本块与 Markdown 正文。"""
     __tablename__ = "knowledge_documents"
-    __table_args__ = (Index("idx_knowledge_documents_base_id", "knowledge_base_id"),)
+    __table_args__ = (Index("idx_knowledge_documents_base_id", "knowledge_base_id"), Index("idx_knowledge_vector_status", "vector_status"),)
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     knowledge_base_id: Mapped[int] = mapped_column(
@@ -68,3 +68,14 @@ class KnowledgeDocument(Base):
     parse_lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     parse_blocks: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     vectorized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    vector_status: Mapped[str] = mapped_column(String(16), server_default=text("'unindexed'"))
+    vector_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    vector_task_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    vector_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    vector_claim_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    vector_lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    vector_profile: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    vector_done: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    vector_total: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    vector_attempts: Mapped[int] = mapped_column(Integer, server_default=text("0"))

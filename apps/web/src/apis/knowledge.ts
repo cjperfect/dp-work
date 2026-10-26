@@ -172,6 +172,11 @@ type ServerKnowledgeDocument = {
   parsed_at?: string | null;
   parse_blocks?: KbFile["blocks"] | null;
   vectorized_at?: string | null;
+  vector_status?: KbFile["vectorStatus"];
+  vector_error?: string | null;
+  vector_task_id?: string | null;
+  vector_done?: number;
+  vector_total?: number;
   original_name?: string | null;
   byte_size?: number;
   created_at: string;
@@ -204,6 +209,11 @@ function toKnowledgeDocument(
     parsedAt: value.parsed_at ?? undefined,
     parsedBlocks: value.parse_blocks ?? undefined,
     vectorizedAt: value.vectorized_at ?? undefined,
+    vectorStatus: value.vector_status ?? "unindexed",
+    vectorError: value.vector_error ?? undefined,
+    vectorTaskId: value.vector_task_id ?? undefined,
+    vectorDone: value.vector_done ?? 0,
+    vectorTotal: value.vector_total ?? 0,
     storage: "server",
     status: "published",
     content: value.content,
@@ -372,6 +382,21 @@ export async function saveParsedDocumentRequest(
     accountId,
     `/${serverId(baseId)}/documents/${encodeURIComponent(documentId)}/parsed`,
     { method: "PUT", data: input },
+  );
+  return toKnowledgeDocument(data as ServerKnowledgeDocument, baseId, user.username);
+}
+
+/** 基于已保存的解析版本提交父子分块向量化。 */
+export async function vectorizeKnowledgeDocumentRequest(
+  accountId: string,
+  baseId: string,
+  file: KbFile,
+): Promise<KbFile> {
+  if (!file.parsedAt) throw new Error("请先解析并保存文档。");
+  const { data, user } = await knowledgeRequest(
+    accountId,
+    `/${serverId(baseId)}/documents/${encodeURIComponent(file.id)}/vectorize`,
+    { method: "POST", data: { expected_parsed_at: file.parsedAt } },
   );
   return toKnowledgeDocument(data as ServerKnowledgeDocument, baseId, user.username);
 }

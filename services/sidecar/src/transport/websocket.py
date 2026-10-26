@@ -1,5 +1,6 @@
 """会议 ASR WebSocket 命令入口。"""
 import asyncio
+import time
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -73,7 +74,14 @@ async def asr_websocket(websocket: WebSocket):
                 if request.meetingId in active:
                     await error("MEETING_BUSY", "该会议已有转写连接。", request, True)
                     continue
-                provider = DoubaoRecognizer()
+                override = None
+                if request.ticket:
+                    entry = websocket.app.state.asr_tickets.pop(request.ticket, None)
+                    if not entry or entry[0] < time.monotonic() or entry[1] != request.meetingId:
+                        await error("INVALID_TICKET", "转写连接凭证已失效，请重试。", request)
+                        continue
+                    override = entry[3].asr() if entry[3] else None
+                provider = DoubaoRecognizer(override) if override else DoubaoRecognizer()
                 session = AsrSession(request.meetingId, send, provider, next_seq=request.nextSeq, offset_ms=request.offsetMs)
                 active[request.meetingId] = session
                 await session.prepare()

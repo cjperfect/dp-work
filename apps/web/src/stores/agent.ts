@@ -77,7 +77,7 @@ const saves = new Map<string, Promise<void>>();
 const creates = new Map<string, Promise<string>>();
 const createIds = new Map<string, string>();
 const message = (error: unknown) => (error instanceof Error ? error.message : "操作失败，请重试。");
-/** 业务 API 已下线：本地构造一个空会话，供静态占位页使用。 */
+/** 构造本地会话，模型执行通过 Agent API 完成。 */
 function localThread(id: string, agentId: number, title = "新会话"): ThreadDetail {
   const now = new Date().toISOString();
   return {
@@ -138,7 +138,7 @@ export function loadAgents(force = false) {
           });
         return;
       }
-      // 业务 API 已下线：用本地常量生成本地 Agent 列表，供静态聊天页使用。
+      // Agent 配置暂使用本地常量，执行模型由服务端环境配置。
       const seen = new Set<string>();
       const skills: Skill[] = [];
       for (const meta of AGENTS)
@@ -202,7 +202,7 @@ export async function saveAgent(
   if (!agent) throw new Error("Agent 尚未加载。");
   useAgentStore.setState({ configBusy: true });
   try {
-    // 业务 API 已下线：本地更新快照，不落库。
+    // 配置暂保存为本地快照，不写入数据库。
     const updated: AgentConfig = {
       ...agent,
       ...changes,
@@ -271,7 +271,7 @@ export function createThread(code: AgentId): Promise<string> {
       id = crypto.randomUUID();
       createIds.set(key, id);
     }
-    // 业务 API 已下线：本地构造空会话，不落库。
+    // 本阶段会话历史保存在本地。
     const agent = useAgentStore.getState().agents.find((row) => row.code === code);
     if (!agent) throw new Error("Agent 尚未加载。");
     const detail = localThread(id, agent.id);
@@ -393,7 +393,7 @@ export function flushDraft(code: AgentId, id: string): Promise<void> {
         drafts: { ...state.drafts, [id]: { ...state.drafts[id], saving: true } },
       }));
       try {
-        // 业务 API 已下线：本地标记已保存，不发起请求。
+        // 草稿保存在本地，不调用业务 API。
         if (!owned(owner)) return;
         useAgentStore.setState((state) => ({
           lists: updateList(state, code, detail.thread),
@@ -426,6 +426,25 @@ export function flushDraft(code: AgentId, id: string): Promise<void> {
 /** 停止当前会话的生成，并中断 API 和 Sidecar 的上游流。 */
 export function cancelMessage(id: string) {
   runs.get(id)?.abort();
+}
+
+/** 修改历史提问，从该条消息重新生成后续回答。 */
+export async function editMessage(code: AgentId, id: string, messageId: string, text: string) {
+  currentOwner();
+  const state = useAgentStore.getState();
+  const detail = state.details[id];
+  const agent = state.agents.find((row) => row.code === code);
+  if (!detail || !state.drafts[id] || detail.thread.agent_id !== agent?.id)
+    throw new Error("会话不存在或与 Agent 不匹配。");
+  if (state.drafts[id].sending) throw new Error("请先停止当前生成，再编辑消息。");
+  if (!text.trim()) throw new Error("请输入消息。");
+  const index = detail.messages.findIndex((row) => row.id === messageId && row.role === "user");
+  if (index < 0) throw new Error("只能编辑当前会话中的用户消息。");
+  useAgentStore.setState((current) => ({
+    details: { ...current.details, [id]: { ...detail, messages: detail.messages.slice(0, index) } },
+    drafts: { ...current.drafts, [id]: { ...current.drafts[id], pending: null, error: null } },
+  }));
+  await sendMessage(code, id, text);
 }
 
 export async function sendMessage(code: AgentId, id: string, text: string) {
@@ -529,6 +548,11 @@ export async function sendMessage(code: AgentId, id: string, text: string) {
       {
         agent_code: code,
         thread_id: id,
+        knowledge_base_ids: (
+          state.agents.find((row) => row.code === code)?.knowledge_base_ids ?? []
+        )
+          .map((value) => Number(String(value).replace(/^server-/, "")))
+          .filter((value) => Number.isSafeInteger(value) && value > 0),
         model,
         messages: [
           ...history
@@ -614,7 +638,7 @@ export async function renameThread(code: AgentId, id: string, title: string) {
   const existing = state.details[id]?.thread;
   const agent = state.agents.find((row) => row.code === code);
   if (!existing || existing.agent_id !== agent?.id) throw new Error("会话不存在。");
-  // 业务 API 已下线：本地更新标题，不发起请求。
+  // 会话标题保存在本地。
   const now = new Date().toISOString();
   const row: ChatThread = {
     ...existing,
@@ -638,7 +662,7 @@ export async function renameThread(code: AgentId, id: string, title: string) {
 export async function removeThread(code: AgentId, id: string) {
   const owner = currentOwner();
   cancelMessage(id);
-  // 业务 API 已下线：仅本地移除。
+  // 仅移除当前设备上的会话。
   if (!owned(owner)) return;
   useAgentStore.setState((state) => {
     const details = { ...state.details };

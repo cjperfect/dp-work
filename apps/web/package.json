@@ -19,7 +19,8 @@
     "test:meetings": "tsx --test src/features/meetings/tests/*.test.mjs",
     "test:agent": "tsx --test src/features/agent/tests/*.test.mjs",
     "test:mock": "tsx --test src/features/auth/tests/*.test.mjs src/features/agent/tests/local-session.test.mjs src/features/knowledge/tests/mock-repository.test.mjs src/features/meetings/tests/generate-minutes.test.mjs src/features/meetings/tests/minutes-view.test.mjs",
-    "test:asr": "tsx --test src/features/meetings/tests/asr-protocol.test.mjs src/features/meetings/tests/pcm-recorder.test.mjs"
+    "test:asr": "tsx --test src/features/meetings/tests/asr-protocol.test.mjs src/features/meetings/tests/pcm-recorder.test.mjs",
+    "test:settings": "tsx --test src/features/settings/tests/*.test.mjs"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.15.30",

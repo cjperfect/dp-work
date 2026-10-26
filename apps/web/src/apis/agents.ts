@@ -9,6 +9,7 @@ export type AgentChatInput = {
   thread_id: string;
   messages: { role: "user" | "assistant"; content: string }[];
   model?: string;
+  knowledge_base_ids?: number[];
 };
 
 /** 使用统一 Axios 客户端读取 SSE；缺少 done 或流中断均视为未完成。 */

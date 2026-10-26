@@ -14,6 +14,7 @@ from .models import MeetingMinutes
 from . import records
 from .schemas import GenerateMinutes, GenerationAccepted, MeetingState
 from .service import _workspace
+from app.modules.settings import service as personal_settings
 
 log = logging.getLogger(__name__)
 SAFE_ERRORS = {
@@ -73,10 +74,14 @@ async def enqueue(owner_id: int, meeting_id: str, body: GenerateMinutes) -> Gene
         return GenerationAccepted(task_id=task_id, source_revision=source_revision, meeting=MeetingState.model_validate(record))
 
 
-async def call_sidecar(payload: dict, transport=None) -> GeneratedMinutes:
+async def call_sidecar(payload: dict, transport=None, owner_id: int | None = None) -> GeneratedMinutes:
     """调用内部生成接口，不向浏览器暴露内部凭证或上游错误。"""
     if not config.SIDECAR_INTERNAL_TOKEN:
         raise ValueError("API 与 Sidecar 的内部服务凭证尚未配置。")
+    if owner_id is not None:
+        override = await personal_settings.runtime(owner_id, "model")
+        if override:
+            payload = {**payload, "runtime": override}
     try:
         async with asyncio.timeout(config.MINUTES_TASK_TIMEOUT):
             async with httpx.AsyncClient(timeout=config.MINUTES_TASK_TIMEOUT, transport=transport) as client:
@@ -143,11 +148,13 @@ async def run_once(transport=None) -> bool:
         if job is None:
             return False
         task_id, claim, payload, attempts = job.id, job.claim_token, job.input, job.attempts
+        meeting = await MeetingsRepository(conn).job_meeting(job.meeting_id)
+        owner_id = meeting.owner_id if meeting else None
     if attempts > 3:
         await finish(task_id, claim, None, "生成任务多次中断，请手动重新生成。")
         return True
     try:
-        result = await call_sidecar(payload, transport)
+        result = await call_sidecar(payload, transport, owner_id)
     except asyncio.CancelledError:
         raise
     except ValueError as cause:

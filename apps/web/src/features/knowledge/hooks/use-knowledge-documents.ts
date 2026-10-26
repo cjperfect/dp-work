@@ -71,18 +71,46 @@ export function useKnowledgeDocuments(baseId: string) {
             (file) =>
               file.id === row.id &&
               (file.parseStatus !== row.status ||
+                (row.vector_status !== undefined && file.vectorStatus !== row.vector_status) ||
+                (row.vector_task_id != null && file.vectorTaskId !== row.vector_task_id) ||
+                (row.vector_done != null && file.vectorDone !== row.vector_done) ||
+                (row.vectorized_at != null && row.vectorized_at !== file.vectorizedAt) ||
                 (row.parsed_at &&
                   Date.parse(row.parsed_at) > Date.parse(file.parsedAt ?? "1970-01-01"))),
           ),
       );
       if (!relevant.length) return;
-      if (relevant.some((row) => row.status === "parsed" || row.status === "failed")) reload();
+      if (
+        relevant.some((row) => {
+          const file = current.current.files.find((file) => file.id === row.id)!;
+          return (
+            ((row.status === "unparsed" || row.status === "parsed" || row.status === "failed") &&
+              (file.parseStatus !== row.status ||
+                (row.parsed_at &&
+                  Date.parse(row.parsed_at) > Date.parse(file.parsedAt ?? "1970-01-01")))) ||
+            ((row.vector_status === "indexed" || row.vector_status === "failed") &&
+              (file.vectorStatus !== row.vector_status || file.vectorTaskId !== row.vector_task_id))
+          );
+        })
+      )
+        reload();
       else
         setState((old) => ({
           ...old,
           files: old.files.map((file) => {
             const update = relevant.find((row) => row.id === file.id);
-            return update ? { ...file, parseStatus: update.status } : file;
+            return update
+              ? {
+                  ...file,
+                  parseStatus: update.status,
+                  vectorStatus: update.vector_status ?? file.vectorStatus,
+                  vectorTaskId: update.vector_task_id ?? undefined,
+                  vectorDone: update.vector_done ?? file.vectorDone,
+                  vectorTotal: update.vector_total ?? file.vectorTotal,
+                  vectorError: update.vector_error ?? undefined,
+                  vectorizedAt: update.vectorized_at ?? undefined,
+                }
+              : file;
           }),
         }));
     });

@@ -3,7 +3,14 @@ import { beforeEach, afterEach, test } from "node:test";
 import { httpClient } from "../../../lib/http.ts";
 import { streamAgentChat } from "../../../apis/agents.ts";
 import { useAuthStore } from "../../../stores/auth.ts";
-import { ensureAgentChat, sendMessage, useAgentStore, resetAgents } from "../../../stores/agent.ts";
+import {
+  ensureAgentChat,
+  cancelMessage,
+  sendMessage,
+  editMessage,
+  useAgentStore,
+  resetAgents,
+} from "../../../stores/agent.ts";
 
 let interceptor;
 let handler;
@@ -123,4 +130,88 @@ test("failed runs can retry without duplicating the user message", async () => {
   await sendMessage("general", id, "重试同一问题");
   assert.equal(useAgentStore.getState().details[id].messages.length, 2);
   assert.equal(useAgentStore.getState().details[id].messages.at(-1).content, "成功回答");
+});
+
+test("stopping generation preserves partial text and clears the running state", async () => {
+  await ensureAgentChat("general");
+  const id = useAgentStore.getState().selected.general;
+  handler = async () => response(event({ type: "delta", text: "partial" }));
+  const unsubscribe = useAgentStore.subscribe((state) => {
+    if (state.details[id]?.messages.at(-1)?.content === "partial") cancelMessage(id);
+  });
+  try {
+    await sendMessage("general", id, "停止测试");
+    assert.equal(useAgentStore.getState().drafts[id].sending, false);
+    assert.equal(useAgentStore.getState().drafts[id].error, null);
+    assert.equal(useAgentStore.getState().details[id].messages.at(-1).status, "cancelled");
+    assert.equal(useAgentStore.getState().details[id].messages.at(-1).content, "partial");
+  } finally {
+    unsubscribe();
+  }
+});
+
+test("chat uses the Agent's current knowledge selection and sends numeric server IDs", async () => {
+  await ensureAgentChat("general");
+  const id = useAgentStore.getState().selected.general;
+  const seen = [];
+  handler = async (request) => {
+    seen.push(JSON.parse(request.data));
+    return response(event({ type: "done", content: "有引用的回答" }));
+  };
+  useAgentStore.setState((state) => ({
+    agents: state.agents.map((agent) =>
+      agent.code === "general" ? { ...agent, knowledge_base_ids: ["server-42"] } : agent,
+    ),
+  }));
+  await sendMessage("general", id, "检索关联知识库");
+  assert.deepEqual(seen[0].knowledge_base_ids, [42]);
+  useAgentStore.setState((state) => ({
+    agents: state.agents.map((agent) =>
+      agent.code === "general" ? { ...agent, knowledge_base_ids: [] } : agent,
+    ),
+  }));
+  await sendMessage("general", id, "不检索知识库");
+  assert.deepEqual(seen[1].knowledge_base_ids, []);
+});
+
+test("editing an earlier message regenerates from its preceding context without stale replies", async () => {
+  await ensureAgentChat("general");
+  const id = useAgentStore.getState().selected.general;
+  await sendMessage("general", id, "第一问");
+  await sendMessage("general", id, "第二问");
+  await sendMessage("general", id, "第三问");
+  const original = useAgentStore.getState().details[id].messages;
+  const requests = [];
+  handler = async (config) => {
+    requests.push(JSON.parse(config.data));
+    return response(event({ type: "done", content: "根据修改内容重新回答" }));
+  };
+  await editMessage("general", id, original[2].id, "修改后的第二问");
+  assert.deepEqual(
+    requests[0].messages.map((row) => row.content),
+    ["第一问", original[1].content, "修改后的第二问"],
+  );
+  const updated = useAgentStore.getState().details[id].messages;
+  assert.equal(updated.length, 4);
+  assert.equal(updated[2].content, "修改后的第二问");
+  assert.equal(updated[3].content, "根据修改内容重新回答");
+  await assert.rejects(editMessage("general", id, updated[1].id, "不能编辑助手"), /用户消息/);
+  await assert.rejects(editMessage("product", id, updated[0].id, "错误 Agent"), /不匹配/);
+  await assert.rejects(editMessage("general", id, updated[0].id, "  "), /请输入/);
+  assert.equal(useAgentStore.getState().details[id].messages.length, 4);
+});
+
+test("failed edited messages can retry without restoring the stale continuation", async () => {
+  await ensureAgentChat("general");
+  const id = useAgentStore.getState().selected.general;
+  await sendMessage("general", id, "原问题");
+  const originalId = useAgentStore.getState().details[id].messages[0].id;
+  handler = async () => response(event({ type: "error", message: "临时故障" }));
+  await assert.rejects(editMessage("general", id, originalId, "修改后的问题"), /临时故障/);
+  handler = async () => response(event({ type: "done", content: "重试成功" }));
+  await sendMessage("general", id, "修改后的问题");
+  const messages = useAgentStore.getState().details[id].messages;
+  assert.equal(messages.length, 2);
+  assert.equal(messages[0].content, "修改后的问题");
+  assert.equal(messages[1].content, "重试成功");
 });

@@ -56,3 +56,9 @@ MINUTES_WORKER_ENABLED = os.environ.get("MINUTES_WORKER_ENABLED", "1") == "1"
 # ---- 文档解析任务 ----
 DOCUMENT_PARSE_WORKER_ENABLED = os.environ.get("DOCUMENT_PARSE_WORKER_ENABLED", "1") == "1"
 DOCUMENT_PARSE_TIMEOUT = float(os.environ.get("DOCUMENT_PARSE_TIMEOUT", "1200"))
+
+# Agent 流式请求的最长等待秒数，应大于 Sidecar 模型调用总超时。
+AGENT_REQUEST_TIMEOUT = float(os.environ.get("AGENT_REQUEST_TIMEOUT", "210"))
+
+# 是否运行知识库向量化任务；队列与进度保存在 PostgreSQL。
+DOCUMENT_VECTOR_WORKER_ENABLED = os.environ.get("DOCUMENT_VECTOR_WORKER_ENABLED", "1") == "1"
