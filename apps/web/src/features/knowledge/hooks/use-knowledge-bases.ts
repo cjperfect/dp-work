@@ -16,11 +16,6 @@ export function useKnowledgeBases(enabled = true) {
     }
     if (!enabled) return;
     void loadKnowledgeBases(accountId);
-    const refresh = () => {
-      void loadKnowledgeBases(accountId, true);
-    };
-    window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
   }, [accountId, enabled]);
   const current = state.accountId === accountId;
   return {

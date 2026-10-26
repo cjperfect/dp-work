@@ -140,18 +140,6 @@ export function useWorkspace(id: string | undefined) {
       alive = false;
     };
   }, [id, accountId, editable]);
-  useEffect(() => {
-    if (!id || !accountId) return;
-    let alive = true;
-    const refresh = () => {
-      void loadWorkspace(accountId, id, () => alive).catch(() => {});
-    };
-    window.addEventListener("focus", refresh);
-    return () => {
-      alive = false;
-      window.removeEventListener("focus", refresh);
-    };
-  }, [id, accountId]);
   const change = useCallback(
     (update: (current: Draft) => Draft) => {
       if (!id || !accountId || !editable) return;

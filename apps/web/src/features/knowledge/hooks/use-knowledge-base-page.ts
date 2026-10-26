@@ -69,11 +69,8 @@ export function useKnowledgeBasePage(
 
   useEffect(() => {
     void reload();
-    const refresh = () => void reload();
-    window.addEventListener("focus", refresh);
     return () => {
       version.current += 1;
-      window.removeEventListener("focus", refresh);
     };
   }, [reload]);
 

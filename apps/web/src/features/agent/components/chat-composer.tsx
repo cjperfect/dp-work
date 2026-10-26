@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ComposerPrimitive, useAui, useAuiState } from "@assistant-ui/react";
 import { BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { flushDraft, setDraftText, useAgentStore } from "@/stores/agent";
+import { flushDraft, sendMessage, setDraftText, useAgentStore } from "@/stores/agent";
 import { useAgentCode } from "@/features/agent/hooks/use-agent-code";
 
 export function ChatComposerInput({ autoFocus }: { autoFocus: boolean }) {
@@ -52,12 +52,12 @@ export function ChatSaveError() {
             variant="outline"
             onClick={() => {
               if (id)
-                void flushDraft(code, id)
+                void (draft?.pending ? sendMessage(code, id, draft.text) : flushDraft(code, id))
                   .then(() => setError(null))
                   .catch((cause) => setError(cause instanceof Error ? cause.message : "重试失败"));
             }}
           >
-            重试保存
+            重试
           </Button>
         </div>
       )}

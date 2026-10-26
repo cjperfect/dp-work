@@ -155,7 +155,7 @@ function DocumentForm({
           localAccountId(useAuthStore.getState().user) === accountId
         ) {
           await navigate({
-            to: "/knowledge/$kbId/edit/$fileId",
+            to: "/knowledge/$kbId/files/$fileId",
             params: { kbId: base.id, fileId: file.id },
             replace: true,
           });

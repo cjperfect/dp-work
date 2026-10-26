@@ -49,12 +49,25 @@ function interceptRequest(config: InternalAxiosRequestConfig): InternalAxiosRequ
 }
 
 /** 处理登录失效并提取统一响应中的业务数据。 */
-function interceptResponse(response: AxiosResponse): AxiosResponse {
-  const { config, status, data: body } = response;
+async function interceptResponse(response: AxiosResponse): Promise<AxiosResponse> {
+  const { config, status } = response;
+  let body = response.data;
+  if (
+    config.responseType === "stream" &&
+    (status < 200 || status >= 300) &&
+    typeof body?.getReader === "function"
+  ) {
+    try {
+      body = await new Response(body).json();
+    } catch {
+      body = null;
+    }
+  }
   const token = config.sessionToken ?? null;
   if (config.requiresAuth !== false && status === 401 && getStoredToken() === token)
     notifyUnauthorized(token);
-  if (status >= 200 && status < 300 && config.responseType === "blob") return response;
+  if (status >= 200 && status < 300 && ["blob", "stream"].includes(config.responseType ?? ""))
+    return response;
   if (
     status < 200 ||
     status >= 300 ||

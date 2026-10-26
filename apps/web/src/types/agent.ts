@@ -22,6 +22,7 @@ export type ChatThread = {
   updated_at: string;
 };
 export type ChatMessage = {
+  status?: "streaming" | "complete" | "failed" | "cancelled";
   id: string;
   seq: number;
   role: "user" | "assistant";

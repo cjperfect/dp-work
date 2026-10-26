@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { httpClient } from "../../../lib/http.ts";
 import { afterEach, beforeEach, test } from "node:test";
 import { useAuthStore } from "../../../stores/auth.ts";
 import {
@@ -14,12 +15,30 @@ import {
   useAgentStore,
 } from "../../../stores/agent.ts";
 
+let streamInterceptor;
 beforeEach(() => {
+  streamInterceptor = httpClient.interceptors.request.use((config) => {
+    config.adapter = async (request) => ({
+      data: new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode('data: {"type":"done","content":"测试回答"}\n\n'),
+          );
+          controller.close();
+        },
+      }),
+      status: 200,
+      statusText: "OK",
+      config: request,
+      headers: {},
+    });
+    return config;
+  });
   useAuthStore.setState({ user: { id: 123, username: "tester" } });
   resetAgents();
 });
 
-test("mock replies and conversation selection survive reinitializing the page", async () => {
+test("Agent replies and conversation selection survive reinitializing the page", async () => {
   const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
   const values = new Map();
   Object.defineProperty(globalThis, "localStorage", {
@@ -32,13 +51,13 @@ test("mock replies and conversation selection survive reinitializing the page", 
   try {
     await ensureAgentChat("general");
     const id = useAgentStore.getState().selected.general;
-    await sendMessage("general", id, "保存这段模拟对话");
+    await sendMessage("general", id, "保存这段对话");
     assert.equal(useAgentStore.getState().details[id].messages.length, 2);
     resetAgents();
     await ensureAgentChat("general");
     const restored = useAgentStore.getState();
     assert.equal(restored.selected.general, id);
-    assert.equal(restored.details[id].messages[0].content, "保存这段模拟对话");
+    assert.equal(restored.details[id].messages[0].content, "保存这段对话");
     assert.equal(restored.details[id].messages[1].role, "assistant");
   } finally {
     if (original) Object.defineProperty(globalThis, "localStorage", original);
@@ -46,6 +65,7 @@ test("mock replies and conversation selection survive reinitializing the page", 
   }
 });
 afterEach(() => {
+  httpClient.interceptors.request.eject(streamInterceptor);
   resetAgents();
   useAuthStore.setState({ user: null });
 });

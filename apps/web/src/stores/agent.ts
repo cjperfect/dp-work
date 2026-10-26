@@ -1,8 +1,11 @@
+import { streamAgentChat } from "@/apis/agents";
+import { useAppStore } from "@/stores/app";
+import { useAgentModelStore } from "@/stores/agent-models";
 import { readMock, writeMock } from "@/lib/mock-storage";
 import { create } from "zustand";
 import { useAuthStore } from "@/stores/auth";
 import type { AgentId } from "@/interfaces/app";
-import type { AgentConfig, ChatThread, Skill, ThreadDetail } from "@/types/agent";
+import type { AgentConfig, ChatThread, Skill, ThreadDetail, ChatMessage } from "@/types/agent";
 import { AGENTS } from "@/features/agent/constants/agents";
 export type DraftState = {
   text: string;
@@ -42,7 +45,12 @@ const empty = (): State => ({
 });
 export const useAgentStore = create<State>(() => empty());
 useAgentStore.subscribe((state) => {
-  if (!state.owner || !state.agents.length) return;
+  if (
+    !state.owner ||
+    !state.agents.length ||
+    Object.values(state.drafts).some((draft) => draft.sending)
+  )
+    return;
   try {
     writeMock(`agents:${state.owner}`, {
       ...state,
@@ -63,6 +71,7 @@ useAgentStore.subscribe((state) => {
 });
 let bootstrap: Promise<void> | null = null;
 let generation = 0;
+const runs = new Map<string, AbortController>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 const saves = new Map<string, Promise<void>>();
 const creates = new Map<string, Promise<string>>();
@@ -94,6 +103,8 @@ export function currentOwner() {
 export function resetAgents() {
   generation++;
   bootstrap = null;
+  for (const controller of runs.values()) controller.abort();
+  runs.clear();
   for (const timer of timers.values()) clearTimeout(timer);
   timers.clear();
   useAgentStore.setState(empty());
@@ -412,104 +423,189 @@ export function flushDraft(code: AgentId, id: string): Promise<void> {
     .catch(() => {});
   return operation;
 }
+/** 停止当前会话的生成，并中断 API 和 Sidecar 的上游流。 */
+export function cancelMessage(id: string) {
+  runs.get(id)?.abort();
+}
+
 export async function sendMessage(code: AgentId, id: string, text: string) {
   const owner = currentOwner();
+  if (!text.trim()) throw new Error("请输入消息。");
   const initial = useAgentStore.getState().drafts[id];
   if (!initial) throw new Error("会话尚未加载。");
-  if (initial.sending) throw new Error("消息正在保存。");
+  if (initial.sending) throw new Error("Agent 正在回复。");
+  const agent = useAgentStore.getState().agents.find((row) => row.code === code);
+  if (!agent || useAgentStore.getState().details[id]?.thread.agent_id !== agent.id)
+    throw new Error("会话与 Agent 不匹配。");
   if (initial.text !== text) setDraftText(id, text);
+  const controller = new AbortController();
+  runs.set(id, controller);
   useAgentStore.setState((state) => ({
     drafts: { ...state.drafts, [id]: { ...state.drafts[id], sending: true, error: null } },
   }));
+  let replyId = "";
   try {
     await flushDraft(code, id);
     const state = useAgentStore.getState();
+    if (!owned(owner) || !state.details[id]) return;
     const draft = state.drafts[id];
-    const detail = state.details[id];
-    if (!owned(owner) || !draft || !detail) throw new Error("登录状态已改变，请重试。");
-    const signature = JSON.stringify([
-      text,
-      [...draft.ids].sort((a, b) => String(a).localeCompare(String(b))),
-    ]);
+    const signature = JSON.stringify([text, [...draft.ids].sort()]);
     const pending =
       draft.pending?.signature === signature
         ? draft.pending
         : { id: crypto.randomUUID(), signature };
-    useAgentStore.setState((state) => ({
-      drafts: { ...state.drafts, [id]: { ...state.drafts[id], pending } },
-    }));
-    const result = (() => {
-      // 业务 API 已下线：本地追加用户消息（无 AI 回复），不发起请求。
-      const current = useAgentStore.getState().details[id];
-      const now = new Date().toISOString();
-      return {
-        thread: {
-          ...current.thread,
-          title:
-            current.messages.length === 0 && current.thread.title === "新会话"
-              ? text.slice(0, 24)
-              : current.thread.title,
-          draft: "",
-          draft_revision: current.thread.draft_revision + 1,
-          updated_at: now,
+    replyId = `${pending.id}-reply`;
+    const history = state.details[id].messages.filter(
+      (row) => row.id !== pending.id && row.id !== replyId,
+    );
+    const now = new Date().toISOString();
+    const context: ChatMessage["context"] = {
+      knowledge_bases: [],
+      skills: [],
+      agent: {
+        id: agent.id,
+        name: agent.name,
+        department: agent.department,
+        revision: agent.revision,
+      },
+    };
+    const detail: ThreadDetail = {
+      ...state.details[id],
+      thread: {
+        ...state.details[id].thread,
+        title:
+          !history.length && state.details[id].thread.title === "新会话"
+            ? text.slice(0, 24)
+            : state.details[id].thread.title,
+        updated_at: now,
+      },
+      messages: [
+        ...history,
+        {
+          id: pending.id,
+          seq: history.length + 1,
+          role: "user",
+          content: text,
+          created_at: now,
+          context,
+          status: "complete",
         },
-        knowledge_base_ids: draft.ids,
+        {
+          id: replyId,
+          seq: history.length + 2,
+          role: "assistant",
+          content: "",
+          created_at: now,
+          context,
+          status: "streaming",
+        },
+      ],
+    };
+    useAgentStore.setState((current) => ({
+      lists: updateList(current, code, detail.thread),
+      details: { ...current.details, [id]: detail },
+      drafts: { ...current.drafts, [id]: { ...current.drafts[id], pending } },
+    }));
+    const updateReply = (content: string, status: ChatMessage["status"]) => {
+      if (!owned(owner) || !useAgentStore.getState().details[id]) return;
+      useAgentStore.setState((current) => ({
+        details: {
+          ...current.details,
+          [id]: {
+            ...current.details[id],
+            messages: current.details[id].messages.map((row) =>
+              row.id === replyId ? { ...row, content, status } : row,
+            ),
+          },
+        },
+      }));
+    };
+    let accumulated = "";
+    const selectedModel = useAppStore.getState().currentModel;
+    const model = useAgentModelStore.getState().data?.models.some((row) => row.id === selectedModel)
+      ? selectedModel
+      : undefined;
+    const content = await streamAgentChat(
+      {
+        agent_code: code,
+        thread_id: id,
+        model,
         messages: [
-          ...current.messages,
-          {
-            id: pending.id,
-            seq: current.messages.length + 1,
-            role: "user" as const,
-            content: text,
-            created_at: now,
-            context: {
-              knowledge_bases: [],
-              skills: [],
-              agent: { id: 0, name: "", department: "", revision: 0 },
-            },
-          },
-          {
-            id: `${pending.id}-reply`,
-            seq: current.messages.length + 2,
-            role: "assistant" as const,
-            content: `已收到你的消息。\n\n这是用于体验聊天流程的模拟回复。你可以继续输入、切换会话，或在 Agent 配置中调整知识库与技能。\n\n- 当前 Agent：${state.agents.find((agent) => agent.code === code)?.name ?? "通用 Agent"}\n- 本次消息：${text}`,
-            created_at: now,
-            context: {
-              knowledge_bases: [],
-              skills: [],
-              agent: { id: 0, name: "", department: "", revision: 0 },
-            },
-          },
+          ...history
+            .filter(
+              (row) =>
+                row.content &&
+                (row.role === "user" ||
+                  row.status === "complete" ||
+                  (!row.status && !row.content.includes("这是用于体验聊天流程的模拟回复"))),
+            )
+            .map((row) => ({ role: row.role, content: row.content })),
+          { role: "user", content: text },
         ],
+      },
+      (delta) => {
+        accumulated += delta;
+        updateReply(accumulated, "streaming");
+      },
+      controller.signal,
+    );
+    updateReply(content, "complete");
+    if (!owned(owner) || !useAgentStore.getState().details[id]) return;
+    useAgentStore.setState((current) => {
+      const thread = {
+        ...current.details[id].thread,
+        draft: "",
+        draft_revision: current.details[id].thread.draft_revision + 1,
+        updated_at: new Date().toISOString(),
       };
-    })();
-    if (!owned(owner)) return;
+      return {
+        lists: updateList(current, code, thread),
+        details: { ...current.details, [id]: { ...current.details[id], thread } },
+        drafts: {
+          ...current.drafts,
+          [id]: {
+            ...current.drafts[id],
+            text: "",
+            sending: false,
+            pending: null,
+            version: 0,
+            savedVersion: 0,
+          },
+        },
+      };
+    });
+  } catch (error) {
+    if (!owned(owner) || !useAgentStore.getState().details[id]) return;
+    const cancelled = controller.signal.aborted;
     useAgentStore.setState((state) => ({
-      lists: updateList(state, code, result.thread),
-      details: { ...state.details, [id]: result },
+      details: {
+        ...state.details,
+        [id]: {
+          ...state.details[id],
+          messages: state.details[id].messages.map((row) =>
+            row.id === replyId
+              ? {
+                  ...row,
+                  status: cancelled ? "cancelled" : "failed",
+                  content: row.content || (cancelled ? "已停止生成。" : "生成失败，请重试。"),
+                }
+              : row,
+          ),
+        },
+      },
       drafts: {
         ...state.drafts,
         [id]: {
-          text: result.thread.draft,
-          ids: result.knowledge_base_ids,
-          version: 0,
-          savedVersion: 0,
-          error: null,
-          saving: false,
+          ...state.drafts[id],
           sending: false,
-          pending: null,
+          error: cancelled ? null : message(error),
+          ...(cancelled ? { text: "", pending: null } : {}),
         },
       },
     }));
-  } catch (error) {
-    if (owned(owner))
-      useAgentStore.setState((state) => ({
-        drafts: {
-          ...state.drafts,
-          [id]: { ...state.drafts[id], sending: false, error: message(error) },
-        },
-      }));
-    throw error;
+    if (!cancelled) throw error;
+  } finally {
+    if (runs.get(id) === controller) runs.delete(id);
   }
 }
 export async function renameThread(code: AgentId, id: string, title: string) {
@@ -541,6 +637,7 @@ export async function renameThread(code: AgentId, id: string, title: string) {
 }
 export async function removeThread(code: AgentId, id: string) {
   const owner = currentOwner();
+  cancelMessage(id);
   // 业务 API 已下线：仅本地移除。
   if (!owned(owner)) return;
   useAgentStore.setState((state) => {

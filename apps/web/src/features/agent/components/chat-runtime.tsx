@@ -14,6 +14,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useAppStore } from "@/stores/app";
 import { useAgentCode } from "@/features/agent/hooks/use-agent-code";
 import {
+  cancelMessage,
   createThread,
   getThreadAgentCode,
   removeThread,
@@ -110,6 +111,10 @@ function useThreadRuntimeHook() {
     // 仅发送中禁用，避免重复提交。
     isLoading: !!remoteId && !detail,
     isDisabled: !!draft?.sending,
+    isRunning: !!draft?.sending,
+    onCancel: async () => {
+      if (remoteId) cancelMessage(remoteId);
+    },
     onNew: async (message: AppendMessage) => {
       if (message.attachments?.length) throw new Error("附件上传尚未接入。");
       let id = aui.threadListItem.getState().remoteId;

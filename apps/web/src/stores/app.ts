@@ -5,7 +5,7 @@ export const useAppStore = create<AppStore>((set) => ({
   view: "agent",
   agentId: "general",
   enabledKbs: [],
-  currentModel: "gpt-4o",
+  currentModel: "",
   meetingTitle: null,
   meetingStatus: "live",
   threadAgent: {},

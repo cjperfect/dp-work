@@ -3,14 +3,13 @@ import { ParsedDocumentEditor } from "./parsed-document-editor";
 import { localAccountId } from "@/features/auth/lib/auth";
 import { useParams } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
-import { useState, useRef, useCallback, type ChangeEvent } from "react";
+import { useState, useRef, useEffect, useCallback, type ChangeEvent } from "react";
 import {
   ArrowLeft,
   ChevronRight,
   Info,
   FilePlus2,
   FileText,
-  Pencil,
   ScanText,
   Network,
   Trash2,
@@ -34,7 +33,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent } from "@/components/ui/popover";
-import { deleteKnowledgeDocument, uploadKnowledgeDocument } from "@/stores/knowledge";
+import {
+  deleteKnowledgeDocument,
+  saveKnowledgeDocument,
+  uploadKnowledgeDocument,
+} from "@/stores/knowledge";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useKnowledgeDocuments } from "@/features/knowledge/hooks/use-knowledge-documents";
 import { useKnowledgeBases } from "@/features/knowledge/hooks/use-knowledge-bases";
@@ -42,6 +46,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useDocumentPdf } from "@/features/knowledge/hooks/use-document-pdf";
 import { useDocumentParsing, parseStatusLabel } from "../hooks/use-document-parsing";
 import { ParseDocumentButton } from "./parse-document-button";
+import { EditableSourceEditor } from "./editable-source-editor";
 import { PdfPreview } from "@/features/knowledge/components/pdf-preview";
 import { LazyBlockNoteEditor as BlockNoteEditor } from "@/components/editor/lazy-blocknote-editor";
 import { getKbFiles, removeUploadedFile } from "@/stores/knowledge-upload";
@@ -52,6 +57,12 @@ import {
 } from "@/features/knowledge/constants/knowledge-data";
 
 export { KnowledgePage } from "./knowledge-list-page";
+
+/** 文档解析状态标签配色：未解析（中性灰）、已解析（绿）、已向量化（蓝） */
+const PARSE_STATUS_TONE: Record<string, string> = {
+  已解析: "bg-emerald-500/10 text-emerald-600",
+  已向量化: "bg-sky-500/10 text-sky-600",
+};
 
 /** 知识库详情页（/knowledge/$kbId）：文件列表，支持上传 md / pdf */
 export function KnowledgeBaseDetailPage() {
@@ -355,18 +366,17 @@ export function KnowledgeBaseDetailPage() {
                   }
                 >
                   <Link
-                    to={
-                      file.source === "editor" && !file.id.startsWith("meeting-")
-                        ? "/knowledge/$kbId/edit/$fileId"
-                        : "/knowledge/$kbId/files/$fileId"
-                    }
+                    to="/knowledge/$kbId/files/$fileId"
                     params={{ kbId: kb.id, fileId: file.id }}
                     title={file.name}
                     className="group relative flex h-full min-w-0 flex-col items-center rounded-2xl px-3 pb-3 pt-9 text-center outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <span
                       title={file.parseError ?? parseStatusLabel(file)}
-                      className="absolute right-2 top-2 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+                      className={`absolute right-2 top-2 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
+                        PARSE_STATUS_TONE[parseStatusLabel(file)] ??
+                        "bg-muted text-muted-foreground"
+                      }`}
                     >
                       {parseStatusLabel(file)}
                     </span>
@@ -502,6 +512,42 @@ export function KnowledgeFilePage() {
   const documents = useKnowledgeDocuments(kbId);
   const file = [...documents.files, ...getKbFiles(kbId)].find((f) => f.id === fileId);
   const pdf = useDocumentPdf(kbId, file);
+  const accountId = useAuthStore((state) => localAccountId(state.user));
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const titleInput = useRef<HTMLInputElement>(null);
+  const titleButton = useRef<HTMLButtonElement>(null);
+  const cancelTitle = useRef(false);
+
+  useEffect(() => {
+    if (editingTitle) {
+      titleInput.current?.focus();
+      titleInput.current?.select();
+    }
+  }, [editingTitle]);
+
+  const displayTitle = file?.name.replace(/\.md$/i, "").trim() || "未命名文档";
+
+  async function finishTitle() {
+    setEditingTitle(false);
+    if (cancelTitle.current || !file) {
+      cancelTitle.current = false;
+      return;
+    }
+    const next = titleDraft.trim().replace(/\.md$/i, "").trim() || "未命名文档";
+    if (next === displayTitle || !accountId) return;
+    try {
+      await saveKnowledgeDocument(accountId, kbId, {
+        id: file.id,
+        title: next,
+        content: file.content ?? "",
+        blocks: file.blocks,
+        status: "published",
+      });
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "标题保存失败，请重试。");
+    }
+  }
   const [parsedSaveBlocked, setParsedSaveBlocked] = useState(false);
   const onParsedSaveStateChange = useCallback(
     (blocked: boolean) => setParsedSaveBlocked(blocked),
@@ -553,7 +599,43 @@ export function KnowledgeFilePage() {
             <div className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
               <Icon className="size-4" />
             </div>
-            <h1 className="truncate text-xl font-semibold tracking-tight">{file.name}</h1>
+            {file.source === "editor" ? (
+              editingTitle ? (
+                <Input
+                  ref={titleInput}
+                  aria-label="文档标题"
+                  value={titleDraft}
+                  onChange={(event) => setTitleDraft(event.target.value)}
+                  onBlur={() => void finishTitle()}
+                  onKeyDown={(event) => {
+                    if (event.nativeEvent.isComposing) return;
+                    if (event.key === "Enter" || event.key === "Escape") {
+                      event.preventDefault();
+                      cancelTitle.current = event.key === "Escape";
+                      event.currentTarget.blur();
+                    }
+                  }}
+                  placeholder="未命名文档"
+                  className="h-8 max-w-md text-xl! font-semibold"
+                />
+              ) : (
+                <button
+                  ref={titleButton}
+                  type="button"
+                  aria-label={`修改文档标题：${displayTitle}`}
+                  title="点击修改标题"
+                  className="max-w-full truncate rounded-sm py-0.5 text-xl font-semibold tracking-tight outline-none hover:text-foreground/75 focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => {
+                    setTitleDraft(displayTitle);
+                    setEditingTitle(true);
+                  }}
+                >
+                  {displayTitle}
+                </button>
+              )
+            ) : (
+              <h1 className="truncate text-xl font-semibold tracking-tight">{file.name}</h1>
+            )}
           </div>
           <p className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
             <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[10px]">
@@ -563,7 +645,7 @@ export function KnowledgeFilePage() {
             <span>
               {file.uploader} {file.source === "editor" ? "创建" : "上传"}
             </span>
-            <span>更新于 {file.updatedAt}</span>
+            <span>更新于 {formatDateTime(file.updatedAt)}</span>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -580,21 +662,6 @@ export function KnowledgeFilePage() {
             <Network className="size-4" />
             向量化
           </Button>
-          {file.source === "editor" && (
-            <Button
-              variant="outline"
-              nativeButton={false}
-              render={
-                <Link
-                  to="/knowledge/$kbId/edit/$fileId"
-                  params={{ kbId: kb.id, fileId: file.id }}
-                />
-              }
-            >
-              <Pencil className="size-4" />
-              编辑文档
-            </Button>
-          )}
         </div>
       </header>
 
@@ -605,7 +672,18 @@ export function KnowledgeFilePage() {
             <TabsTrigger value="rendered">解析后文档</TabsTrigger>
           </TabsList>
           <TabsContent value="source" className="min-h-0 flex-1 overflow-auto">
-            {isPdf ? (
+            {file.source === "editor" ? (
+              accountId ? (
+                <EditableSourceEditor accountId={accountId} baseId={kb.id} file={file} />
+              ) : (
+                <BlockNoteEditor
+                  initialContent={file.blocks}
+                  markdown={file.blocks ? undefined : file.content}
+                  editable={false}
+                  className="px-4 py-4"
+                />
+              )
+            ) : isPdf ? (
               pdf.url ? (
                 <PdfPreview url={pdf.url} />
               ) : (
@@ -661,6 +739,15 @@ export function KnowledgeFilePage() {
       </section>
     </div>
   );
+}
+
+/** 将 ISO 时间格式化为本地可读时间（YYYY-MM-DD HH:mm）。 */
+function formatDateTime(value?: string): string {
+  if (!value) return "未知";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function KnowledgeLoadState({ error, reload }: { error: string | null; reload: () => void }) {
