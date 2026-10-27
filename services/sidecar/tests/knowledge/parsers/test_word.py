@@ -1,14 +1,14 @@
 """验证 DOCX 顺序、标题、样式、列表、表格与内部接口。"""
 import asyncio
+import base64
 import io
 import zipfile
 
 import pytest
 from docx import Document
-from httpx import ASGITransport, AsyncClient
 
 from src import config
-from src.main import app
+from src.transport.handlers import dispatch, OperationError
 from src.knowledge.parsers.word import parse_word
 from src.knowledge.parsers import dispatcher, word
 
@@ -61,18 +61,15 @@ def test_invalid_empty_and_unpacked_limits(monkeypatch):
         parse_word(stream.getvalue())
 
 
-def test_docx_process_and_internal_auth(tmp_path, monkeypatch):
+def test_docx_process_and_rpc_dispatch(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "TEMP_DIR", tmp_path)
-    monkeypatch.setattr(config, "SIDECAR_INTERNAL_TOKEN", "test-internal")
     async def case():
         result = await dispatcher.parse_document(sample_word(), "docx")
         assert result["parser"] == "python-docx" and "Alpha" in result["content"]
         assert not list((tmp_path / "parsing").iterdir())
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://sidecar") as client:
-            path = "/internal/knowledge/parse?file_type=docx"
-            assert (await client.post(path, content=sample_word())).status_code == 401
-            response = await client.post(path, headers={"X-Internal-Token": "test-internal"}, content=sample_word())
-            assert response.status_code == 200, response.text
-            assert response.json()["blocks"][4]["type"] == "table"
-            assert (await client.post(path, headers={"X-Internal-Token": "test-internal"}, content=b"invalid")).status_code == 422
+        response = await dispatch("knowledge.parse", {"file_type": "docx", "content_base64": base64.b64encode(sample_word()).decode()}, None)
+        assert response["blocks"][4]["type"] == "table"
+        with pytest.raises(OperationError) as error:
+            await dispatch("knowledge.parse", {"file_type": "docx", "content_base64": base64.b64encode(b"invalid").decode()}, None)
+        assert error.value.status == 422
     asyncio.run(case())

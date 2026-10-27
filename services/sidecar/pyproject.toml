@@ -15,8 +15,11 @@ dependencies = [
     "websockets>=15,<18",
     "langchain-community>=0.4,<0.5",
     "langchain>=1,<2",
+    "deepagents==0.7.32",
+    "PyYAML>=6,<7",
     "langchain-text-splitters>=1,<2",
     "langgraph>=1,<2",
+    "langgraph-checkpoint-sqlite>=3,<4",
     "langchain-openai>=1,<2",
     "pymupdf>=1.26,<2",
     "pymupdf4llm>=0.0.17,<1",
@@ -28,6 +31,7 @@ include = ["src*"]
 
 [tool.setuptools.package-data]
 "src.meetings" = ["prompts/*.md"]
+"src.agents" = ["templates/*/AGENT.md"]
 
 [project.optional-dependencies]
 test = ["pytest>=8"]

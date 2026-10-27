@@ -4,6 +4,13 @@ import json
 from urllib.parse import parse_qs
 
 ROUTES = {
+    ("POST", "/internal/agents/config/update"): "agents.config.update",
+    ("POST", "/internal/agents/config"): "agents.config",
+    ("POST", "/internal/skills/descriptions"): "skills.descriptions",
+    ("POST", "/internal/skills/search"): "skills.search",
+    ("POST", "/internal/skills/list"): "skills.list",
+    ("POST", "/internal/skills/install"): "skills.install",
+    ("POST", "/internal/skills/uninstall"): "skills.uninstall",
     ("POST", "/internal/agents/chat"): "agents.chat",
     ("POST", "/internal/agents/title"): "agents.title",
     ("GET", "/internal/agents/models"): "agents.models",

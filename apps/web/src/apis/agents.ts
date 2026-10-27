@@ -83,3 +83,13 @@ export function generateAgentTitle(input: {
 }): Promise<{ title: string }> {
   return request("/api/agents/title", { method: "POST", data: input, timeout: 45000 });
 }
+
+export type AgentRuntimeConfig = { agent_code: AgentId; prompt: string; prompt_file: string };
+export const getAgentConfig = (code: AgentId, signal?: AbortSignal) =>
+  request<AgentRuntimeConfig>("/api/agents/config", { params: { agent_code: code }, signal });
+
+export const updateAgentConfig = (code: AgentId, prompt: string, expectedPrompt: string) =>
+  request<AgentRuntimeConfig>("/api/agents/config", {
+    method: "PUT",
+    data: { agent_code: code, prompt, expected_prompt: expectedPrompt },
+  });

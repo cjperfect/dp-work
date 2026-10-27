@@ -1,6 +1,9 @@
 """Agent 业务接口，前端无需直接访问 Sidecar。"""
 from typing import Annotated
 from fastapi import APIRouter, Depends
+from typing import Literal
+from pydantic import BaseModel, Field
+from src.infrastructure.sidecar.service import sidecar
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 from src.core.responses import ApiResponse, ok
@@ -36,3 +39,21 @@ async def chat(body: AgentRequest, user: CurrentUser):
 async def generate_title(body: TitleRequest, user: CurrentUser):
     """验证登录后调用 LLM 生成简短标题。"""
     return ok(await service.generate_title(body, user.id))
+
+
+@router.get("/config", response_model=ApiResponse[dict], summary="读取当前设备 Agent 配置")
+async def agent_config(user: CurrentUser, agent_code: Literal["general", "product"]):
+    """返回当前 Agent 工作区的提示词。"""
+    return ok(await sidecar("/agents/config", {"agent_code": agent_code}))
+
+
+class AgentConfigUpdate(BaseModel):
+    agent_code: Literal["general", "product"]
+    prompt: str = Field(min_length=1, max_length=65536)
+    expected_prompt: str = Field(min_length=1, max_length=65536)
+
+
+@router.put("/config", response_model=ApiResponse[dict], summary="修改当前设备 Agent 配置")
+async def update_agent_config(body: AgentConfigUpdate, user: CurrentUser):
+    """将提示词保存到当前设备的 Agent 工作区。"""
+    return ok(await sidecar("/agents/config/update", body.model_dump()))

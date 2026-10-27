@@ -139,7 +139,7 @@ ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 
 `ARK_API_KEY` 独立于 ASR 的 `VOLC_API_KEY`。修改配置后重启 Sidecar。实际模型访问权限和效果需配置有效 Key 后验证，接入测试不调用付费模型。
 
-API 通过 `POST /internal/meetings/minutes/generate` 调用 Sidecar，使用 `X-Internal-Token` 鉴权；两个服务的 `SIDECAR_INTERNAL_TOKEN` 必须相同。内部接口不供 Renderer 调用，生产环境应限制为 API 可访问。
+API 通过设备通道将 `meetings.minutes.generate` 任务交给 Electron，再以 stdin/stdout JSON-RPC 调用本机 Sidecar。Sidecar 不提供业务 HTTP 接口。`SIDECAR_INTERNAL_TOKEN` 仍用于 Sidecar 向 API 的知识库检索回调，不是本机 HTTP 入口凭证。
 
 Sidecar 读取 `minutes-v1` 系统提示词，按片段顺序整理标题、会议时间、说话人和原始内容。结果以完整 Markdown 返回，并带实际模型、提示词版本、任务 ID 和原始内容版本。截断、空结果和缺少约定章节的结果不会作为成功纪要保存。
 
@@ -147,6 +147,6 @@ Sidecar 读取 `minutes-v1` 系统提示词，按片段顺序整理标题、会�
 
 ## 桌面子进程模式
 
-Electron 使用 `desktop_entry.py --stdio`（安装版 `dp-work-sidecar --stdio`）启动 Sidecar。普通业务通过 stdin/stdout JSON-RPC，日志写 stderr；ASR 音频仍使用本机 WebSocket。该模式的网络服务不注册 `/internal`，普通业务通过方法名直接分发到 `transport/handlers.py` 的处理函数，票据与 ASR 共用会话状态。
+Electron 使用 `desktop_entry.py --stdio`（安装版 `dp-work-sidecar --stdio`）启动 Sidecar。普通业务通过 stdin/stdout JSON-RPC，日志写 stderr；ASR 音频仍使用本机 WebSocket。网络服务只保留健康检查与 ASR WebSocket，不注册 `/internal`；普通业务通过方法名直接分发到 `transport/handlers.py` 的处理函数，票据与 ASR 共用会话状态。
 
-跨语言声明集中在 [packages/protocols](../../packages/protocols/README.md)：TS 导入编译后的类型/常量，Python 读取同一份 `protocol.json`。上文直接 HTTP 调用仅适用于独立 HTTP 兼容模式。
+跨语言声明集中在 [packages/protocols](../../packages/protocols/README.md)：TS 导入编译后的类型/常量，Python 读取同一份 `protocol.json`。业务请求只使用 JSON-RPC；单独运行 Uvicorn 仅能提供健康检查和 ASR WebSocket。

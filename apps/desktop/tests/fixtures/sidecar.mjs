@@ -39,6 +39,7 @@ if (process.env.CRASH_ALWAYS || (process.env.CRASH_FIRST && launch === 1))
   setTimeout(() => process.exit(12), 350);
 
 const pending = new Set();
+const installedSkills = new Map();
 const send = (value) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", ...value }) + "\n");
 readline.createInterface({ input: process.stdin }).on("line", (line) => {
   const { id, method, params } = JSON.parse(line);
@@ -57,6 +58,33 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
         instance_id: process.env.DP_SIDECAR_INSTANCE_ID,
       },
     });
+    return;
+  }
+  if (method.startsWith("skills.")) {
+    const rows = installedSkills.get(params.agent_code) ?? [];
+    const skill = {
+      id: "acme/repo@test-skill",
+      name: "test-skill",
+      source: "acme/repo",
+      description: "fixture",
+      url: "https://skills.sh/acme/repo/test-skill",
+    };
+    let result = { items: rows };
+    if (method === "skills.install") {
+      installedSkills.set(params.agent_code, [skill]);
+      result = skill;
+    }
+    if (method === "skills.uninstall") {
+      installedSkills.set(params.agent_code, []);
+      result = { removed: true };
+    }
+    if (method === "skills.search") result = { items: [skill] };
+    send({ method: "stream.head", params: { id, status: 200, content_type: "application/json" } });
+    send({
+      method: "stream.chunk",
+      params: { id, seq: 0, data: Buffer.from(JSON.stringify(result)).toString("base64") },
+    });
+    send({ id, result: { complete: true } });
     return;
   }
   const data =

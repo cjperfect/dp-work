@@ -1,12 +1,9 @@
 """个人服务配置、密钥存储及连接测试。"""
-from src.infrastructure.sidecar.transport import client as sidecar_client
-from src.infrastructure.sidecar.relay import DeviceOffline
+from src.infrastructure.sidecar.service import sidecar
 import json
 from typing import Literal
-import httpx
 from jwcrypto import jwe
 from sqlalchemy import func
-from src.core import config
 from src.core.exceptions import ApiError
 from src.core.responses import ApiCode
 from src.infrastructure.database import session
@@ -48,20 +45,6 @@ async def runtime(owner_id: int, kind: Kind) -> dict | None:
         return {**data, "api_key": unseal(encrypted, owner_id, kind)}
 
 
-async def sidecar(path: str, payload: dict | None = None) -> dict:
-    """调用可信执行服务，不转发上游敏感错误。"""
-    if config.SIDECAR_TRANSPORT != "device" and not config.SIDECAR_INTERNAL_TOKEN:
-        raise ApiError(ApiCode.INTERNAL_ERROR, "Sidecar 内部服务凭证尚未配置。", 503)
-    try:
-        async with sidecar_client(timeout=25) as client:
-            response = await client.request("GET" if payload is None else "POST",
-                config.SIDECAR_API_URL + "/internal" + path,
-                headers={"X-Internal-Token": config.SIDECAR_INTERNAL_TOKEN}, json=payload)
-        if response.status_code != 200:
-            raise ApiError(ApiCode.INTERNAL_ERROR, "执行服务暂不可用，请检查 Sidecar 连接。", 503)
-        return response.json()
-    except (httpx.HTTPError, ValueError) as cause:
-        raise ApiError(ApiCode.INTERNAL_ERROR, "无法连接 Sidecar，请稍后重试。", 503) from cause
 
 
 async def read(owner_id: int) -> dict:

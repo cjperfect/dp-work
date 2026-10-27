@@ -33,6 +33,7 @@ export class DeviceBridge {
     api: string,
     private readonly installation: string,
     private readonly executeLocal: (job: SidecarJob, signal: AbortSignal) => Promise<Response>,
+    private readonly onConnected: () => void = () => {},
   ) {
     this.api = apiBaseUrl(api);
   }
@@ -102,6 +103,7 @@ export class DeviceBridge {
             this.attempts = 0;
             clearTimeout(timeout);
             resolve();
+            this.onConnected();
             if (this.ping) clearInterval(this.ping);
             this.ping = setInterval(() => {
               if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" }));

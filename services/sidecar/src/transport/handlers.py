@@ -1,4 +1,4 @@
-"""按语义方法名分发业务操作，HTTP 与 JSON-RPC 共用。"""
+"""按语义方法名分发业务操作，供 JSON-RPC 调用。"""
 import asyncio
 import base64
 import binascii
@@ -23,6 +23,7 @@ from ..providers.settings import RuntimeConfig, defaults, test_connection
 
 
 class AgentInput(AgentRequest):
+    approval_resume: dict[str, dict] | None = None
     run_id: str | None = Field(default=None, pattern=r"^[a-fA-F0-9-]{36}$")
     retrieval_token: str | None = Field(default=None, repr=False, max_length=4096)
     runtime: RuntimeConfig | None = None
@@ -185,7 +186,107 @@ async def embed_texts(params, state):
         raise OperationError(502, str(cause) if isinstance(cause, EmbeddingError) else "向量化超时，请重试。") from cause
 
 
+class SkillsAgent(BaseModel):
+    agent_code: Literal["general", "product"]
+
+
+class SkillsSearch(BaseModel):
+    query: str = Field(default="", max_length=200)
+
+
+class SkillsDescriptions(BaseModel):
+    skill_ids: list[str] = Field(max_length=24)
+
+
+class SkillInstall(SkillsAgent):
+    source: str = Field(min_length=1, max_length=512)
+
+
+class SkillUninstall(SkillsAgent):
+    skill_id: str = Field(min_length=1, max_length=256)
+
+
+async def skill_operation(operation, params):
+    """将技能管理错误转换为可展示的业务错误。"""
+    from ..skills import service
+    try:
+        if operation == "descriptions":
+            from ..skills.descriptions import descriptions
+            body = SkillsDescriptions.model_validate(params)
+            return {"items": await descriptions(body.skill_ids)}
+        if operation == "search":
+            body = SkillsSearch.model_validate(params)
+            return {"items": await service.search(body.query)}
+        body = (SkillInstall if operation == "install" else SkillUninstall if operation == "uninstall" else SkillsAgent).model_validate(params)
+        if operation == "list":
+            return {"items": await service.file_operation(service.installed, body.agent_code)}
+        if operation == "install":
+            return await service.install(body.agent_code, body.source)
+        return await service.uninstall(body.agent_code, body.skill_id)
+    except service.SkillError as cause:
+        raise OperationError(cause.status, str(cause)) from cause
+
+
+async def skills_descriptions(params, state):
+    return await skill_operation("descriptions", params)
+
+
+async def skills_search(params, state):
+    return await skill_operation("search", params)
+
+
+async def skills_list(params, state):
+    return await skill_operation("list", params)
+
+
+async def skills_install(params, state):
+    return await skill_operation("install", params)
+
+
+async def skills_uninstall(params, state):
+    return await skill_operation("uninstall", params)
+
+
+class AgentConfigInput(BaseModel):
+    agent_code: Literal["general", "product"]
+
+
+async def agent_config(params, state):
+    """读取当前设备指定 Agent 的提示词配置。"""
+    from ..agents.context import read_prompt
+    body = AgentConfigInput.model_validate(params)
+    try:
+        prompt = await asyncio.to_thread(read_prompt, body.agent_code)
+    except ModelError as cause:
+        raise OperationError(400, str(cause)) from cause
+    return {"agent_code": body.agent_code, "prompt": prompt, "prompt_file": "AGENT.md"}
+
+
+class AgentConfigUpdate(AgentConfigInput):
+    prompt: str = Field(min_length=1, max_length=65536)
+    expected_prompt: str = Field(min_length=1, max_length=65536)
+
+
+async def agent_config_update(params, state):
+    """保存当前设备指定 Agent 的提示词。"""
+    from ..agents.context import save_prompt
+    body = AgentConfigUpdate.model_validate(params)
+    try:
+        prompt = await asyncio.to_thread(save_prompt, body.agent_code, body.prompt, body.expected_prompt)
+    except ModelError as cause:
+        status = 409 if cause.code == "AGENT_PROMPT_CONFLICT" else 500 if cause.code == "AGENT_PROMPT_SAVE_FAILED" else 400
+        raise OperationError(status, str(cause)) from cause
+    return {"agent_code": body.agent_code, "prompt": prompt, "prompt_file": "AGENT.md"}
+
+
 HANDLERS = {
+    "agents.config.update": agent_config_update,
+    "agents.config": agent_config,
+    "skills.search": skills_search,
+    "skills.descriptions": skills_descriptions,
+    "skills.list": skills_list,
+    "skills.install": skills_install,
+    "skills.uninstall": skills_uninstall,
     "agents.chat": agent_chat,
     "agents.title": agent_title,
     "agents.models": agent_models,

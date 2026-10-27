@@ -79,6 +79,14 @@ def test_live_device_bridge(monkeypatch,tmp_path,migrated_test_database):
             response=client.get('/api/agents/models',headers=headers)
             assert response.status_code==200,response.text
             assert response.json()['data']['models'][0]['id']=='fixture-model'
+            assert client.get('/api/skills',headers=headers,params={'agent_code':'general'}).json()['data']['items']==[]
+            assert client.get('/api/skills/search',headers=headers,params={'q':'fixture'}).json()['data']['items'][0]['name']=='test-skill'
+            response=client.post('/api/skills/install',headers=headers,json={'agent_code':'general','source':'acme/repo@test-skill'})
+            assert response.status_code==200,response.text
+            assert client.get('/api/skills',headers=headers,params={'agent_code':'general'}).json()['data']['items'][0]['name']=='test-skill'
+            assert client.get('/api/skills',headers=headers,params={'agent_code':'product'}).json()['data']['items']==[]
+            assert client.post('/api/skills/uninstall',headers=headers,json={'agent_code':'general','skill_id':'acme/repo@test-skill'}).status_code==200
+            assert client.get('/api/skills',headers=headers,params={'agent_code':'general'}).json()['data']['items']==[]
             # 即使输入记录被伪造成非白名单路径，Main 也不能转发任意本机地址。
             fake_call=str(uuid4())
             async def forged_call():

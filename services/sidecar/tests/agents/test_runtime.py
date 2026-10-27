@@ -13,7 +13,12 @@ from src import config
 from src.agents import agent
 from src.agents.agent import AgentRequest, build_agent, create_model, settings_for
 from src.providers.llm.schemas import ModelError, ModelSettings
-from src.main import app
+
+
+@pytest.fixture(autouse=True)
+def isolated_default_tools(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "WORKSPACE_DIR", tmp_path / "workspace")
+    monkeypatch.setattr(FakeMessagesListChatModel, "bind_tools", lambda self, *args, **kwargs: self, raising=False)
 
 
 def body(**kwargs):
@@ -107,17 +112,15 @@ def test_langchain_provider_stream_uses_configured_endpoint():
     asyncio.run(case())
 
 
-def test_internal_agent_auth_and_metadata(monkeypatch):
-    monkeypatch.setattr(config, "SIDECAR_INTERNAL_TOKEN", "test-internal")
+def test_agent_dispatch_metadata_and_missing_configuration(monkeypatch):
+    from src.transport.handlers import dispatch, OperationError
     monkeypatch.setattr(config, "ARK_API_KEY", "")
     async def case():
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://sidecar") as client:
-            assert (await client.get("/internal/agents/models")).status_code == 401
-            result = await client.get("/internal/agents/models", headers={"X-Internal-Token": "test-internal"})
-            assert result.status_code == 200 and not result.json()["configured"]
-            assert "api_key" not in result.text
-            response = await client.post("/internal/agents/chat", headers={"X-Internal-Token": "test-internal"}, json=body().model_dump())
-            assert response.status_code == 503
+        result = await dispatch("agents.models", {}, None)
+        assert not result["configured"] and "api_key" not in str(result)
+        with pytest.raises(OperationError) as error:
+            await dispatch("agents.chat", body().model_dump(), None)
+        assert error.value.status == 503
     asyncio.run(case())
 
 

@@ -1,10 +1,10 @@
 """验证 LangChain 文本解析、格式保留和内部接口分发。"""
 import asyncio
+import base64
 import pytest
-from httpx import ASGITransport, AsyncClient
 
 from src import config
-from src.main import app
+from src.transport.handlers import dispatch, OperationError
 from src.knowledge.parsers import dispatcher
 from src.knowledge.parsers import text as text_parser
 
@@ -42,19 +42,14 @@ def test_empty_invalid_encoding_and_limits(tmp_path, monkeypatch):
     assert list(tmp_path.iterdir()) == []
 
 
-def test_internal_endpoint_routes_text_and_preserves_auth(tmp_path, monkeypatch):
+def test_rpc_routes_text_and_reports_invalid_encoding(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "TEMP_DIR", tmp_path)
-    monkeypatch.setattr(config, "SIDECAR_INTERNAL_TOKEN", "test-internal")
     async def case():
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://sidecar") as client:
-            for kind in ("txt", "md"):
-                path = "/internal/knowledge/parse?file_type=" + kind
-                assert (await client.post(path, content=b"text")).status_code == 401
-                response = await client.post(path, headers={"X-Internal-Token": "test-internal"}, content="# 中文正文".encode())
-                assert response.status_code == 200, response.text
-                assert response.json()["content"] == "# 中文正文"
-                assert response.json()["metadata"][0]["format"] == kind
-            invalid = await client.post("/internal/knowledge/parse?file_type=txt", headers={"X-Internal-Token": "test-internal"}, content=b"\xff")
-            assert invalid.status_code == 422
-            assert "UTF-8" in invalid.json()["detail"]["message"]
+        for kind in ("txt", "md"):
+            response = await dispatch("knowledge.parse", {"file_type": kind, "content_base64": base64.b64encode("# 中文正文".encode()).decode()}, None)
+            assert response["content"] == "# 中文正文"
+            assert response["metadata"][0]["format"] == kind
+        with pytest.raises(OperationError) as error:
+            await dispatch("knowledge.parse", {"file_type": "txt", "content_base64": base64.b64encode(b"\xff").decode()}, None)
+        assert error.value.status == 422 and "UTF-8" in error.value.detail["message"]
     asyncio.run(case())

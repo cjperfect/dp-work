@@ -145,7 +145,6 @@ def main():
     """标准输出留给协议，其他 print 和日志重定向到 stderr。"""
     output = sys.stdout.buffer
     sys.stdout = sys.stderr
-    os.environ["DP_SIDECAR_STDIO"] = "1"
     import uvicorn
     from src.main import app
     from src.config import PORT

@@ -1,3 +1,4 @@
+import { invalidateSkills } from "@/stores/skills";
 import { useEffect } from "react";
 import { getAccessToken, useAuthStore } from "@/stores/auth";
 
@@ -8,8 +9,13 @@ export function DesktopSession() {
     const sync = () => {
       void window.desktop?.setSession(getAccessToken()).catch(() => {});
     };
+    const unsubscribeDevice = window.desktop.onDeviceConnected?.(() => invalidateSkills());
     sync();
-    return useAuthStore.subscribe(sync);
+    const unsubscribeAuth = useAuthStore.subscribe(sync);
+    return () => {
+      unsubscribeDevice?.();
+      unsubscribeAuth();
+    };
   }, []);
   return null;
 }

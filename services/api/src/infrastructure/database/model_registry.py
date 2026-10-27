@@ -14,6 +14,7 @@ from src.infrastructure.tasks.models import TaskOutbox
 
 from src.modules.agents.conversation_models import Conversation, ConversationMessage
 from src.modules.agents.run_models import AgentRun
+from src.modules.agents.approval_models import AgentApproval
 
 from src.modules.devices.models import Device, DeviceCall, DeviceChunk
 

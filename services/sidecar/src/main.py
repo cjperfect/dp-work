@@ -9,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import PORT, VOLC_API_KEY
 from .transport.websocket import router
-from .transport.internal import router as internal_router
 from .infrastructure.parent_watch import watch_parent
 
 
@@ -38,8 +37,6 @@ app.add_middleware(CORSMiddleware,
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?",
     allow_methods=["GET"], allow_headers=[])
 app.include_router(router)
-if os.environ.get("DP_SIDECAR_STDIO") != "1":
-    app.include_router(internal_router)
 
 
 @app.get("/health")

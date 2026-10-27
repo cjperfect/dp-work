@@ -1,16 +1,16 @@
-"""验证真实 PDF 提取、表格、边界和内部接口认证。"""
+"""验证真实 PDF 提取、表格、边界和RPC 方法分发。"""
 import asyncio
+import base64
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pymupdf
 import pytest
-from httpx import ASGITransport, AsyncClient
 
 from src import config
 from src.knowledge.parsers.pdf import parse_pdf
 from src.knowledge.parsers import dispatcher
-from src.main import app
+from src.transport.handlers import dispatch, OperationError
 
 
 def sample_pdf():
@@ -65,20 +65,17 @@ def test_legacy_doc_is_unsupported():
         asyncio.run(dispatcher.parse_document(b"legacy", "doc"))
 
 
-def test_process_parser_and_internal_auth(tmp_path, monkeypatch):
+def test_process_parser_and_rpc_dispatch(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "TEMP_DIR", tmp_path)
-    monkeypatch.setattr(config, "SIDECAR_INTERNAL_TOKEN", "test-internal")
     async def case():
         # 实际运行独立解析进程。
         result = await dispatcher.parse_pdf(sample_pdf())
         assert result["status"] == "parsed" and len(result["metadata"]) == 2
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://sidecar") as client:
-            assert (await client.post("/internal/knowledge/parse", content=sample_pdf())).status_code == 401
-            response = await client.post("/internal/knowledge/parse", headers={"X-Internal-Token": "test-internal"}, content=sample_pdf())
-            assert response.status_code == 200, response.text
-            assert response.json()["parser"] == "pymupdf"
-            invalid = await client.post("/internal/knowledge/parse", headers={"X-Internal-Token": "test-internal"}, content=b"not pdf")
-            assert invalid.status_code == 400
+        response = await dispatch("knowledge.parse", {"content_base64": base64.b64encode(sample_pdf()).decode(), "file_type": "pdf"}, None)
+        assert response["parser"] == "pymupdf"
+        with pytest.raises(OperationError) as error:
+            await dispatch("knowledge.parse", {"content_base64": base64.b64encode(b"not pdf").decode(), "file_type": "pdf"}, None)
+        assert error.value.status == 400
     asyncio.run(case())
 
 

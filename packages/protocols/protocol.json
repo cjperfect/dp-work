@@ -2,6 +2,8 @@
   "jsonrpc": "2.0",
   "revision": 2,
   "methods": {
+    "agents.config.update": "保存 Agent 配置",
+    "agents.config": "读取 Agent 配置",
     "agents.chat": "运行 Agent",
     "agents.title": "生成会话标题",
     "agents.models": "查询模型",
@@ -11,7 +13,12 @@
     "knowledge.embed": "生成向量",
     "settings.defaults": "读取默认配置",
     "settings.test": "测试服务连接",
-    "asr.sessions": "创建 ASR 票据"
+    "asr.sessions": "创建 ASR 票据",
+    "skills.search": "搜索 skills.sh 技能",
+    "skills.list": "查询已安装技能",
+    "skills.install": "安装技能",
+    "skills.uninstall": "卸载技能",
+    "skills.descriptions": "批量读取技能简介"
   },
   "control": {
     "health": "system.health",

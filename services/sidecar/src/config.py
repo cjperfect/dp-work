@@ -16,7 +16,10 @@ REPO_ROOT = SERVICE_ROOT.parents[1]
 
 # ---- 未确认片段的临时目录 ----
 DP_DATA_DIR = os.environ.get("DP_DATA_DIR", "")
-TEMP_DIR = (Path(DP_DATA_DIR).parent if DP_DATA_DIR else REPO_ROOT / ".dp-work") / "temp"
+DATA_ROOT = Path(DP_DATA_DIR).parent if DP_DATA_DIR else REPO_ROOT / ".dp-work"
+TEMP_DIR = DATA_ROOT / "temp"
+# 各 Agent 默认工具的本机工作目录，与 Electron 使用相同位置。
+WORKSPACE_DIR = DATA_ROOT / "workspace"
 
 # ---- ASR ----
 VOLC_BASE_URL = os.environ.get("VOLC_BASE_URL", "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async").strip()

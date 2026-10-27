@@ -15,6 +15,10 @@ async def run_events(events, run_id=None, model=None):
             if kind == "start":
                 continue
             event = {**event, "run_id": run_id}
+            if kind == "approval":
+                event["status"] = "waiting_approval"
+                yield event
+                return
             if kind in ("done", "error"):
                 event["status"] = "completed" if kind == "done" else "failed"
                 event["duration_ms"] = round((time.monotonic() - started) * 1000)

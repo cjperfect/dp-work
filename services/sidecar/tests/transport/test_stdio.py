@@ -128,3 +128,17 @@ def test_real_stdio_entry_shares_asr_state_and_disables_network_internal(tmp_pat
 def test_registered_methods_match_shared_protocol():
     from src.transport.protocol import METHODS
     assert set(handlers.HANDLERS) == METHODS
+
+
+def test_network_surface_has_no_business_http_routes():
+    from fastapi.testclient import TestClient
+    from src.main import app
+    with TestClient(app) as client:
+        assert client.get("/health").status_code == 200
+        for path in ("/internal/agents/models", "/internal/agents/chat", "/internal/asr/sessions",
+                     "/internal/knowledge/parse", "/internal/meetings/minutes/generate"):
+            assert client.get(path).status_code == 404
+            assert client.post(path, json={}).status_code == 404
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "invalid"})
+            assert ws.receive_json()["code"] == "INVALID_MESSAGE"

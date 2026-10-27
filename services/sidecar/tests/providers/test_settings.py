@@ -32,16 +32,14 @@ def test_personal_model_is_used_without_overwriting_global(monkeypatch):
     async def runner(body, resolved):
         seen.append(resolved)
         yield {"type": "done", "content": "fixture", "model": resolved.model}
-    monkeypatch.setattr(config, "SIDECAR_INTERNAL_TOKEN", "fixture-token")
     monkeypatch.setattr(handlers, "run_agent", runner)
     async def case():
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            body = {"thread_id": "one", "messages": [{"role": "user", "content": "hi"}], "runtime": {"provider": "deepseek", "base_url": "https://api.deepseek.com", "model": "personal-model", "api_key": "private-fixture"}}
-            assert (await client.post("/internal/agents/chat", json=body)).status_code == 401
-            response = await client.post("/internal/agents/chat", json=body, headers={"X-Internal-Token": "fixture-token"})
-            assert response.status_code == 200 and "personal-model" in response.text
-            assert "private-fixture" not in response.text
-            assert seen[0].api_key == "private-fixture"
+        body = {"thread_id": "one", "messages": [{"role": "user", "content": "hi"}], "runtime": {"provider": "deepseek", "base_url": "https://api.deepseek.com", "model": "personal-model", "api_key": "private-fixture"}}
+        result = await handlers.dispatch("agents.chat", body, None)
+        events = [event async for event in result.events]
+        assert "personal-model" in str(events)
+        assert "private-fixture" not in str(events)
+        assert seen[0].api_key == "private-fixture"
     original = config.ARK_MODEL
     asyncio.run(case())
     assert config.ARK_MODEL == original
@@ -61,11 +59,9 @@ def test_connection_checks_real_response_and_hides_upstream_error(monkeypatch):
 
 
 def test_asr_tickets_are_one_time_and_bound_to_meeting(monkeypatch):
-    monkeypatch.setattr(config, "SIDECAR_INTERNAL_TOKEN", "fixture-token")
     with TestClient(app) as client:
-        assert client.post("/internal/asr/sessions", json={"owner_id": 1, "meeting_id": "one"}).status_code == 401
-        response = client.post("/internal/asr/sessions", json={"owner_id": 1, "meeting_id": "one"}, headers={"X-Internal-Token": "fixture-token"})
-        ticket = response.json()["ticket"]
+        response = client.portal.call(handlers.dispatch, "asr.sessions", {"owner_id": 1, "meeting_id": "one"}, app.state)
+        ticket = response["ticket"]
         assert ticket in app.state.asr_tickets
         # 错误会议不能使用此票据，且票据立即销毁。
         with client.websocket_connect("/ws") as ws:
@@ -83,16 +79,14 @@ def test_asr_ticket_uses_personal_credentials_without_exposing_them(monkeypatch,
     def recognizer(value):
         seen.append(value)
         return FakeRecognizer()
-    monkeypatch.setattr(config, "SIDECAR_INTERNAL_TOKEN", "fixture-token")
     monkeypatch.setattr(websocket, "DoubaoRecognizer", recognizer)
     monkeypatch.setattr(repository, "TEMP_DIR", tmp_path)
     with TestClient(app) as client:
-        response = client.post("/internal/asr/sessions", json={"owner_id": 1, "meeting_id": "one", "runtime": {
-            "provider": "doubao", "base_url": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async", "api_key": "personal-asr-fixture", "resource_id": "personal-resource", "speaker_info": False}},
-            headers={"X-Internal-Token": "fixture-token"})
-        assert "personal-asr-fixture" not in response.text
+        response = client.portal.call(handlers.dispatch, "asr.sessions", {"owner_id": 1, "meeting_id": "one", "runtime": {
+            "provider": "doubao", "base_url": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async", "api_key": "personal-asr-fixture", "resource_id": "personal-resource", "speaker_info": False}}, app.state)
+        assert "personal-asr-fixture" not in str(response)
         with client.websocket_connect("/ws") as ws:
-            ws.send_json({"type": "asr.start", "meetingId": "one", "requestId": "start", "ticket": response.json()["ticket"],
+            ws.send_json({"type": "asr.start", "meetingId": "one", "requestId": "start", "ticket": response["ticket"],
                 "nextSeq": 0, "offsetMs": 0, "audio": {"format": "pcm", "sampleRate": 16000, "channels": 1, "bitsPerSample": 16}})
             message = ws.receive_json()
             assert message["type"] == "asr.ready" and "personal-asr-fixture" not in str(message)

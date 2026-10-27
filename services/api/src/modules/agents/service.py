@@ -77,9 +77,11 @@ class AgentStream:
             await self.close()
 
 
-async def open_chat(body: AgentRequest, owner_id: int | None = None, *, run_id: str | None = None) -> AgentStream:
+async def open_chat(body: AgentRequest, owner_id: int | None = None, *, run_id: str | None = None, approval_resume: dict | None = None) -> AgentStream:
     """先连接并校验上游，再向前端开启事件流。"""
     payload = body.model_dump()
+    if approval_resume is not None:
+        payload["approval_resume"] = approval_resume
     if run_id:
         payload['run_id'] = run_id
     if body.knowledge_base_ids:

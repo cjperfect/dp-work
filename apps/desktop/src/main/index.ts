@@ -110,6 +110,10 @@ if (!app.requestSingleInstanceLock()) {
           api,
           installationId(path.join(storage.data, "device-id")),
           (job, signal) => sidecar!.request(job, signal),
+          () => {
+            if (window && !window.isDestroyed())
+              window.webContents.send("desktop:device-connected");
+          },
         );
       }
       if (quitting) return;

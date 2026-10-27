@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { BookOpen, Bot, Boxes, Package, Plug, Settings2 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { AgentConfigDialog } from "./components/agent-config-dialog";
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useKnowledgeBases } from "@/features/knowledge/hooks/use-knowledge-bases";
+import { useSkills } from "@/features/skills/hooks/use-skills";
 import { useConnectors } from "@/stores/connectors";
 import { useAuthStore } from "@/stores/auth";
 import type { AgentId } from "@/interfaces/app";
@@ -99,11 +101,16 @@ export function AgentPage({ agentId }: { agentId: AgentId }) {
   );
 }
 function AgentPanel({ agent }: { agent: AgentConfig }) {
+  const configBusy = useAgentStore((state) => state.configBusy);
   const { bases, loading, error: kbError, reload } = useKnowledgeBases();
   const { connectors } = useConnectors();
   const connected = connectors.filter((connector) => connector.status === "connected");
-  const state = useAgentStore();
-  const skills = state.skills.filter((skill) => agent.skill_ids.includes(skill.id));
+  const {
+    skills,
+    error: skillsError,
+    loading: skillsLoading,
+    reload: reloadSkills,
+  } = useSkills(agent.code);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   async function save(changes: Partial<AgentConfig>) {
@@ -139,6 +146,7 @@ function AgentPanel({ agent }: { agent: AgentConfig }) {
               <p className="mt-1 text-xs text-muted-foreground">{agent.department}</p>
             </div>
           </div>
+          <AgentConfigDialog key={agent.code} agent={agent} />
         </div>
         <p className="mt-3 text-xs leading-6 text-muted-foreground">{agent.description}</p>
       </section>
@@ -161,7 +169,17 @@ function AgentPanel({ agent }: { agent: AgentConfig }) {
             </li>
           ))}
         </ul>
-        {!skills.length && (
+        {skillsError && (
+          <button
+            type="button"
+            className="text-left text-xs text-destructive"
+            onClick={() => void reloadSkills()}
+          >
+            {skillsError}，点击重试
+          </button>
+        )}
+        {skillsLoading && <p className="text-xs text-muted-foreground">正在读取已安装技能…</p>}
+        {!skillsLoading && !skillsError && !skills.length && (
           <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
             暂无关联技能，可前往技能配置安装。
           </p>
@@ -235,7 +253,7 @@ function AgentPanel({ agent }: { agent: AgentConfig }) {
             <span className="min-w-0 truncate">{base.name}</span>
             <Switch
               checked={agent.knowledge_base_ids.some((id) => String(id) === base.id)}
-              disabled={state.configBusy}
+              disabled={configBusy}
               aria-label={`默认关联 ${base.name}`}
               onCheckedChange={(checked) =>
                 void save({
@@ -249,7 +267,7 @@ function AgentPanel({ agent }: { agent: AgentConfig }) {
         ))}
       </section>
       <div className="mt-auto space-y-2 text-[11px] leading-5 text-muted-foreground">
-        {state.configBusy && <p role="status">正在保存配置…</p>}
+        {configBusy && <p role="status">正在保存配置…</p>}
         {saved && (
           <p role="status" className="text-emerald-700">
             配置已保存在当前浏览器。
