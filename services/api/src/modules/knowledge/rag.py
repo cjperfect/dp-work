@@ -1,4 +1,6 @@
 """父子分块向量任务与带权限过滤的检索。"""
+from src.infrastructure.sidecar.transport import client as sidecar_client
+from src.infrastructure.sidecar.relay import DeviceOffline
 import asyncio
 import logging
 import math
@@ -31,9 +33,9 @@ def invalidate(row):
 
 async def call_sidecar(path: str, data: dict):
     """通过服务端认证调用分块或向量服务。"""
-    if not config.SIDECAR_INTERNAL_TOKEN:
+    if config.SIDECAR_TRANSPORT != "device" and not config.SIDECAR_INTERNAL_TOKEN:
         raise ValueError("请配置 API 与 Sidecar 的内部服务凭证。")
-    async with httpx.AsyncClient(timeout=110, follow_redirects=False) as client:
+    async with sidecar_client(timeout=110) as client:
         response = await client.post(config.SIDECAR_API_URL + "/internal/knowledge/" + path,
             headers={"X-Internal-Token": config.SIDECAR_INTERNAL_TOKEN}, json=data)
     if response.status_code != 200:
@@ -181,6 +183,8 @@ async def process(snapshot):
                 await notify_parse(db, row.knowledge_base_id, row.id)
     except asyncio.CancelledError:
         raise
+    except DeviceOffline:
+        raise
     except ValueError as cause:
         await fail(snapshot, str(cause))
     except (httpx.HTTPError, KeyError, TypeError):
@@ -232,7 +236,7 @@ async def search(owner_id: int, base_ids: list[int], query: str, top_k: int):
             result = await call_sidecar("embed", {"texts": [query], "query": True})
         vector, profile = result["vectors"][0], result["profile"]
         validate_vector(vector)
-    except (TimeoutError, ValueError, httpx.HTTPError, KeyError, TypeError):
+    except (TimeoutError, ValueError, httpx.HTTPError, KeyError, TypeError, DeviceOffline):
         vector, profile = None, None
     try:
         from .hybrid import search as search_hybrid

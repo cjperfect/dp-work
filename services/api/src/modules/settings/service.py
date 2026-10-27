@@ -1,4 +1,6 @@
 """个人服务配置、密钥存储及连接测试。"""
+from src.infrastructure.sidecar.transport import client as sidecar_client
+from src.infrastructure.sidecar.relay import DeviceOffline
 import json
 from typing import Literal
 import httpx
@@ -48,10 +50,10 @@ async def runtime(owner_id: int, kind: Kind) -> dict | None:
 
 async def sidecar(path: str, payload: dict | None = None) -> dict:
     """调用可信执行服务，不转发上游敏感错误。"""
-    if not config.SIDECAR_INTERNAL_TOKEN:
+    if config.SIDECAR_TRANSPORT != "device" and not config.SIDECAR_INTERNAL_TOKEN:
         raise ApiError(ApiCode.INTERNAL_ERROR, "Sidecar 内部服务凭证尚未配置。", 503)
     try:
-        async with httpx.AsyncClient(timeout=25, follow_redirects=False) as client:
+        async with sidecar_client(timeout=25) as client:
             response = await client.request("GET" if payload is None else "POST",
                 config.SIDECAR_API_URL + "/internal" + path,
                 headers={"X-Internal-Token": config.SIDECAR_INTERNAL_TOKEN}, json=payload)

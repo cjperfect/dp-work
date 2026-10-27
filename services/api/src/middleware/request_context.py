@@ -41,6 +41,8 @@ class RequestContextMiddleware:
                     headers.append((b"x-request-id", request_id.encode("ascii")))
             return send(message)
 
+        from src.infrastructure.sidecar.context import scope as execution
+        token = execution.set((None, None))
         try:
             await self.app(scope, receive, send_with_rid)
         except Exception:
@@ -54,6 +56,8 @@ class RequestContextMiddleware:
                 request_id,
             )
             raise
+        finally:
+            execution.reset(token)
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
         user_id = state.get("user_id", "-")
         log.info(

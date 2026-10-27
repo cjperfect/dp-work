@@ -24,3 +24,4 @@ def isolate_search_backend(monkeypatch):
     from src.core import config
     monkeypatch.setattr(config, "ELASTICSEARCH_ENABLED", False)
     monkeypatch.setattr(config, "MQ_DISPATCH_ENABLED", False)
+    monkeypatch.setattr(config, "SIDECAR_TRANSPORT", "http")

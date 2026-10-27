@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import http, { type Server } from "node:http";
 import { test } from "node:test";
-import { startWebServer } from "../src/server";
+import { startWebServer } from "../src/main/web/server";
 
 async function close(server: Server) {
   server.closeAllConnections();

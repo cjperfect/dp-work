@@ -13,7 +13,10 @@ from src.modules.meetings.record_models import MeetingRecord, MeetingRecordVersi
 from src.infrastructure.tasks.models import TaskOutbox
 
 from src.modules.agents.conversation_models import Conversation, ConversationMessage
+from src.modules.agents.run_models import AgentRun
+
+from src.modules.devices.models import Device, DeviceCall, DeviceChunk
 
 from .base import Base
 
-__all__ = ["Conversation", "ConversationMessage", "TaskOutbox", "KnowledgeSearchSync", "KnowledgeParentChunk", "KnowledgeChildChunk", "Base", "UserSettings", "User", "KnowledgeBase", "KnowledgeDocument", "Meeting", "MeetingSegment", "MeetingMinutes", "MeetingGenerationJob", "MeetingRecord", "MeetingRecordVersion"]
+__all__ = ["Device", "DeviceCall", "DeviceChunk", "AgentRun", "Conversation", "ConversationMessage", "TaskOutbox", "KnowledgeSearchSync", "KnowledgeParentChunk", "KnowledgeChildChunk", "Base", "UserSettings", "User", "KnowledgeBase", "KnowledgeDocument", "Meeting", "MeetingSegment", "MeetingMinutes", "MeetingGenerationJob", "MeetingRecord", "MeetingRecordVersion"]

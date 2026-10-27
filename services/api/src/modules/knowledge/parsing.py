@@ -1,4 +1,6 @@
 """由 PostgreSQL 保存进度的异步文档解析任务。"""
+from src.infrastructure.sidecar.transport import client as sidecar_client
+from src.infrastructure.sidecar.relay import DeviceOffline
 import asyncio
 import logging
 import json
@@ -86,9 +88,9 @@ async def finish(row: KnowledgeDocument, **values) -> bool:
 
 async def sidecar(method: str, path: str, **kwargs) -> dict:
     """通过内部认证调用 Sidecar，限制调用时长。"""
-    if not config.SIDECAR_INTERNAL_TOKEN:
+    if config.SIDECAR_TRANSPORT != "device" and not config.SIDECAR_INTERNAL_TOKEN:
         raise ValueError("请先配置 API 和 Sidecar 的 SIDECAR_INTERNAL_TOKEN。")
-    async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
+    async with sidecar_client(timeout=min(120, config.DOCUMENT_PARSE_TIMEOUT)) as client:
         response = await client.request(method, config.SIDECAR_API_URL + "/internal/knowledge/parse" + path,
                                         headers={"X-Internal-Token": config.SIDECAR_INTERNAL_TOKEN}, **kwargs)
         if response.status_code != 200:
@@ -106,8 +108,6 @@ async def sidecar(method: str, path: str, **kwargs) -> dict:
 async def process(row: KnowledgeDocument):
     """调用 Sidecar 解析，网络等待不占用数据库事务。"""
     try:
-        if row.parse_started_at and (datetime.now(timezone.utc) - row.parse_started_at).total_seconds() > config.DOCUMENT_PARSE_TIMEOUT:
-            raise ValueError("文档解析超时，请稍后重试。")
         if row.file_type not in ("pdf", "txt", "md", "docx"):
             raise ValueError("当前支持 TXT、Markdown、PDF 和 DOCX 解析。")
         if row.source == "editor":
@@ -126,6 +126,8 @@ async def process(row: KnowledgeDocument):
         else:
             raise ValueError("解析服务返回了无效的正文。")
     except asyncio.CancelledError:
+        raise
+    except DeviceOffline:
         raise
     except (ValueError, OSError) as cause:
         await finish(row, parse_status="failed", parse_error=str(cause)[:300], parse_lease_until=None)

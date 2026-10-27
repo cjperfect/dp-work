@@ -46,6 +46,6 @@ async def search(body: SearchInput, user: Annotated[User, Depends(get_current_us
 @router.post("/api/internal/knowledge/search", response_model=ApiResponse[dict], include_in_schema=False)
 async def internal_search(body: InternalSearch, x_internal_token: Annotated[str | None, Header()] = None):
     """仅接受 Sidecar 的服务凭证和固定范围的短时授权。"""
-    if not config.SIDECAR_INTERNAL_TOKEN or not x_internal_token or not secrets.compare_digest(x_internal_token, config.SIDECAR_INTERNAL_TOKEN):
+    if config.SIDECAR_TRANSPORT != "device" and (not config.SIDECAR_INTERNAL_TOKEN or not x_internal_token or not secrets.compare_digest(x_internal_token, config.SIDECAR_INTERNAL_TOKEN)):
         raise ApiError(ApiCode.UNAUTHORIZED, "无效的内部服务凭证。", 401)
     return ok(await rag_access.retrieve_with_status(body.capability, body.vector, body.profile, body.top_k, body.query))

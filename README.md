@@ -130,7 +130,7 @@ pnpm dev:web
 pnpm dev:desktop   # Electron 客户端
 ```
 
-> 日常开发推荐：终端 1 跑 `pnpm dev:api`，终端 2 跑 `pnpm dev:sidecar`，终端 3 跑 `pnpm dev:web`，浏览器打开 `http://localhost:3000`。
+> 当前目标架构为本地 Web / Electron / Sidecar，云端 API / PG / ES / RabbitMQ / Worker。开发时在本机运行 API 和 Worker，并设置 `SIDECAR_TRANSPORT=device`；运行 `pnpm dev:desktop` 自动启动 Web 与 Sidecar，登录后建立设备连接。纯浏览器集中式调试可显式使用 `SIDECAR_TRANSPORT=http`。详情见 [设备通道说明](services/api/src/modules/devices/README.md)。
 
 ---
 
@@ -141,7 +141,7 @@ dp-work/
 ├── apps/
 │   ├── web/          # Web 前端（Vite + React）
 │   └── desktop/      # Electron 桌面端（可选）
-├── packages/         # 共享包（contracts / api-client / ui 等）
+├── packages/         # 共享包（contracts / sidecar-rpc）
 ├── services/
 │   ├── api/          # 后端 API（FastAPI + PostgreSQL）
 │   └── sidecar/      # 实时转写与模型代理服务

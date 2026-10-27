@@ -1,4 +1,4 @@
-import type { SidecarToClient, WsAsrTranscript } from "@dp-work/contracts";
+import type { SidecarToClient, WsAsrTranscript } from "@dp-work/protocols/asr";
 
 export type AsrStatus = "idle" | "connecting" | "live" | "stopping" | "stopped" | "error";
 

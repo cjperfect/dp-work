@@ -14,7 +14,10 @@ from src.modules.connectors.router import router as connectors_router
 
 from src.modules.meetings.router import router as meetings_router
 
+from src.modules.devices.router import router as devices_router
+
 api_router = APIRouter()
+api_router.include_router(devices_router)
 for router in (auth_router, knowledge_router, connectors_router, meetings_router, agents_router, settings_router, rag_router):
     api_router.include_router(router)
 

@@ -9,9 +9,11 @@ from src.modules.users.models import User
 from . import service
 from .schemas import AgentRequest, TitleRequest
 from .conversation_router import router as conversation_router
+from .run_router import router as run_router
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 router.include_router(conversation_router)
+router.include_router(run_router)
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 

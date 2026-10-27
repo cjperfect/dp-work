@@ -11,7 +11,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
-load_dotenv(SERVICE_ROOT / ".env")
+load_dotenv(os.environ.get("DP_SIDECAR_ENV_FILE") or SERVICE_ROOT / ".env")
 REPO_ROOT = SERVICE_ROOT.parents[1]
 
 # ---- 未确认片段的临时目录 ----

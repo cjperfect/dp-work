@@ -14,8 +14,9 @@ async def enqueue(db, kind, target_id, version):
     """在业务事务内写消息，相同业务版本只保留一条。"""
     if kind not in KINDS:
         raise ValueError('不支持的任务类型。')
+    from src.infrastructure.sidecar.context import scope
     await db.execute(insert(TaskOutbox).values(id=str(uuid4()), kind=kind, target_id=target_id,
-        version=str(version)).on_conflict_do_nothing(constraint='uq_task_outbox_target_version'))
+        version=str(version), device_id=scope.get()[1]).on_conflict_do_nothing(constraint='uq_task_outbox_target_version'))
 
 
 async def claim():

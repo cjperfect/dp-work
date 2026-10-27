@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { WsAsrTranscript } from "@dp-work/contracts";
+import type { WsAsrTranscript } from "@dp-work/protocols/asr";
 import { getMeeting, elapsed } from "@/apis/meetings";
 import { useAuthStore } from "@/stores/auth";
 import { getSidecarAsrConfig, createAsrSession } from "@/apis/sidecar";

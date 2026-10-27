@@ -54,7 +54,8 @@ async def run_parser(content: bytes, module: str, label: str) -> dict:
     temporary_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     temporary = TemporaryDirectory(prefix=module + "-", dir=temporary_root)
     process = await asyncio.create_subprocess_exec(
-        sys.executable, "-m", "src.knowledge.parsers." + module, temporary.name,
+        sys.executable, *(["--parse-worker", module, temporary.name] if getattr(sys, "frozen", False)
+                         else ["-m", "src.knowledge.parsers." + module, temporary.name]),
         cwd=config.SERVICE_ROOT, stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
     )

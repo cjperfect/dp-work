@@ -16,7 +16,7 @@ class InternalMinutesTests(unittest.TestCase):
         with patch.object(config, "SIDECAR_INTERNAL_TOKEN", "internal-fixture"), TestClient(app) as client:
             self.assertEqual(client.post("/internal/meetings/minutes/generate", json=BODY).status_code, 401)
             output = MinutesOutput(task_id="task", source_revision=1, content="# 会议", model="test-model", prompt_version="minutes-v1")
-            with patch("src.transport.internal.generate", new=AsyncMock(return_value=output)) as generate:
+            with patch("src.transport.handlers.generate", new=AsyncMock(return_value=output)) as generate:
                 response = client.post("/internal/meetings/minutes/generate", json=BODY, headers={"X-Internal-Token": "internal-fixture"})
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json()["prompt_version"], "minutes-v1")

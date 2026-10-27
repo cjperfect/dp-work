@@ -16,6 +16,7 @@ class TaskOutbox(Base):
     kind: Mapped[str] = mapped_column(String(32))
     target_id: Mapped[str] = mapped_column(String(128))
     version: Mapped[str] = mapped_column(String(128))
+    device_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, server_default=text('0'))
     next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

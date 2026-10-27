@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 from src.providers import settings
 from src.providers.settings import RuntimeConfig
-from src.transport import internal
+from src.transport import handlers
 from src.agents.agent import AgentRequest
 from src import config
 from src.main import app
@@ -33,7 +33,7 @@ def test_personal_model_is_used_without_overwriting_global(monkeypatch):
         seen.append(resolved)
         yield {"type": "done", "content": "fixture", "model": resolved.model}
     monkeypatch.setattr(config, "SIDECAR_INTERNAL_TOKEN", "fixture-token")
-    monkeypatch.setattr(internal, "run_agent", runner)
+    monkeypatch.setattr(handlers, "run_agent", runner)
     async def case():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             body = {"thread_id": "one", "messages": [{"role": "user", "content": "hi"}], "runtime": {"provider": "deepseek", "base_url": "https://api.deepseek.com", "model": "personal-model", "api_key": "private-fixture"}}

@@ -43,6 +43,11 @@ def create_app() -> FastAPI:
     )
     application.add_middleware(RequestContextMiddleware)
     register_exception_handlers(application)
+    from src.infrastructure.sidecar.relay import DeviceOffline
+    from fastapi.responses import JSONResponse
+    @application.exception_handler(DeviceOffline)
+    async def device_offline(_request, _error):
+        return JSONResponse(status_code=503, content={"code": 5000,"message":"本机执行设备未连接，请打开桌面端后重试。","data":None})
     application.include_router(api_router)
     return application
 

@@ -1,4 +1,6 @@
 """Agent 模型查询、个人模型配置及流式执行转发；正式会话由 conversation_service 保存。"""
+from src.infrastructure.sidecar.transport import client as sidecar_client
+from src.infrastructure.sidecar.relay import DeviceOffline
 import json
 from dataclasses import dataclass
 
@@ -15,7 +17,7 @@ from src.modules.knowledge import rag, rag_access
 
 def internal_headers():
     """获取 API 到 Sidecar 的内部认证信息。"""
-    if not config.SIDECAR_INTERNAL_TOKEN:
+    if config.SIDECAR_TRANSPORT != "device" and not config.SIDECAR_INTERNAL_TOKEN:
         raise ApiError(ApiCode.INTERNAL_ERROR, "请先配置 API 与 Sidecar 的内部服务凭证。", 503)
     return {"X-Internal-Token": config.SIDECAR_INTERNAL_TOKEN}
 
@@ -41,7 +43,7 @@ async def list_models(owner_id: int | None = None) -> dict:
         if personal:
             return {"configured": True, "models": [{"id": personal["model"], "name": personal["model"]}]}
     try:
-        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
+        async with sidecar_client(timeout=10) as client:
             response = await client.get(config.SIDECAR_API_URL + "/internal/agents/models", headers=internal_headers())
             await check_response(response)
             return response.json()
@@ -69,15 +71,17 @@ class AgentStream:
         try:
             async for chunk in self.response.aiter_bytes():
                 yield chunk
-        except httpx.HTTPError:
+        except (httpx.HTTPError, DeviceOffline):
             yield 'data: {"type":"error","code":"AGENT_DISCONNECTED","message":"Agent 连接中断，请重试。"}\n\n'.encode()
         finally:
             await self.close()
 
 
-async def open_chat(body: AgentRequest, owner_id: int | None = None) -> AgentStream:
+async def open_chat(body: AgentRequest, owner_id: int | None = None, *, run_id: str | None = None) -> AgentStream:
     """先连接并校验上游，再向前端开启事件流。"""
     payload = body.model_dump()
+    if run_id:
+        payload['run_id'] = run_id
     if body.knowledge_base_ids:
         if owner_id is None:
             raise ApiError(ApiCode.UNAUTHORIZED, "请先登录。", 401)
@@ -88,7 +92,7 @@ async def open_chat(body: AgentRequest, owner_id: int | None = None) -> AgentStr
         if personal:
             payload["runtime"] = personal
     headers = internal_headers()
-    client = httpx.AsyncClient(timeout=httpx.Timeout(config.AGENT_REQUEST_TIMEOUT, connect=10), follow_redirects=False)
+    client = sidecar_client(timeout=httpx.Timeout(config.AGENT_REQUEST_TIMEOUT, connect=10))
     try:
         request = client.build_request("POST", config.SIDECAR_API_URL + "/internal/agents/chat",
                                        headers=headers, json=payload)
@@ -99,7 +103,7 @@ async def open_chat(body: AgentRequest, owner_id: int | None = None) -> AgentStr
         return AgentStream(client, response)
     except BaseException as cause:
         await client.aclose()
-        if isinstance(cause, httpx.HTTPError):
+        if isinstance(cause, (httpx.HTTPError, DeviceOffline)):
             raise ApiError(ApiCode.INTERNAL_ERROR, "无法连接 Agent 执行服务，请检查 Sidecar。", 503) from cause
         raise
 
@@ -111,7 +115,7 @@ async def generate_title(body, owner_id: int) -> dict:
     if personal:
         payload["runtime"] = personal
     try:
-        async with httpx.AsyncClient(timeout=40, follow_redirects=False) as client:
+        async with sidecar_client(timeout=40) as client:
             response = await client.post(config.SIDECAR_API_URL + "/internal/agents/title", headers=internal_headers(), json=payload)
         await check_response(response)
         data = response.json()

@@ -1,5 +1,6 @@
 """会话权限、版本控制、迁移及流式回答保存。"""
 import codecs
+import asyncio
 import json
 import time
 from datetime import datetime, timedelta, timezone
@@ -14,6 +15,9 @@ from src.infrastructure.database import session
 from .conversation_models import Conversation, ConversationMessage
 from .conversation_repository import ConversationRepository
 from .schemas import AgentRequest
+from .run_models import AgentRun
+from . import run_service
+from .run_control import RunControl, RunStopped
 
 
 def missing():
@@ -44,6 +48,7 @@ async def expire_run(db, row):
             if message.status == 'streaming':
                 message.status = 'failed'
                 message.content = message.content or '生成中断，请重试。'
+        await run_service.finish_locked(db, row, 'interrupted', 'RUN_EXPIRED', '执行中断，请重试。')
         row.run_token = row.run_until = None
         row.draft_revision += 1
         await db.flush()
@@ -164,6 +169,7 @@ async def remove(owner, key):
         repository = ConversationRepository(db)
         row = await repository.get(owner, key, lock=True, deleted=True)
         if row is None: raise missing()
+        await run_service.stop_locked(db, row, 'cancelled', 'CONVERSATION_DELETED', '会话已删除。')
         await repository.clear_messages(key)
         row.deleted_at = func.now()
         row.title, row.draft, row.active_path, row.knowledge_base_ids = '已删除', '', [], []
@@ -206,62 +212,98 @@ async def begin_chat(owner, key, body):
             if nodes[mid].content and (nodes[mid].role == 'user' or nodes[mid].status == 'complete')]
         payload = AgentRequest(agent_code='general' if row.agent_id == 1 else 'product', thread_id=key,
             messages=history[-100:], knowledge_base_ids=body.knowledge_base_ids, model=body.model)
+        from src.infrastructure.sidecar.context import scope
+        db.add(AgentRun(device_id=scope.get()[1], id=token, owner_id=owner, conversation_id=key, agent_id=row.agent_id,
+            response_id=body.response_id, model=body.model, status='running',
+            deadline_at=datetime.now(timezone.utc) + timedelta(seconds=config.AGENT_REQUEST_TIMEOUT)))
         return token, payload
 
 
-async def save_reply(owner, key, response_id, token, content, status):
+async def save_reply(owner, key, response_id, token, content, status, code=None, error=None, model=None):
     """仅当前执行器可保存回答，终态提交后再向浏览器发送 done。"""
     async with session.transaction() as db:
         row = await ConversationRepository(db).get(owner, key, lock=True)
-        if row is None or row.run_token != token: return
+        if row is None or row.run_token != token: return False
+        run = await db.get(AgentRun, token, with_for_update=True)
+        if run and (run.status != 'running' or run.deadline_at <= datetime.now(timezone.utc)):
+            if run.status == 'running':
+                await run_service.stop_locked(db, row, 'interrupted', 'RUN_EXPIRED', '运行超时或执行服务中断，请重试。')
+            return False
         message = await db.get(ConversationMessage, (key, response_id))
-        if message is None: return
+        if message is None: return False
         message.content, message.status = content[:120000], status
+        if run and model: run.model = model[:128]
         if status != 'streaming':
+            await run_service.finish_locked(db, row,
+                'completed' if status == 'complete' else status, code, error)
             row.run_token = row.run_until = None
             if status == 'complete': row.draft = ''
             row.draft_revision += 1
             row.updated_at = func.clock_timestamp()
+        return True
 
 
 async def open_chat(owner, key, body):
     """领取生成租约，并在连接上游失败时保存失败状态。"""
     from . import service
     token, payload = await begin_chat(owner, key, body)
+    control = RunControl(token)
     try:
-        upstream = await service.open_chat(payload, owner)
-    except BaseException:
+        await control.open()
+        upstream = await control.wait(service.open_chat(payload, owner, run_id=token))
+    except BaseException as cause:
         with anyio.CancelScope(shield=True):
-            await save_reply(owner, key, body.response_id, token, '生成失败，请重试。', 'failed')
+            cancelled = isinstance(cause, asyncio.CancelledError)
+            await save_reply(owner, key, body.response_id, token, '', 'cancelled' if cancelled else 'failed',
+                'CLIENT_DISCONNECTED' if cancelled else 'AGENT_CONNECT_FAILED',
+                '客户端已断开。' if cancelled else '无法连接 Agent 执行服务，请重试。')
+            await control.close()
+        if isinstance(cause, RunStopped):
+            raise ApiError(ApiCode.STATE_CONFLICT, '运行已停止或中断。', 409) from cause
         raise
-    return StoredStream(owner, key, body.response_id, token, upstream)
+    return StoredStream(owner, key, body.response_id, token, upstream, control)
 
 
 class StoredStream:
     """包装 SSE，按秒保存增量，结束和取消保存最终状态。"""
-    def __init__(self, owner, key, response_id, token, upstream):
+    def __init__(self, owner, key, response_id, token, upstream, control):
         self.owner, self.key, self.response_id, self.token, self.upstream = owner, key, response_id, token, upstream
         self.content, self.status = '', 'streaming'
         self.finished = False
+        self.control = control
 
-    async def persist(self, status):
+    async def persist(self, status, code=None, error=None, model=None):
         """在请求取消时仍允许完成本地事务。"""
         with anyio.CancelScope(shield=True):
-            await save_reply(self.owner, self.key, self.response_id, self.token, self.content, status)
+            saved = await save_reply(self.owner, self.key, self.response_id, self.token, self.content, status, code, error, model)
         if status != 'streaming': self.finished = True
+        if not saved: raise RunStopped()
 
     async def close(self):
         """断开上游，并保留已经生成的回答。"""
         try:
-            if not self.finished: await self.persist('cancelled')
+            if not self.finished:
+                try:
+                    await self.persist('cancelled', 'CLIENT_DISCONNECTED', '客户端已停止或断开连接。')
+                except RunStopped:
+                    self.finished = True
         finally:
-            await self.upstream.close()
+            with anyio.CancelScope(shield=True):
+                try:
+                    await self.upstream.close()
+                finally:
+                    await self.control.close()
 
     async def chunks(self):
         """先提交最终回答，再转发完成事件。"""
         decoder, buffer, last_save = codecs.getincrementaldecoder('utf-8')(), '', time.monotonic()
         try:
-            async for chunk in self.upstream.chunks():
+            iterator = self.upstream.chunks().__aiter__()
+            while True:
+                try:
+                    chunk = await self.control.wait(anext(iterator))
+                except StopAsyncIteration:
+                    break
                 buffer += decoder.decode(chunk)
                 buffer = buffer.replace('\r\n', '\n')
                 if len(buffer) > 2000000: raise ValueError('event too large')
@@ -270,26 +312,41 @@ class StoredStream:
                     data = '\n'.join(line[5:].lstrip() for line in frame.splitlines() if line.startswith('data:'))
                     if data:
                         event = json.loads(data)
+                        event['run_id'] = self.token
+                        if event.get('type') == 'start':
+                            await self.persist('streaming', model=event.get('model'))
                         if event.get('type') == 'delta': self.content += event.get('text', '')
                         if len(self.content) > 120000: raise ValueError('reply too large')
                         if event.get('type') == 'done':
                             if not isinstance(event.get('content'), str) or not event['content'].strip() or len(event['content']) > 120000:
                                 raise ValueError('invalid final reply')
                             self.content = event['content']
-                            await self.persist('complete')
+                            await self.persist('complete', model=event.get('model'))
                         elif event.get('type') == 'error':
                             self.content = self.content or event.get('message', '生成失败，请重试。')
-                            await self.persist('failed')
+                            await self.persist('failed', str(event.get('code') or 'AGENT_FAILED')[:64],
+                                str(event.get('message') or 'Agent 执行失败，请重试。')[:300])
                         elif time.monotonic() - last_save >= 1:
                             await self.persist('streaming')
                             last_save = time.monotonic()
+                        frame = 'data: ' + json.dumps(event, ensure_ascii=False, separators=(',', ':'))
                     yield (frame + '\n\n').encode()
+                    if self.finished: return
                 if self.finished: return
             if not self.finished:
-                await self.persist('failed')
-                yield 'data: {"type":"error","message":"Agent 回答中断，请重试。"}\n\n'.encode()
+                await self.persist('failed', 'AGENT_DISCONNECTED', 'Agent 回答中断，请重试。')
+                yield ('data: ' + json.dumps({'type': 'error', 'run_id': self.token,
+                    'code': 'AGENT_DISCONNECTED', 'message': 'Agent 回答中断，请重试。'}) + '\n\n').encode()
+        except RunStopped:
+            with anyio.CancelScope(shield=True):
+                await save_reply(self.owner, self.key, self.response_id, self.token, self.content,
+                    'failed', 'RUN_CONTROL_LOST', '运行已停止或中断。')
+            self.finished = True
+            yield ('data: ' + json.dumps({'type': 'error', 'run_id': self.token,
+                'code': 'RUN_STOPPED', 'message': '运行已停止或中断。'}) + '\n\n').encode()
         except (ValueError, KeyError, TypeError):
-            await self.persist('failed')
-            yield 'data: {"type":"error","message":"Agent 返回了无效的回答，请重试。"}\n\n'.encode()
+            await self.persist('failed', 'INVALID_AGENT_EVENT', 'Agent 返回了无效的回答，请重试。')
+            yield ('data: ' + json.dumps({'type': 'error', 'run_id': self.token,
+                'code': 'INVALID_AGENT_EVENT', 'message': 'Agent 返回了无效的回答，请重试。'}) + '\n\n').encode()
         finally:
             await self.close()

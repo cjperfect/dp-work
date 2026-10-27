@@ -3,6 +3,7 @@ import asyncio
 import logging
 from sqlalchemy import select
 from src.core import config
+from src.infrastructure.sidecar.relay import DeviceOffline
 from src.infrastructure.database import session
 from src.infrastructure.tasks import outbox
 from src.infrastructure.tasks.celery_app import celery_app
@@ -40,12 +41,31 @@ async def is_finished(message):
 async def execute(message_id, kind):
     """独立进程拥有自己的事件循环和连接池，执行结束后释放。"""
     await session.init_db()
+    scope_token = None
     try:
         async with asyncio.timeout(config.MQ_TASK_TIME_LIMIT):
             async with session.read_session() as db:
                 message = await db.get(TaskOutbox, message_id)
             if message is None or message.completed_at is not None or message.kind != kind:
                 return
+            if kind in ('minutes','parse','vector') and config.SIDECAR_TRANSPORT == 'device':
+                from src.infrastructure.sidecar.context import scope
+                from src.infrastructure.sidecar.relay import online_device
+                from src.modules.meetings.models import Meeting
+                from src.modules.knowledge.models import KnowledgeBase
+                async with session.read_session() as db:
+                    if kind == 'minutes':
+                        owner = await db.scalar(select(Meeting.owner_id).join(MeetingGenerationJob,
+                            MeetingGenerationJob.meeting_id == Meeting.id).where(MeetingGenerationJob.id == message.target_id))
+                    else:
+                        owner = await db.scalar(select(KnowledgeBase.owner_id).join(KnowledgeDocument,
+                            KnowledgeDocument.knowledge_base_id == KnowledgeBase.id).where(KnowledgeDocument.id == message.target_id))
+                scope_token = scope.set((owner, message.device_id))
+                if owner is not None:
+                    try: await online_device(owner, message.device_id)
+                    except DeviceOffline:
+                        await outbox.defer(message.id)
+                        return
             if not await is_finished(message):
                 if kind == 'minutes' and config.MINUTES_WORKER_ENABLED:
                     await generation.run_once(task_id=message.target_id)
@@ -64,7 +84,13 @@ async def execute(message_id, kind):
                 await outbox.complete(message.id)
             else:
                 await outbox.defer(message.id)
+    except DeviceOffline:
+        if message is not None:
+            await outbox.defer(message.id)
     finally:
+        if scope_token is not None:
+            from src.infrastructure.sidecar.context import scope
+            scope.reset(scope_token)
         await session.close_db()
 
 

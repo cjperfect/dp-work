@@ -9,6 +9,8 @@ from src.modules.knowledge.search_index import maintenance as search_maintenance
 from src.task_dispatcher import worker as dispatch_worker
 from src.modules.users.bootstrap import ensure_initial_admin
 from src.modules.connectors.service import shutdown as shutdown_connectors
+from src.modules.agents.run_service import maintenance as run_maintenance
+from src.infrastructure.sidecar.relay import maintenance as device_maintenance
 
 
 @asynccontextmanager
@@ -18,6 +20,8 @@ async def lifespan(_: FastAPI):
     tasks = []
     try:
         await ensure_initial_admin()
+        tasks.append(asyncio.create_task(run_maintenance()))
+        tasks.append(asyncio.create_task(device_maintenance()))
         if config.MQ_DISPATCH_ENABLED:
             tasks.append(asyncio.create_task(dispatch_worker()))
         if config.ELASTICSEARCH_ENABLED:

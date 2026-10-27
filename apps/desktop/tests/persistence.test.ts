@@ -11,7 +11,11 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { ensureAgentWorkspace, migrateProfile, persistencePaths } from "../src/persistence";
+import {
+  ensureAgentWorkspace,
+  migrateProfile,
+  persistencePaths,
+} from "../src/main/storage/persistence";
 
 test("development and packaged storage use their respective .dp-work roots", () => {
   assert.equal(

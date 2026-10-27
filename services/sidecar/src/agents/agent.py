@@ -107,7 +107,7 @@ def text_content(content) -> str:
 
 async def agent_events(body: AgentRequest, model, tools=None):
     """执行隔离的图状态，输出增量文本及结束标记。"""
-    run_id = str(uuid4())
+    run_id = getattr(body, 'run_id', None) or str(uuid4())
     yield {"type": "start", "run_id": run_id}
     graph = build_agent(model, body.agent_code, tools)
     messages = [(HumanMessage if row.role == "user" else AIMessage)(row.content) for row in body.messages]

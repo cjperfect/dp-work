@@ -39,6 +39,13 @@ async def get_current_user(
     user = await users_service.find_by_subject(sub, payload.get("uidv"))
     if user is None or not user.is_active:
         raise ApiError(ApiCode.UNAUTHORIZED, "账号不存在或已停用", 401)
+    from src.infrastructure.sidecar.context import scope
+    device_id = request.headers.get("X-Device-ID")
+    if device_id:
+        from uuid import UUID
+        try: device_id = str(UUID(device_id))
+        except ValueError as cause: raise ApiError(ApiCode.PARAM_ERROR, "设备标识无效。", 400) from cause
+    scope.set((user.id, device_id))
     request.state.user = user
     request.state.user_id = user.id
     return user

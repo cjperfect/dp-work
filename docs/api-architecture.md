@@ -278,7 +278,7 @@ ORM 模型位于各模块的 models.py，迁移集中在 services/api/migrations
 
 - **部门专业范畴**：`users.department` 与 Agent 配置 `department` 对齐，`require_dept` 守卫支撑「Agent 按部门范畴输出」的 API 层约束。
 - **会议纪要转知识库**：`minutes.status=2 已发布` 触发知识库入库任务（二期），走同一认证与响应底座。
-- **统一响应对接前端**：`@dp-work/api-client` 增加 `unwrap()`（code≠0 抛业务错误），前端统一弹 message。
+- **统一响应对接前端**：通过 `apps/web/src/lib/http.ts` 的 Axios 响应拦截器解包，code≠0 时抛业务错误，前端统一展示 message。
 
 ## 12. 连接器（Connectors）设计决策
 

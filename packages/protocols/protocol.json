@@ -1,0 +1,42 @@
+{
+  "jsonrpc": "2.0",
+  "revision": 2,
+  "methods": {
+    "agents.chat": "运行 Agent",
+    "agents.title": "生成会话标题",
+    "agents.models": "查询模型",
+    "meetings.minutes.generate": "生成会议纪要",
+    "knowledge.parse": "解析文档",
+    "knowledge.chunks": "父子分块",
+    "knowledge.embed": "生成向量",
+    "settings.defaults": "读取默认配置",
+    "settings.test": "测试服务连接",
+    "asr.sessions": "创建 ASR 票据"
+  },
+  "control": {
+    "health": "system.health",
+    "cancel": "$/cancelRequest",
+    "head": "stream.head",
+    "chunk": "stream.chunk"
+  },
+  "limits": {
+    "maxInputLineBytes": 33554432,
+    "maxOutputLineBytes": 131072,
+    "maxEncodedInputCharacters": 31457280,
+    "maxInputBytes": 22020096,
+    "maxResponseBytes": 33554432,
+    "chunkBytes": 32768,
+    "maxEncodedChunkCharacters": 65536,
+    "maxConcurrentCalls": 4,
+    "maxPendingRequests": 8
+  },
+  "errors": {
+    "parse": -32700,
+    "invalidRequest": -32600,
+    "methodNotFound": -32601,
+    "invalidParams": -32602,
+    "internal": -32603,
+    "busy": -32001,
+    "cancelled": -32800
+  }
+}

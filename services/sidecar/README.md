@@ -144,3 +144,9 @@ API 通过 `POST /internal/meetings/minutes/generate` 调用 Sidecar，使用 `X
 Sidecar 读取 `minutes-v1` 系统提示词，按片段顺序整理标题、会议时间、说话人和原始内容。结果以完整 Markdown 返回，并带实际模型、提示词版本、任务 ID 和原始内容版本。截断、空结果和缺少约定章节的结果不会作为成功纪要保存。
 
 默认单次调用总超时 180 秒，输出上限 8192 tokens，输入字符上限 120000，可通过 `.env.example` 中的配置调整。超长会议当前明确报错，不静默截断，也未加入分段摘要。这里不自动重试模型请求。
+
+## 桌面子进程模式
+
+Electron 使用 `desktop_entry.py --stdio`（安装版 `dp-work-sidecar --stdio`）启动 Sidecar。普通业务通过 stdin/stdout JSON-RPC，日志写 stderr；ASR 音频仍使用本机 WebSocket。该模式的网络服务不注册 `/internal`，普通业务通过方法名直接分发到 `transport/handlers.py` 的处理函数，票据与 ASR 共用会话状态。
+
+跨语言声明集中在 [packages/protocols](../../packages/protocols/README.md)：TS 导入编译后的类型/常量，Python 读取同一份 `protocol.json`。上文直接 HTTP 调用仅适用于独立 HTTP 兼容模式。

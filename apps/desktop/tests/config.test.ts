@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { desktopPort, developmentUrl, isAppUrl, canCaptureMicrophone } from "../src/config";
+import { desktopPort, developmentUrl, isAppUrl, canCaptureMicrophone } from "../src/main/config";
 
 test("development windows only load local HTTP pages", () => {
   assert.equal(developmentUrl("http://localhost:3000"), "http://localhost:3000/");

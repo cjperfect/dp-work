@@ -1,4 +1,6 @@
 """PostgreSQL 持久化任务与 Sidecar 调度。"""
+from src.infrastructure.sidecar.transport import client as sidecar_client
+from src.infrastructure.sidecar.relay import DeviceOffline
 import asyncio
 import logging
 from uuid import uuid4
@@ -78,7 +80,7 @@ async def enqueue(owner_id: int, meeting_id: str, body: GenerateMinutes) -> Gene
 
 async def call_sidecar(payload: dict, transport=None, owner_id: int | None = None) -> GeneratedMinutes:
     """调用内部生成接口，不向浏览器暴露内部凭证或上游错误。"""
-    if not config.SIDECAR_INTERNAL_TOKEN:
+    if config.SIDECAR_TRANSPORT != "device" and not config.SIDECAR_INTERNAL_TOKEN:
         raise ValueError("API 与 Sidecar 的内部服务凭证尚未配置。")
     if owner_id is not None:
         override = await personal_settings.runtime(owner_id, "model")
@@ -86,7 +88,7 @@ async def call_sidecar(payload: dict, transport=None, owner_id: int | None = Non
             payload = {**payload, "runtime": override}
     try:
         async with asyncio.timeout(config.MINUTES_TASK_TIMEOUT):
-            async with httpx.AsyncClient(timeout=config.MINUTES_TASK_TIMEOUT, transport=transport) as client:
+            async with sidecar_client(timeout=config.MINUTES_TASK_TIMEOUT, transport=transport) as client:
                 response = await client.post(config.SIDECAR_API_URL + "/internal/meetings/minutes/generate",
                     headers={"X-Internal-Token": config.SIDECAR_INTERNAL_TOKEN}, json=payload)
         try:
@@ -158,6 +160,8 @@ async def run_once(transport=None, task_id: str | None = None) -> bool:
     try:
         result = await call_sidecar(payload, transport, owner_id)
     except asyncio.CancelledError:
+        raise
+    except DeviceOffline:
         raise
     except ValueError as cause:
         await finish(task_id, claim, None, str(cause))

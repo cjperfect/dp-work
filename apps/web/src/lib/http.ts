@@ -41,10 +41,20 @@ function notifyUnauthorized(token: string | null): void {
 }
 
 /** 注入 Token 并记录请求所属会话。 */
-function interceptRequest(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
+async function interceptRequest(
+  config: InternalAxiosRequestConfig,
+): Promise<InternalAxiosRequestConfig> {
   const token = config.requiresAuth === false ? null : getStoredToken();
   config.sessionToken = token;
-  if (token) config.headers.set("Authorization", `Bearer ${token}`);
+  if (token) {
+    config.headers.set("Authorization", `Bearer ${token}`);
+    try {
+      const connection = await window.desktop?.setSession?.(token);
+      if (connection?.deviceId) config.headers.set("X-Device-ID", connection.deviceId);
+    } catch {
+      /* 数据接口仍可访问，执行接口会提示设备离线。 */
+    }
+  }
   return config;
 }
 

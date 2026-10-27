@@ -25,7 +25,7 @@
     "migrate:current": "cd services/api && .venv/bin/python -m alembic current",
     "migrate:history": "cd services/api && .venv/bin/python -m alembic history",
     "dev:desktop": "pnpm --filter @dp-work/desktop dev",
-    "build:desktop": "pnpm --filter @dp-work/desktop build && pnpm --filter @dp-work/desktop build:web",
+    "build:desktop": "pnpm --filter @dp-work/desktop build && pnpm --filter @dp-work/desktop build:web && pnpm --filter @dp-work/desktop build:sidecar",
     "package:desktop": "pnpm --filter @dp-work/desktop package",
     "package:desktop:dir": "pnpm --filter @dp-work/desktop package:dir",
     "dev:sidecar": "cd services/sidecar && .venv/bin/python -m uvicorn src.main:app --reload --host 127.0.0.1 --port 8001",

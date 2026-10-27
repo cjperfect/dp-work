@@ -37,7 +37,7 @@ CORS_ORIGINS = [
     o.strip()
     for o in os.environ.get(
         "CORS_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3300,http://127.0.0.1:3300",
+        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3300,http://127.0.0.1:3300,http://127.0.0.1:34731,http://localhost:34731",
     ).split(",")
     if o.strip()
 ]
@@ -47,6 +47,11 @@ CREDENTIAL_PRIVATE_KEY_FILE = os.environ.get(
     "CREDENTIAL_PRIVATE_KEY_FILE",
     str(Path(__file__).resolve().parents[4] / ".dp-work/keys/auth-transport.pem"),
 )
+
+# ---- 执行服务：device 为用户本机反向连接，http 仅供集中式开发兼容 ----
+SIDECAR_TRANSPORT = os.environ.get("SIDECAR_TRANSPORT", "http").strip()
+if SIDECAR_TRANSPORT not in ("http", "device"):
+    raise ValueError("SIDECAR_TRANSPORT 必须为 http 或 device")
 
 # ---- 会议纪要生成执行服务 ----
 SIDECAR_API_URL = os.environ.get("SIDECAR_API_URL", "http://127.0.0.1:8001").rstrip("/")

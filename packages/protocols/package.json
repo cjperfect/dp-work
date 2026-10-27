@@ -1,0 +1,44 @@
+{
+  "name": "@dp-work/protocols",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Web、Electron、Python Sidecar 的 IPC、ASR 与 JSON-RPC 协议",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "protocol.json"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./protocol.json": "./protocol.json",
+    "./desktop": {
+      "types": "./dist/desktop.d.ts",
+      "import": "./dist/desktop.mjs",
+      "require": "./dist/desktop.js"
+    },
+    "./asr": {
+      "types": "./dist/asr.d.ts",
+      "import": "./dist/asr.mjs",
+      "require": "./dist/asr.js"
+    },
+    "./rpc": {
+      "types": "./dist/rpc.d.ts",
+      "import": "./dist/rpc.mjs",
+      "require": "./dist/rpc.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "tsup": "^9.0.0",
+    "typescript": "^6.0.0"
+  }
+}

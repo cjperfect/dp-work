@@ -4,20 +4,21 @@
   "private": true,
   "description": "企业 Agent 平台桌面客户端",
   "author": "DP Work",
-  "main": "dist/main.js",
+  "main": "dist/main/index.js",
   "scripts": {
     "dev": "pnpm build && node scripts/dev.mjs",
-    "build": "pnpm --filter @dp-work/contracts build && tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "pnpm --filter @dp-work/protocols build && tsc -p tsconfig.json",
+    "typecheck": "pnpm --filter @dp-work/protocols build && tsc -p tsconfig.json --noEmit",
     "build:web": "node scripts/prepare-web.mjs",
     "start": "electron .",
     "preview": "pnpm build && node scripts/preview.mjs",
-    "package": "pnpm build && pnpm build:web && electron-builder",
-    "package:dir": "pnpm build && pnpm build:web && electron-builder --dir",
-    "test": "tsx --test tests/*.test.ts"
+    "package": "pnpm build && pnpm build:web && pnpm build:sidecar && electron-builder",
+    "package:dir": "pnpm build && pnpm build:web && pnpm build:sidecar && electron-builder --dir",
+    "test": "pnpm --filter @dp-work/protocols build && tsx --test tests/*.test.ts",
+    "build:sidecar": "node scripts/prepare-sidecar.mjs"
   },
   "dependencies": {
-    "@dp-work/contracts": "workspace:*"
+    "@dp-work/protocols": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
@@ -45,6 +46,15 @@
           "web/**/*",
           "web-config.json"
         ]
+      },
+      {
+        "from": "build/sidecar",
+        "to": "sidecar",
+        "filter": [
+          "**/*",
+          "!**/.env",
+          "!**/.env.*"
+        ]
       }
     ],
     "mac": {
@@ -56,7 +66,10 @@
         "NSMicrophoneUsageDescription": "用于会议录音和实时语音转写。"
       },
       "entitlements": "resources/entitlements.mac.plist",
-      "entitlementsInherit": "resources/entitlements.mac.plist"
+      "entitlementsInherit": "resources/entitlements.mac.plist",
+      "binaries": [
+        "Contents/Resources/sidecar/dp-work-sidecar"
+      ]
     },
     "win": {
       "target": [
