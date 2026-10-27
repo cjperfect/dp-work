@@ -86,3 +86,46 @@ useAuthStore.subscribe((state, previous) => {
     vectorNotified.clear();
   }
 });
+
+const searchPending = new Map<string, string>();
+const searchNotified = new Set<string>();
+/** 当前向量版本的 ES 索引就绪时提示，内部清理任务不提示。 */
+export function consumeDocumentSearchEvents(
+  rows: DocumentParseState[],
+  snapshot: boolean,
+): DocumentParseState[] {
+  const owner = useAuthStore.getState().user?.id;
+  const completed: DocumentParseState[] = [];
+  for (const row of rows) {
+    if (row.owner_id !== owner) continue;
+    const document = `${owner}:${row.id}`;
+    if (!row.search_task_id || !row.search_status) {
+      searchPending.delete(document);
+      continue;
+    }
+    const task = `${document}:${row.search_task_id}`;
+    if (row.search_status === "syncing") {
+      if (!searchNotified.has(task)) searchPending.set(document, task);
+    } else {
+      const tracked = searchPending.get(document) === task;
+      if (snapshot && !tracked) searchNotified.add(task);
+      searchPending.delete(document);
+      if ((!snapshot || tracked) && !searchNotified.has(task)) {
+        searchNotified.add(task);
+        completed.push(row);
+      }
+    }
+  }
+  if (snapshot)
+    for (const document of searchPending.keys()) {
+      if (!rows.some((row) => `${owner}:${row.id}` === document)) searchPending.delete(document);
+    }
+  while (searchNotified.size > 1000) searchNotified.delete(searchNotified.values().next().value!);
+  return completed;
+}
+useAuthStore.subscribe((state, previous) => {
+  if (state.user?.id !== previous.user?.id) {
+    searchPending.clear();
+    searchNotified.clear();
+  }
+});

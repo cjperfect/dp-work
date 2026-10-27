@@ -40,7 +40,7 @@ FastAPI 概念映射（本次规划的关键认知）：
 
 | 传统概念            | FastAPI 落地                                              | 职责                                                      |
 | ------------------- | --------------------------------------------------------- | --------------------------------------------------------- |
-| 拦截器 Interceptor  | `BaseHTTPMiddleware` / `@app.middleware`                  | 请求前：请求 ID、计时、日志、注入上下文；响应后：耗时统计 |
+| 拦截器 Interceptor  | `BaseHTTPMiddleware` / `@src.middleware`                  | 请求前：请求 ID、计时、日志、注入上下文；响应后：耗时统计 |
 | 认证守卫 Auth Guard | `Depends(get_current_user)`（路由/分组级 `dependencies`） | Bearer 解析、JWT 校验、用户装载、角色/部门鉴权            |
 | 过滤器 Filter       | 全局 `exception_handler`（`register_exception_handler`）  | 异常归一为统一响应，错误码映射，日志记录                  |
 | 统一响应体          | 泛型 `ApiResponse[T]` + `response_model`                  | 所有路由输出一致结构                                      |
@@ -61,7 +61,7 @@ FastAPI 概念映射（本次规划的关键认知）：
 - `message`：人类可读描述（成功 `ok`，失败为具体原因），前端可直接展示。
 - `data`：payload。失败时为 `null`。
 
-### 3.2 泛型定义（`app/core/responses.py`）
+### 3.2 泛型定义（`src/core/responses.py`）
 
 ```python
 from typing import Generic, TypeVar
@@ -147,7 +147,7 @@ CREATE TABLE agent_bindings (              -- 规划：用户/部门 → Agent �
   → 2001 未登录 / 2004 凭证错误 / 2003 停用用户
 ```
 
-### 4.3 守卫依赖（`app/modules/auth/dependencies.py`）
+### 4.3 守卫依赖（`src/modules/auth/dependencies.py`）
 
 ```python
 async def get_current_user(
@@ -170,7 +170,7 @@ def require_dept(*depts: str) -> Callable:
 
 ## 5. 拦截器（中间件）
 
-### 5.1 RequestContextMiddleware（`app/middleware/request_context.py`）
+### 5.1 RequestContextMiddleware（`src/middleware/request_context.py`）
 
 | 职责       | 实现                                                                                 |
 | ---------- | ------------------------------------------------------------------------------------ |
@@ -180,7 +180,7 @@ def require_dept(*depts: str) -> Callable:
 | 上下文注入 | `request.state.request_id`、`request.state.started_at` 供异常过滤器与业务使用        |
 
 ```python
-@app.middleware("http")
+@src.middleware("http")
 async def request_context(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID") or str(uuid4())
     request.state.request_id = request_id
@@ -198,7 +198,7 @@ async def request_context(request: Request, call_next):
 
 ## 6. 过滤器（全局异常处理）
 
-`app/core/exceptions.py` 注册全局 handler：
+`src/core/exceptions.py` 注册全局 handler：
 
 | 异常                                   | HTTP      | code   | message（对外）                  |
 | -------------------------------------- | --------- | ------ | -------------------------------- |
@@ -217,10 +217,10 @@ async def api_error_handler(_, exc: ApiError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"code": exc.code, "message": exc.message, "data": None})
 ```
 
-## 7. 目录结构（`services/api/app/`）
+## 7. 目录结构（`services/api/src/`）
 
 ```text
-app/
+src/
 ├── main.py                         # 应用装配
 ├── api_router.py                   # 路由汇总
 ├── lifespan.py                     # 启动与关闭
@@ -291,7 +291,7 @@ ORM 模型位于各模块的 models.py，迁移集中在 services/api/migrations
 
 ## 知识库接口（0005_knowledge）
 
-新增 `app/modules/knowledge`，按 Router → Service → Repository 分层，所有请求使用 Bearer JWT。
+新增 `src/modules/knowledge`，按 Router → Service → Repository 分层，所有请求使用 Bearer JWT。
 当前实现个人知识库：归属从登录用户取得，所有查询、更新和删除同时限定 `owner_id`。
 他人资源与不存在的资源统一返回 404，客户端不能提交或修改 owner_id。
 

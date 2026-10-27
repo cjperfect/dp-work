@@ -16,7 +16,7 @@
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "prepare": "husky",
-    "dev:api": "cd services/api && .venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
+    "dev:api": "cd services/api && .venv/bin/python -m uvicorn src.main:app --reload --host 127.0.0.1 --port 8000",
     "dev:https": "pnpm --filter @dp-work/web dev:https",
     "migrate": "cd services/api && .venv/bin/python -m alembic upgrade head",
     "migrate:generate": "cd services/api && .venv/bin/python -m alembic revision --autogenerate",
@@ -33,7 +33,10 @@
     "setup:feishu-cli": "node node_modules/@larksuite/cli/scripts/install.js",
     "db:up": "docker-compose up -d postgres",
     "db:down": "docker-compose down",
-    "db:logs": "docker-compose logs -f postgres"
+    "db:logs": "docker-compose logs -f postgres",
+    "dev:workers": "cd services/api && .venv/bin/python -m src.infrastructure.tasks.workers",
+    "mq:up": "docker-compose up -d rabbitmq",
+    "mq:logs": "docker-compose logs -f rabbitmq"
   },
   "lint-staged": {
     "*.{js,mjs,cjs,ts,tsx}": [

@@ -8,14 +8,14 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 from sqlalchemy import delete, select
 
-from app.core import config
-from app.core.security import create_access_token
-from app.infrastructure.database import session
-from app.main import create_app
-from app.modules.knowledge import parsing, storage
-from app.modules.knowledge.models import KnowledgeBase, KnowledgeDocument
-from app.modules.users.models import User
-from app.modules.users import service as users_service
+from src.core import config
+from src.core.security import create_access_token
+from src.infrastructure.database import session
+from src.main import create_app
+from src.modules.knowledge import parsing, storage
+from src.modules.knowledge.models import KnowledgeBase, KnowledgeDocument
+from src.modules.users.models import User
+from src.modules.users import service as users_service
 
 
 def test_document_events_and_parsed_editor(monkeypatch, tmp_path):

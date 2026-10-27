@@ -3,7 +3,7 @@
 import ast
 from pathlib import Path
 
-APP = Path(__file__).resolve().parents[2] / "app"
+APP = Path(__file__).resolve().parents[2] / "src"
 
 
 def imports(path):
@@ -36,7 +36,7 @@ def test_modules_do_not_import_another_modules_repository():
     for path in (APP / "modules").rglob("*.py"):
         module = path.relative_to(APP / "modules").parts[0]
         for name in imports(path):
-            if name.startswith("app.modules.") and name.endswith(".repository"):
+            if name.startswith("src.modules.") and name.endswith(".repository"):
                 assert name.split(".")[2] == module, path
 
 
@@ -52,4 +52,4 @@ def test_repositories_do_not_manage_connection_lifecycle():
 
 def test_core_has_no_business_module_dependencies():
     for path in (APP / "core").glob("*.py"):
-        assert not any(name.startswith("app.modules") for name in imports(path)), path
+        assert not any(name.startswith("src.modules") for name in imports(path)), path

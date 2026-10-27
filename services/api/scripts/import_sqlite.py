@@ -10,9 +10,9 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import DateTime, Integer, JSON, func, select, text
 from sqlalchemy.ext.asyncio import create_async_engine
-from app.core.config import DATABASE_URL
-from app.infrastructure.database.model_registry import Base
-from app.infrastructure.database.session import async_database_url
+from src.core.config import DATABASE_URL
+from src.infrastructure.database.model_registry import Base
+from src.infrastructure.database.session import async_database_url
 
 
 async def import_database(source: Path, target_url: str) -> dict[str, int]:

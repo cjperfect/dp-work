@@ -11,6 +11,7 @@ export type StoredKnowledgeBase = KnowledgeBase & {
 };
 export type KnowledgeBaseInput = { name: string; description: string };
 export type EditorDocumentInput = {
+  preserveTitle?: boolean;
   id: string;
   title: string;
   content: string;

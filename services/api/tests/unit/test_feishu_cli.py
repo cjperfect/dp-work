@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from app.core.exceptions import ApiError
-from app.modules.connectors import cli, service
+from src.core.exceptions import ApiError
+from src.modules.connectors import cli, service
 
 
 @pytest.fixture(autouse=True)

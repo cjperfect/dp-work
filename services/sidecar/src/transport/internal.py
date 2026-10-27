@@ -5,7 +5,7 @@ import json
 from typing import Annotated, Literal
 from fastapi import APIRouter, Header, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse
-from ..agents.agent import AgentRequest, run_agent, settings_for
+from ..agents.agent import AgentRequest, TitleRequest, generate_title, run_agent, settings_for
 from .. import config
 from ..knowledge.parsers import dispatcher
 from ..knowledge.parsers.pdf import MAX_SOURCE_BYTES
@@ -171,3 +171,20 @@ async def embed_texts(body: EmbedInput, x_internal_token: Annotated[str | None, 
         return {"vectors": vectors, "model": config.EMBEDDING_MODEL, "dimensions": 1024, "profile": profile()}
     except (EmbeddingError, TimeoutError) as cause:
         raise HTTPException(502, detail={"message": str(cause) if isinstance(cause, EmbeddingError) else "向量化超时，请重试。"}) from cause
+
+
+class InternalTitleRequest(TitleRequest):
+    runtime: RuntimeConfig | None = None
+
+
+@router.post("/agents/title", summary="生成简短会话标题")
+async def agent_title(body: InternalTitleRequest, x_internal_token: Annotated[str | None, Header()] = None):
+    """标题模型沿用当前用户的服务端配置。"""
+    authorize(x_internal_token)
+    try:
+        settings = body.runtime.llm() if body.runtime else settings_for(body.model)
+        if body.model and body.model != settings.model:
+            raise ModelError("MODEL_NOT_AVAILABLE", "所选模型未配置。")
+        return {"title": await generate_title(body, settings)}
+    except ModelError as cause:
+        raise HTTPException(503, detail={"message": str(cause)}) from cause

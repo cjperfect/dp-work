@@ -5,12 +5,12 @@ from uuid import uuid4
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, select, func
 
-from app.core.security import create_access_token
-from app.infrastructure.database import session
-from app.main import create_app
-from app.modules.knowledge.models import KnowledgeBase, KnowledgeDocument
-from app.modules.users.models import User
-from app.modules.users import service as users_service
+from src.core.security import create_access_token
+from src.infrastructure.database import session
+from src.main import create_app
+from src.modules.knowledge.models import KnowledgeBase, KnowledgeDocument
+from src.modules.users.models import User
+from src.modules.users import service as users_service
 
 
 def test_document_autosave_survives_reconnection_and_respects_ownership():
@@ -51,6 +51,19 @@ def test_document_autosave_survives_reconnection_and_respects_ownership():
                 assert restored["content"] == content["content"]
                 assert restored["blocks"] == blocks
                 assert restored["created_at"] == created_at
+                renamed = await client.patch(path + "/title", headers=headers[0], json={"title": " 新标题 "})
+                assert renamed.status_code == 200, renamed.text
+                assert renamed.json()["data"]["title"] == "新标题"
+                assert renamed.json()["data"]["content"] == content["content"]
+                assert renamed.json()["data"]["blocks"] == blocks
+                # 旧编辑器随后自动保存正文，不能把旧标题覆盖回来。
+                autosaved = await client.put(path, headers=headers[0], json={**content, "content": "继续编辑的正文", "preserve_title": True})
+                assert autosaved.status_code == 200, autosaved.text
+                assert autosaved.json()["data"]["title"] == "新标题"
+                assert autosaved.json()["data"]["content"] == "继续编辑的正文"
+                assert (await client.patch(path + "/title", headers=headers[1], json={"title": "越权"})).status_code == 404
+                latest = (await client.get(path, headers=headers[0])).json()["data"]
+                assert latest["title"] == "新标题" and latest["content"] == "继续编辑的正文"
                 listed = await client.get(f"/api/knowledge-bases/{bases[0].id}/documents", headers=headers[0])
                 assert [item["id"] for item in listed.json()["data"]] == [document_id]
                 bases_page = (await client.get("/api/knowledge-bases", headers=headers[0])).json()["data"]

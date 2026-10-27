@@ -3,9 +3,9 @@
 import asyncio
 
 from alembic import context
-from app.core import config as app_config
-from app.infrastructure.database.model_registry import Base
-from app.infrastructure.database.session import async_database_url
+from src.core import config as app_config
+from src.infrastructure.database.model_registry import Base
+from src.infrastructure.database.session import async_database_url
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 

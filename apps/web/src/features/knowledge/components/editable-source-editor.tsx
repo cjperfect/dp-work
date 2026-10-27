@@ -18,6 +18,7 @@ export function EditableSourceEditor({
   baseId: string;
   file: KbFile;
 }) {
+  const [initialDocument] = useState(() => ({ blocks: file.blocks, content: file.content }));
   const documentRef = useRef<{ blocks: KbFile["blocks"]; content: string }>({
     blocks: file.blocks ?? [],
     content: file.content ?? "",
@@ -37,6 +38,7 @@ export function EditableSourceEditor({
     try {
       await saveKnowledgeDocument(accountId, baseId, {
         id: file.id,
+        preserveTitle: true,
         title: file.name.replace(/\.md$/i, "").trim() || "未命名文档",
         content: documentRef.current.content,
         blocks: documentRef.current.blocks,
@@ -75,8 +77,8 @@ export function EditableSourceEditor({
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       <Editor
-        initialContent={file.blocks}
-        markdown={file.blocks ? undefined : file.content}
+        initialContent={initialDocument.blocks}
+        markdown={initialDocument.blocks ? undefined : initialDocument.content}
         editable
         onDocumentChange={({ blocks: nextBlocks, markdown }) => {
           documentRef.current = { blocks: nextBlocks, content: markdown };

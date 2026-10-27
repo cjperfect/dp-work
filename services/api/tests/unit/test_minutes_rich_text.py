@@ -1,5 +1,5 @@
 """纪要结构转换保留格式、列表层级和表格。"""
-from app.modules.meetings.rich_text import state_from_minutes, minutes_from_state
+from src.modules.meetings.rich_text import state_from_minutes, minutes_from_state
 
 
 def test_markdown_roundtrip_preserves_heading_marks_nested_list_and_table():

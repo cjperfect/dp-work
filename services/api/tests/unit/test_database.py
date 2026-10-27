@@ -1,7 +1,7 @@
 import pytest
 
-from app.infrastructure.database.model_registry import Base
-from app.infrastructure.database.session import async_database_url
+from src.infrastructure.database.model_registry import Base
+from src.infrastructure.database.session import async_database_url
 
 
 @pytest.mark.parametrize("scheme", ["postgres", "postgresql", "postgresql+asyncpg"])
@@ -17,4 +17,4 @@ def test_other_database_driver_is_not_silently_accepted():
 
 
 def test_model_registry_covers_all_existing_tables():
-    assert set(Base.metadata.tables) == {"knowledge_parent_chunks", "knowledge_child_chunks", "users", "user_settings", "knowledge_bases", "knowledge_documents", "meetings", "meeting_segments", "meeting_minutes", "meeting_generation_jobs", "meeting_records", "meeting_record_versions"}
+    assert set(Base.metadata.tables) == {"conversations", "conversation_messages", "task_outbox", "knowledge_search_sync", "knowledge_parent_chunks", "knowledge_child_chunks", "users", "user_settings", "knowledge_bases", "knowledge_documents", "meetings", "meeting_segments", "meeting_minutes", "meeting_generation_jobs", "meeting_records", "meeting_record_versions"}

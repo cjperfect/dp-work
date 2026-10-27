@@ -2,7 +2,7 @@ import asyncio
 
 from httpx import ASGITransport, AsyncClient
 
-from app.main import create_app
+from src.main import create_app
 
 
 def test_documentation_routes_and_authentication_contract():

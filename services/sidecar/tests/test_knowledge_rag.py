@@ -92,3 +92,18 @@ def test_tool_preserves_index_not_ready_diagnostic(monkeypatch):
             assert result['sources'] == [] and result['coverage']['ready'] == 0
             assert '向量化' in result['message'] and '不能断言' in result['notice']
     asyncio.run(case())
+
+
+def test_embedding_failure_still_calls_keyword_search(monkeypatch):
+    monkeypatch.setattr(ArkEmbeddings, 'aembed_query', AsyncMock(side_effect=EmbeddingError('unavailable')))
+    seen = []
+    def handler(request):
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, json={'code': 0, 'data': {'sources': [{'content': '电池容量 1800mAh'}],
+            'retrieval': {'mode': 'keyword', 'keyword_pending': 0}, 'message': '本次使用关键词检索。'}})
+    async def case():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            result = await knowledge_tool('fixture-capability', client).ainvoke({'query': 'N6mini电池容量'})
+            assert result['retrieval']['mode'] == 'keyword' and '1800' in result['sources'][0]['content']
+    asyncio.run(case())
+    assert seen[0]['query'] == 'N6mini电池容量' and seen[0]['vector'] is None

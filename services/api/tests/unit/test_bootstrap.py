@@ -4,8 +4,8 @@ import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
-from app.lifespan import lifespan
-from app.modules.users import bootstrap
+from src.lifespan import lifespan
+from src.modules.users import bootstrap
 from fastapi import FastAPI
 
 
@@ -20,7 +20,7 @@ def test_disabled_bootstrap_does_not_access_users(monkeypatch):
 def test_bootstrap_failure_closes_pool(monkeypatch):
     import importlib
 
-    module = importlib.import_module("app.lifespan")
+    module = importlib.import_module("src.lifespan")
     init, close = AsyncMock(), AsyncMock()
     monkeypatch.setattr(module.session, "init_db", init)
     monkeypatch.setattr(module.session, "close_db", close)

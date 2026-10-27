@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from app.core import config
+from src.core import config
 
 API_ROOT = Path(__file__).resolve().parents[2]
 

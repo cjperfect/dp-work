@@ -30,7 +30,7 @@ Docker Compose 提供 PostgreSQL 16（镜像包含 pgvector，当前业务尚未
 
 ## 修改结构
 
-修改模块 `models.py`；新模型在 `app/infrastructure/database/model_registry.py` 注册，然后执行：
+修改模块 `models.py`；新模型在 `src/infrastructure/database/model_registry.py` 注册，然后执行：
 
 ```bash
 pnpm migrate:generate -- -m describe_change

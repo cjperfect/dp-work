@@ -6,14 +6,14 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 from sqlalchemy import delete
-from app.core import config
-from app.core.security import create_access_token
-from app.infrastructure.database import session
-from app.main import create_app
-from app.modules.meetings import generation
-from app.modules.meetings.models import Meeting
-from app.modules.users.models import User
-from app.modules.users import service as users_service
+from src.core import config
+from src.core.security import create_access_token
+from src.infrastructure.database import session
+from src.main import create_app
+from src.modules.meetings import generation
+from src.modules.meetings.models import Meeting
+from src.modules.users.models import User
+from src.modules.users import service as users_service
 
 
 def test_owner_scoped_generation_events(monkeypatch):

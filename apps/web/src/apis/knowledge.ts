@@ -238,12 +238,31 @@ export async function saveKnowledgeDocumentRequest(
         title: input.title.trim().replace(/\.md$/i, "").trim() || "未命名文档",
         content: input.content,
         blocks: input.blocks ?? null,
+        ...(input.preserveTitle ? { preserve_title: true } : {}),
       },
     },
   );
   const file = toKnowledgeDocument(data as ServerKnowledgeDocument, baseId, user.username);
   if (file.id !== input.id) throw new Error("服务返回的文档 ID 无效。");
   return file;
+}
+
+/** 标题独立保存，不发送旧正文覆盖自动保存内容。 */
+export async function renameKnowledgeDocumentRequest(
+  accountId: string,
+  baseId: string,
+  id: string,
+  title: string,
+): Promise<KbFile> {
+  const { data, user } = await knowledgeRequest(
+    accountId,
+    `/${serverId(baseId)}/documents/${encodeURIComponent(id)}/title`,
+    {
+      method: "PATCH",
+      data: { title: title.trim().replace(/\.md$/i, "").trim() || "未命名文档" },
+    },
+  );
+  return toKnowledgeDocument(data as ServerKnowledgeDocument, baseId, user.username);
 }
 
 export async function listKnowledgeDocumentsRequest(

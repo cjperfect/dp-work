@@ -52,6 +52,8 @@ dp-work 从三个环节解决这个问题：
 | 聊天与编辑 | assistant-ui（对话界面）· BlockNote（富文本编辑器，基于 Tiptap）· React Flow（思维导图）                |
 | 协同编辑   | Yjs（CRDT 实时协同）· WebSocket（多人协作通道）                                                         |
 | 后端 API   | Python · FastAPI · SQLAlchemy · Alembic · PostgreSQL                                                    |
+| 后台任务   | RabbitMQ · Celery（纪要、解析、向量化、ES 同步）                                                        |
+| 检索       | pgvector · Elasticsearch BM25 · RRF 混合检索                                                            |
 | 实时服务   | WebSocket（ASR 实时转写与状态推送）· Sidecar 服务                                                       |
 | AI 能力    | 豆包 ASR（实时语音转写）· 火山方舟大模型（会议纪要生成 / Agent 对话）· 火山方舟向量模型（知识库向量化） |
 | 桌面端     | Electron（可选）                                                                                        |
@@ -93,8 +95,8 @@ cp services/sidecar/.env.example services/sidecar/.env
 ### 3. 初始化数据库
 
 ```bash
-# 启动 PostgreSQL（首次或未运行时）
-pnpm db:up
+# 启动 PostgreSQL、Elasticsearch、RabbitMQ（首次或未运行时）
+docker-compose up -d postgres elasticsearch rabbitmq
 
 # Alembic 自动建表（PostgreSQL）
 pnpm migrate
@@ -106,9 +108,14 @@ pnpm migrate
 # API 服务（:8000）
 pnpm dev:api
 
-# Sidecar 服务（:8001，ASR 转写 / 模型代理，可选）
+# Sidecar 服务（:8001，ASR 转写 / 模型代理）
 pnpm dev:sidecar
+
+# 独立消费进程（四类队列，另开终端）
+pnpm dev:workers
 ```
+
+队列并发、可靠投递及部署说明见 [异步任务说明](services/api/src/infrastructure/tasks/README.md)。
 
 ### 5. 启动前端
 

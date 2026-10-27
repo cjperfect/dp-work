@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.core.pagination import Page, PageParams
+from src.core.pagination import Page, PageParams
 
 
 def test_page_offsets_and_totals():

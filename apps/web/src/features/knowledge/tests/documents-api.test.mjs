@@ -6,6 +6,7 @@ import {
   useKnowledgeStore,
   resetKnowledgeBases,
   saveKnowledgeDocument,
+  renameKnowledgeDocument,
   deleteKnowledgeDocument,
 } from "../../../stores/knowledge.ts";
 import {
@@ -284,4 +285,51 @@ test("PDF parsing submits a protected task and maps durable result fields", asyn
   assert.equal(file.parseStatus, "parsed");
   assert.equal(file.parsedContent, "| A | B |");
   assert.equal(file.content, doc.content);
+});
+
+test("renaming sends only a title and publishes the committed document to detail subscribers", async () => {
+  const events = [];
+  window.dispatchEvent = (event) => {
+    events.push(event);
+    return true;
+  };
+  const request = mockHttpRequest(async () =>
+    Response.json({ code: 0, data: { ...doc, title: "新标题" } }),
+  );
+  const file = await renameKnowledgeDocument("user:12", base.id, doc.id, "新标题");
+  const [url, init] = request.mock.calls[0].arguments;
+  assert.equal(url, "/api/knowledge-bases/1/documents/editor-doc/title");
+  assert.equal(init.method, "PATCH");
+  assert.deepEqual(JSON.parse(init.body), { title: "新标题" });
+  assert.equal(file.name, "新标题.md");
+  assert.equal(events[0].detail.file.name, "新标题.md");
+  assert.equal(events[0].detail.accountId, "user:12");
+});
+
+test("source autosave explicitly preserves the server title", async () => {
+  const request = mockHttpRequest(async () =>
+    Response.json({ code: 0, data: { ...doc, title: "服务端新标题" } }),
+  );
+  await saveKnowledgeDocument("user:12", base.id, { ...input, preserveTitle: true });
+  assert.equal(JSON.parse(request.mock.calls[0].arguments[1].body).preserve_title, true);
+});
+
+test("a delayed old autosave response cannot undo a newer title in the cache", async () => {
+  let finishOldSave;
+  mockHttpRequest(async (url) => {
+    if (String(url).endsWith("/title"))
+      return Response.json({
+        code: 0,
+        data: { ...doc, title: "最新标题", updated_at: "2026-10-25T00:00:03" },
+      });
+    return new Promise((resolve) => {
+      finishOldSave = () => resolve(Response.json({ code: 0, data: doc }));
+    });
+  });
+  const oldSave = saveKnowledgeDocument("user:12", base.id, { ...input, preserveTitle: true });
+  await new Promise(setImmediate);
+  await renameKnowledgeDocument("user:12", base.id, doc.id, "最新标题");
+  finishOldSave();
+  await oldSave;
+  assert.equal(useKnowledgeStore.getState().bases[0].files[0].name, "最新标题.md");
 });

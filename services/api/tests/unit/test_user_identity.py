@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.core.security import create_access_token, decode_token
-from app.modules.users import service
+from src.core.security import create_access_token, decode_token
+from src.modules.users import service
 
 
 def test_numeric_subject_is_encoded_as_a_string_with_explicit_id_version():

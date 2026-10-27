@@ -13,6 +13,7 @@ export type AgentConfig = {
 };
 export type Skill = { id: string; name: string; department: string; description: string };
 export type ChatThread = {
+  title_source?: "pending" | "generated" | "manual";
   id: string;
   agent_id: number;
   title: string;
@@ -34,7 +35,10 @@ export type ChatMessage = {
     agent: { id: number; name: string; department: string; revision: number };
   };
 };
+export type MessageBranch = { parentId: string | null; message: ChatMessage };
+
 export type ThreadDetail = {
+  message_branches?: MessageBranch[];
   thread: ChatThread;
   knowledge_base_ids: (string | number)[];
   messages: ChatMessage[];

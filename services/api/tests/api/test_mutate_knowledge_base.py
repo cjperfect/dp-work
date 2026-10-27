@@ -4,11 +4,11 @@ from unittest.mock import AsyncMock
 
 from httpx import ASGITransport, AsyncClient
 
-from app.main import create_app
-from app.modules.auth.dependencies import get_current_user
-from app.modules.knowledge import service
-from app.modules.knowledge.schemas import KnowledgeBaseOut
-from app.modules.users.models import User
+from src.main import create_app
+from src.modules.auth.dependencies import get_current_user
+from src.modules.knowledge import service
+from src.modules.knowledge.schemas import KnowledgeBaseOut
+from src.modules.users.models import User
 
 
 def test_update_and_delete_use_authenticated_owner(monkeypatch):

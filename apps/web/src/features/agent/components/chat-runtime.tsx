@@ -1,37 +1,46 @@
 import { useEffect, useMemo, useRef, type PropsWithChildren } from "react";
 import {
   AssistantRuntimeProvider,
+  ExportedMessageRepository,
   useAui,
   useAuiState,
   useExternalStoreRuntime,
   useRemoteThreadListRuntime,
   type AppendMessage,
   type RemoteThreadListAdapter,
-  type ThreadMessageLike,
+  type ThreadMessage,
 } from "@assistant-ui/react";
 import { createAssistantStream } from "assistant-stream";
 import { useAuthStore } from "@/stores/auth";
 import { useAppStore } from "@/stores/app";
 import { useAgentCode } from "@/features/agent/hooks/use-agent-code";
 import {
+  loadAgents,
+  selectThreadById,
   cancelMessage,
   createThread,
   getThreadAgentCode,
+  generateThreadTitle,
+  preserveMessageBranches,
+  collectMessageBranches,
+  selectMessageBranch,
   removeThread,
   renameThread,
   editMessage,
   sendMessage,
   useAgentStore,
 } from "@/stores/agent";
+import { readRuntimeBranches, toRuntimeMessage } from "@/features/agent/lib/message-branches";
 import type { ChatThread } from "@/types/agent";
 
 /**
- * 会话历史 adapter：列表与 CRUD 暂存 agent-store，模型执行走 API。
+ * 会话历史 adapter：列表与 CRUD 保存到 API / PG，store 只缓存当前页面。
  * 保持模块级稳定引用（assistant-ui 要求 adapter 跨渲染稳定），方法内用
  * getState() 读取最新状态，reload 时才重新 list()。
  */
 const threadListAdapter: RemoteThreadListAdapter = {
   async list() {
+    await loadAgents();
     const state = useAgentStore.getState();
     if (state.owner !== useAuthStore.getState().user?.id) return { threads: [] };
     // 汇总当前账号下全部 Agent 的会话。
@@ -39,14 +48,14 @@ const threadListAdapter: RemoteThreadListAdapter = {
       (rows ?? []).map((row) => ({
         status: "regular" as const,
         remoteId: row.id,
-        title: row.title,
+        title: row.title_source === "pending" ? undefined : row.title,
         lastMessageAt: row.updated_at ? new Date(row.updated_at) : undefined,
       })),
     );
     return { threads };
   },
   async initialize() {
-    // 本地数据源直接采纳 runtime 传入的 localId 作为业务 id
+    // 由 API 幂等创建会话并返回业务 ID
     const code = useAppStore.getState().agentId;
     const id = await createThread(code);
     useAppStore.getState().bindThreadAgent(id, code);
@@ -61,7 +70,7 @@ const threadListAdapter: RemoteThreadListAdapter = {
     return {
       status: "regular" as const,
       remoteId,
-      title: row.title,
+      title: row.title_source === "pending" ? undefined : row.title,
       lastMessageAt: row.updated_at ? new Date(row.updated_at) : undefined,
     };
   },
@@ -76,38 +85,67 @@ const threadListAdapter: RemoteThreadListAdapter = {
     const code = getThreadAgentCode(remoteId);
     if (code) await removeThread(code, remoteId);
   },
-  async generateTitle() {
-    // 首条消息已在 sendMessage 中本地命名，不再流式生成标题
-    return createAssistantStream(async () => {});
+  async generateTitle(remoteId) {
+    return createAssistantStream(async (controller) => {
+      const title = await generateThreadTitle(remoteId);
+      if (title) controller.appendText(title);
+    });
   },
 };
 
-/** 每个线程一个 ExternalStore runtime：消息来自 agent-store（本地）。 */
+/** 每个线程一个 ExternalStore runtime：消息来自 API，在 agent-store 中缓存。 */
 function useThreadRuntimeHook() {
   const aui = useAui();
   const remoteId = useAuiState((s) => s.threadListItem.remoteId);
   const detail = useAgentStore((state) => (remoteId ? state.details[remoteId] : undefined));
   const draft = useAgentStore((state) => (remoteId ? state.drafts[remoteId] : undefined));
-  const messages = useMemo<ThreadMessageLike[]>(
-    () =>
-      detail?.messages.map((row) => ({
-        id: row.id,
-        role: row.role,
-        content: row.content,
-        createdAt: new Date(row.created_at),
-        metadata: {
-          custom: {
-            knowledge_bases: row.context.knowledge_bases,
-            skills: row.context.skills,
-            agent: row.context.agent,
-          },
-        },
-      })) ?? [],
+  useEffect(() => {
+    if (remoteId && !useAgentStore.getState().details[remoteId])
+      void selectThreadById(remoteId).catch((error) =>
+        useAgentStore.setState({
+          error: error instanceof Error ? error.message : "无法读取会话。",
+        }),
+      );
+  }, [remoteId]);
+  const messages = useMemo<ThreadMessage[]>(
+    () => detail?.messages.map(toRuntimeMessage) ?? [],
     [detail?.messages],
   );
-  return useExternalStoreRuntime<ThreadMessageLike>({
+  const repository = useMemo(
+    () =>
+      detail?.message_branches
+        ? ExportedMessageRepository.fromBranchableArray(
+            collectMessageBranches(detail.messages, detail.message_branches).map((entry) => ({
+              parentId: entry.parentId,
+              message: toRuntimeMessage(entry.message),
+            })),
+            { headId: detail.messages.at(-1)?.id ?? null },
+          )
+        : undefined,
+    [detail?.messages, detail?.message_branches],
+  );
+  const readBranches = () => {
+    const id = aui.threadListItem.getState().remoteId;
+    const current = id ? useAgentStore.getState().details[id] : undefined;
+    return current
+      ? readRuntimeBranches(
+          aui.thread().export().messages,
+          collectMessageBranches(current.messages, current.message_branches),
+        )
+      : [];
+  };
+  return useExternalStoreRuntime({
     messages,
-    convertMessage: (message) => message,
+    ...(repository ? { messageRepository: repository } : {}),
+    setMessages: (selected) => {
+      const id = aui.threadListItem.getState().remoteId;
+      if (id)
+        selectMessageBranch(
+          id,
+          selected.map((message) => message.id),
+          readBranches(),
+        );
+    },
     // 空态（remoteId 未定）不禁用：用户输入即触发 onNew → initialize；
     // 仅发送中禁用，避免重复提交。
     isLoading: !!remoteId && !detail,
@@ -124,6 +162,7 @@ function useThreadRuntimeHook() {
         .filter((part) => part.type === "text")
         .map((part) => part.text)
         .join("\n");
+      preserveMessageBranches(id, readBranches());
       await editMessage(
         getThreadAgentCode(id) ?? useAppStore.getState().agentId,
         id,
@@ -148,7 +187,7 @@ function useThreadRuntimeHook() {
 }
 
 /**
- * 本地 store 的会话列表变化（新建/重命名/删除/首条消息命名）时刷新
+ * 会话列表变化（新建/重命名/删除/首条消息命名）时刷新
  * RemoteThreadList 的列表元数据；reload 保留当前打开的线程。
  */
 function ThreadListReloadOnChange() {
@@ -164,6 +203,38 @@ function ThreadListReloadOnChange() {
     }
     void aui.threads.reload().catch(() => {});
   }, [aui, owner, lists]);
+  return null;
+}
+
+/** API 列表异步加载后，恢复当前 Agent 上次选中的会话。 */
+function RestoreThreadSelection() {
+  const aui = useAui();
+  const auiRef = useRef(aui);
+  const owner = useAuthStore((state) => state.user?.id);
+  const code = useAgentCode();
+  const selected = useAgentStore((state) => state.selected[code]);
+  const loading = useAgentStore((state) => state.loading);
+  const restored = useRef<string | null>(null);
+  useEffect(() => {
+    auiRef.current = aui;
+  }, [aui]);
+  useEffect(() => {
+    const key = `${owner}:${code}`;
+    if (loading || !owner || !selected || restored.current === key) return;
+    let alive = true;
+    void auiRef.current.threads
+      .getLoadThreadsPromise()
+      .then(() => {
+        if (alive) {
+          restored.current = key;
+          auiRef.current.threads.switchToThread(selected);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [owner, code, loading, selected]);
   return null;
 }
 
@@ -190,6 +261,7 @@ export function ChatRuntime({ children }: PropsWithChildren) {
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ThreadListReloadOnChange />
+      <RestoreThreadSelection />
       {children}
     </AssistantRuntimeProvider>
   );

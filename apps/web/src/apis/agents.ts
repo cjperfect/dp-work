@@ -5,6 +5,8 @@ import type { AgentId } from "@/interfaces/app";
 export type AgentModels = { configured: boolean; models: { id: string; name: string }[] };
 export const getAgentModels = () => request<AgentModels>("/api/agents/models");
 export type AgentChatInput = {
+  response_id?: string;
+  expected_revision?: number;
   agent_code: AgentId;
   thread_id: string;
   messages: { role: "user" | "assistant"; content: string }[];
@@ -20,14 +22,17 @@ export async function streamAgentChat(
 ): Promise<string> {
   const owner = useAuthStore.getState().user?.id;
   const token = getAccessToken();
-  const stream = await request<ReadableStream<Uint8Array>>("/api/agents/chat", {
-    method: "POST",
-    data: input,
-    adapter: "fetch",
-    responseType: "stream",
-    signal,
-    timeout: 240000,
-  });
+  const stream = await request<ReadableStream<Uint8Array>>(
+    input.response_id ? `/api/agents/threads/${input.thread_id}/chat` : "/api/agents/chat",
+    {
+      method: "POST",
+      data: input,
+      adapter: "fetch",
+      responseType: "stream",
+      signal,
+      timeout: 240000,
+    },
+  );
   if (!stream || typeof stream.getReader !== "function")
     throw new Error("Agent 返回了无效的事件流。");
   const reader = stream.getReader();
@@ -68,4 +73,13 @@ export async function streamAgentChat(
     await reader.cancel().catch(() => {});
     reader.releaseLock();
   }
+}
+
+/** 调用后端 LLM 生成会话标题，再由会话接口保存。 */
+export function generateAgentTitle(input: {
+  thread_id: string;
+  messages: { role: "user" | "assistant"; content: string }[];
+  model?: string;
+}): Promise<{ title: string }> {
+  return request("/api/agents/title", { method: "POST", data: input, timeout: 45000 });
 }

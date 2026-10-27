@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock
 
 from httpx import ASGITransport, AsyncClient
 
-from app.main import create_app
-from app.modules.auth.dependencies import get_current_user
-from app.modules.connectors import service
+from src.main import create_app
+from src.modules.auth.dependencies import get_current_user
+from src.modules.connectors import service
 
 
 def test_feishu_routes_require_authentication_and_validate_action():

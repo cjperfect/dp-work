@@ -11,7 +11,7 @@
 - `rag/chunking.py` 保留标题层级；页码仅在正文仍可精确对应源页时保留。
 - `rag/embedding.py` 使用 LangChain Embeddings 异步接口适配方舟 `doubao-embedding-vision-251215`；文档/查询分别设置检索指令，固定 1024 维。
 - 每个子块独立调用多模态向量接口（不能把多个子块放在同一个 input 中融合成单向量）；限制并发、请求重试和批次超时。
-- `rag/tool.py` 提供 Agent 检索工具，API 按短时授权校验用户和知识库，返回去重父块及引用。
+- `rag/tool.py` 提供 Agent 检索工具，API 按短时授权校验用户和知识库，由 API 执行 pgvector + Elasticsearch BM25 双路召回与 RRF 融合，返回去重父块及引用；查询向量服务失败时继续发送原始查询以降级关键词检索。
 - 向量与任务状态由 API 保存到 PostgreSQL/pgvector；仅 API 内部请求可调用分块/向量端点。
 - 更换模型、维度或指令后需重新向量化；检索按向量空间 profile 过滤，不混用历史向量。
 - 配置见 `.env.example` 的 `EMBEDDING_*` 与 `API_INTERNAL_URL`；密钥不返回前端。

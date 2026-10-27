@@ -9,9 +9,9 @@ from pathlib import Path
 from uuid import uuid4
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import create_async_engine
-from app.infrastructure.database.model_registry import Base
+from src.infrastructure.database.model_registry import Base
 from scripts.import_sqlite import import_database
-from app.infrastructure.database.session import async_database_url
+from src.infrastructure.database.session import async_database_url
 
 API_ROOT = Path(__file__).resolve().parents[2]
 

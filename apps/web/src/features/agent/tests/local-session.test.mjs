@@ -1,3 +1,4 @@
+import { conversationFixture } from "./conversation-fixture.mjs";
 import assert from "node:assert/strict";
 import { httpClient } from "../../../lib/http.ts";
 import { afterEach, beforeEach, test } from "node:test";
@@ -17,16 +18,21 @@ import {
 
 let streamInterceptor;
 beforeEach(() => {
+  const backend = conversationFixture();
   streamInterceptor = httpClient.interceptors.request.use((config) => {
     config.adapter = async (request) => ({
-      data: new ReadableStream({
-        start(controller) {
-          controller.enqueue(
-            new TextEncoder().encode('data: {"type":"done","content":"测试回答"}\n\n'),
-          );
-          controller.close();
-        },
-      }),
+      data: await backend.handle(
+        request,
+        async () =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode('data: {"type":"done","content":"测试回答"}\n\n'),
+              );
+              controller.close();
+            },
+          }),
+      ),
       status: 200,
       statusText: "OK",
       config: request,

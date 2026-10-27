@@ -4,12 +4,12 @@ from uuid import uuid4
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, select
 
-from app.core.security import create_access_token
-from app.infrastructure.database import session
-from app.main import create_app
-from app.modules.knowledge.models import KnowledgeBase
-from app.modules.users import service as users_service
-from app.modules.users.models import User
+from src.core.security import create_access_token
+from src.infrastructure.database import session
+from src.main import create_app
+from src.modules.knowledge.models import KnowledgeBase
+from src.modules.users import service as users_service
+from src.modules.users.models import User
 
 
 def test_authenticated_creation_commits_to_postgresql():

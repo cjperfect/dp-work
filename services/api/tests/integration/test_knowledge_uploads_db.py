@@ -6,14 +6,14 @@ from unittest.mock import AsyncMock
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete
 
-from app.core.security import create_access_token
-from app.infrastructure.database import session
-from app.main import create_app
-from app.modules.knowledge import storage
-from app.modules.knowledge.models import KnowledgeBase, KnowledgeDocument
-from app.modules.knowledge.repository import KnowledgeRepository
-from app.modules.users.models import User
-from app.modules.users import service as users_service
+from src.core.security import create_access_token
+from src.infrastructure.database import session
+from src.main import create_app
+from src.modules.knowledge import storage
+from src.modules.knowledge.models import KnowledgeBase, KnowledgeDocument
+from src.modules.knowledge.repository import KnowledgeRepository
+from src.modules.users.models import User
+from src.modules.users import service as users_service
 
 
 def test_upload_list_preview_deletion_and_failures(tmp_path, monkeypatch):

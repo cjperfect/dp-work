@@ -1,8 +1,8 @@
 """配置协议不接受任意内网地址或前端注入执行凭证。"""
 import pytest
 from pydantic import ValidationError
-from app.modules.settings.schemas import ServiceConfig
-from app.modules.agents.schemas import AgentRequest
+from src.modules.settings.schemas import ServiceConfig
+from src.modules.agents.schemas import AgentRequest
 
 
 def test_personal_endpoints_restrict_targets_and_keep_keys_out_of_repr():

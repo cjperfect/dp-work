@@ -5,9 +5,9 @@ import time
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.utils import credential_transport as transport
-from app.core.exceptions import ApiError
-from app.main import app
+from src.utils import credential_transport as transport
+from src.core.exceptions import ApiError
+from src.main import app
 from tests.credentials import auth_payload
 
 # 保留未被 autouse fixture 替换的磁盘加载函数，专门测试临时目录。

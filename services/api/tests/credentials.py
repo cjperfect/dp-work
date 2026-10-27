@@ -3,8 +3,8 @@ import time
 
 from jwcrypto import jwe
 
-from app.utils import credential_transport
-from app.utils.credential_transport import ALGORITHM, ENCRYPTION
+from src.utils import credential_transport
+from src.utils.credential_transport import ALGORITHM, ENCRYPTION
 
 
 def auth_payload(username, password, /, purpose="login", **changes):

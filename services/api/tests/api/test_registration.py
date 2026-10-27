@@ -7,13 +7,13 @@ from unittest.mock import AsyncMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.core.security import hash_password
-from app.main import app
-from app.modules.auth import dependencies as deps
-from app.modules.auth import service as auth
-from app.modules.users import service as user_model
-from app.modules.users.exceptions import UsernameExistsError
-from app.modules.users.models import User
+from src.core.security import hash_password
+from src.main import app
+from src.modules.auth import dependencies as deps
+from src.modules.auth import service as auth
+from src.modules.users import service as user_model
+from src.modules.users.exceptions import UsernameExistsError
+from src.modules.users.models import User
 from tests.credentials import protect
 
 

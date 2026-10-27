@@ -5,15 +5,15 @@ from unittest.mock import AsyncMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete
-from app.core.security import create_access_token
-from app.core.exceptions import ApiError
-from app.infrastructure.database import session
-from app.main import create_app
-from app.modules.settings import service
-from app.modules.settings.models import UserSettings
-from app.modules.settings.schemas import ServiceConfig
-from app.modules.users import service as users
-from app.modules.users.models import User
+from src.core.security import create_access_token
+from src.core.exceptions import ApiError
+from src.infrastructure.database import session
+from src.main import create_app
+from src.modules.settings import service
+from src.modules.settings.models import UserSettings
+from src.modules.settings.schemas import ServiceConfig
+from src.modules.users import service as users
+from src.modules.users.models import User
 
 DEFAULTS = {"model": {"provider": "ark", "base_url": "https://ark.cn-beijing.volces.com/api/v3", "model": "default", "configured": True},
             "asr": {"provider": "doubao", "base_url": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async", "configured": True}}

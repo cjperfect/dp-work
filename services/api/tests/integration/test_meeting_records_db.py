@@ -6,16 +6,16 @@ import pytest
 from pycrdt import Doc, XmlFragment
 from sqlalchemy import delete
 from fastapi.testclient import TestClient
-from app.core import config
-from app.core.exceptions import ApiError
-from app.core.security import create_access_token
-from app.infrastructure.database import session
-from app.main import create_app
-from app.modules.users import service as users
-from app.modules.users.models import User
-from app.modules.meetings import service, records, generation
-from app.modules.meetings.models import Meeting, MeetingGenerationJob, MeetingMinutes
-from app.modules.meetings.schemas import MeetingCreate, MeetingSave, GenerateMinutes
+from src.core import config
+from src.core.exceptions import ApiError
+from src.core.security import create_access_token
+from src.infrastructure.database import session
+from src.main import create_app
+from src.modules.users import service as users
+from src.modules.users.models import User
+from src.modules.meetings import service, records, generation
+from src.modules.meetings.models import Meeting, MeetingGenerationJob, MeetingMinutes
+from src.modules.meetings.schemas import MeetingCreate, MeetingSave, GenerateMinutes
 
 
 def append(state, value):
@@ -44,7 +44,7 @@ async def seed(generated=True):
 async def cleanup(owner, peer):
     async with session.transaction() as db:
         await db.execute(delete(Meeting).where(Meeting.owner_id == owner.id))
-        from app.modules.knowledge.models import KnowledgeBase
+        from src.modules.knowledge.models import KnowledgeBase
         await db.execute(delete(KnowledgeBase).where(KnowledgeBase.owner_id == owner.id))
         await db.execute(delete(User).where(User.id.in_([owner.id, peer.id])))
 
@@ -82,7 +82,7 @@ def test_merge_versions_permissions_and_generation():
             with pytest.raises(ApiError):
                 await service.save(owner.id, mid, MeetingSave(**stale, expected_revision=workspace.meeting.revision))
             with pytest.raises(ApiError): await records.archive_minutes(mid, peer.id, 1)
-            from app.modules.knowledge.repository import KnowledgeRepository
+            from src.modules.knowledge.repository import KnowledgeRepository
             async with session.transaction() as db:
                 base = await KnowledgeRepository(db).create(owner.id, '归档测试', '')
                 base_id = base.id
@@ -139,7 +139,7 @@ def test_original_transcript_has_no_collaboration_and_generation_uses_segments()
             corrected = await service.save(owner.id, mid, MeetingSave(**body, expected_revision=workspace.meeting.revision))
             accepted = await generation.enqueue(owner.id, mid, GenerateMinutes(expected_revision=corrected.meeting.revision))
             async with session.read_session() as db:
-                from app.modules.meetings.models import MeetingSegment
+                from src.modules.meetings.models import MeetingSegment
                 segment = await db.get(MeetingSegment, (mid, 'raw'))
                 assert segment.original_text == '初始转写'
                 job = await db.get(MeetingGenerationJob, accepted.task_id)
@@ -151,8 +151,8 @@ def test_original_transcript_has_no_collaboration_and_generation_uses_segments()
 
 def test_legacy_original_share_is_not_reused_for_minutes():
     async def case():
-        from app.modules.meetings.record_models import MeetingRecord, MeetingRecordVersion
-        from app.modules.meetings.rich_text import state_from_minutes
+        from src.modules.meetings.record_models import MeetingRecord, MeetingRecordVersion
+        from src.modules.meetings.rich_text import state_from_minutes
         await session.init_db()
         owner, peer, mid = await seed()
         try:

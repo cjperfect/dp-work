@@ -4,6 +4,7 @@ import { useAuthStore } from "../../../stores/auth.ts";
 import {
   consumeDocumentParseEvents,
   consumeDocumentVectorEvents,
+  consumeDocumentSearchEvents,
 } from "../../../stores/document-parsing.ts";
 import { subscribeDocumentParseEvents } from "../lib/parse-events.ts";
 
@@ -116,4 +117,19 @@ test("vector notifications track independent task IDs and do not repeat parse no
   assert.deepEqual(consumeDocumentParseEvents([vectorRow("indexed")], false), []);
   assert.equal(consumeDocumentVectorEvents([vectorRow("failed", "retry-vector")], false).length, 1);
   assert.deepEqual(consumeDocumentVectorEvents([vectorRow("indexed", "foreign", 2)], false), []);
+});
+
+test("ES completion ignores history, deduplicates and recovers known disconnected tasks", () => {
+  const searchRow = (status, task = "1", owner = 1) => ({
+    ...row("parsed", "parse-one", owner),
+    search_status: status,
+    search_task_id: task,
+  });
+  assert.deepEqual(consumeDocumentSearchEvents([searchRow("synced", "old")], true), []);
+  consumeDocumentSearchEvents([searchRow("syncing")], false);
+  assert.equal(consumeDocumentSearchEvents([searchRow("synced")], true).length, 1);
+  assert.deepEqual(consumeDocumentSearchEvents([searchRow("synced")], false), []);
+  assert.equal(consumeDocumentSearchEvents([searchRow("synced", "2")], false).length, 1);
+  assert.deepEqual(consumeDocumentSearchEvents([searchRow("synced", "3", 2)], false), []);
+  assert.deepEqual(consumeDocumentSearchEvents([searchRow(null, null)], false), []);
 });

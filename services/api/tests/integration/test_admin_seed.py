@@ -2,11 +2,11 @@
 
 import asyncio
 
-from app.core.security import hash_password, verify_password
-from app.infrastructure.database import session
-from app.modules.auth import service as auth_service
-from app.modules.users import bootstrap, service
-from app.modules.users.models import User
+from src.core.security import hash_password, verify_password
+from src.infrastructure.database import session
+from src.modules.auth import service as auth_service
+from src.modules.users import bootstrap, service
+from src.modules.users.models import User
 from sqlalchemy import delete, update
 
 

@@ -1,3 +1,4 @@
+import { conversationFixture } from "./conversation-fixture.mjs";
 import assert from "node:assert/strict";
 import { beforeEach, afterEach, test } from "node:test";
 import { httpClient } from "../../../lib/http.ts";
@@ -8,6 +9,10 @@ import {
   cancelMessage,
   sendMessage,
   editMessage,
+  selectMessageBranch,
+  collectMessageBranches,
+  generateThreadTitle,
+  renameThread,
   useAgentStore,
   resetAgents,
 } from "../../../stores/agent.ts";
@@ -47,9 +52,10 @@ beforeEach(() => {
       event({ type: "delta", text: "真实链路的测试回答" }) +
         event({ type: "done", content: "真实链路的测试回答" }),
     );
+  const backend = conversationFixture();
   interceptor = httpClient.interceptors.request.use((config) => {
     config.adapter = async (request) => ({
-      data: await handler(request),
+      data: await backend.handle(request, handler),
       status: 200,
       statusText: "OK",
       config: request,
@@ -214,4 +220,134 @@ test("failed edited messages can retry without restoring the stale continuation"
   assert.equal(messages.length, 2);
   assert.equal(messages[0].content, "修改后的问题");
   assert.equal(messages[1].content, "重试成功");
+});
+
+test("LLM titles are generated once and persisted to the API thread", async () => {
+  await ensureAgentChat("general");
+  const id = useAgentStore.getState().selected.general;
+  await sendMessage("general", id, "如何设计知识库检索工具？");
+  const requests = [];
+  let resolve;
+  handler = async (request) => {
+    requests.push(JSON.parse(request.data));
+    return new Promise((done) => {
+      resolve = () => done({ code: 0, data: { title: "知识库检索工具设计" } });
+    });
+  };
+  const first = generateThreadTitle(id);
+  const second = generateThreadTitle(id);
+  assert.equal(first, second);
+  await new Promise(setImmediate);
+  resolve();
+  assert.equal(await first, "知识库检索工具设计");
+  assert.equal(requests.length, 1);
+  assert.equal(useAgentStore.getState().details[id].thread.title_source, "generated");
+  assert.equal(await generateThreadTitle(id), "知识库检索工具设计");
+  assert.equal(requests.length, 1);
+});
+
+test("a late generated title cannot override a manual rename", async () => {
+  await ensureAgentChat("general");
+  const id = useAgentStore.getState().selected.general;
+  await sendMessage("general", id, "原问题");
+  let resolve;
+  handler = async () =>
+    new Promise((done) => {
+      resolve = () => done({ code: 0, data: { title: "模型标题" } });
+    });
+  const pending = generateThreadTitle(id);
+  await new Promise(setImmediate);
+  await renameThread("general", id, "手动命名");
+  resolve();
+  assert.equal(await pending, "手动命名");
+  assert.equal(useAgentStore.getState().details[id].thread.title, "手动命名");
+  assert.equal(useAgentStore.getState().details[id].thread.title_source, "manual");
+});
+
+test("a title response from the previous account cannot update thread metadata", async () => {
+  await ensureAgentChat("general");
+  const id = useAgentStore.getState().selected.general;
+  await sendMessage("general", id, "标题隔离测试");
+  let resolve;
+  handler = async () =>
+    new Promise((done) => {
+      resolve = () => done({ code: 0, data: { title: "旧账号标题" } });
+    });
+  const pending = generateThreadTitle(id);
+  await new Promise(setImmediate);
+  useAuthStore.setState({ user: { id: 2, username: "other" } });
+  resolve();
+  assert.equal(await pending, undefined);
+  assert.equal(useAgentStore.getState().details[id].thread.title, "新会话");
+});
+
+test("branches keep original continuations and later sends use only the selected path", async () => {
+  await ensureAgentChat("general");
+  const id = useAgentStore.getState().selected.general;
+  await sendMessage("general", id, "原始问题");
+  await sendMessage("general", id, "原分支后续问题");
+  const original = useAgentStore.getState().details[id].messages;
+  await editMessage("general", id, original[0].id, "修改后的问题");
+  const edited = useAgentStore.getState().details[id].messages;
+  assert.equal(edited.length, 2);
+  const all = collectMessageBranches(edited, useAgentStore.getState().details[id].message_branches);
+  assert.equal(all.length, 6);
+  selectMessageBranch(
+    id,
+    original.map((message) => message.id),
+    all,
+  );
+  assert.equal(useAgentStore.getState().details[id].messages[2].content, "原分支后续问题");
+  const requests = [];
+  handler = async (request) => {
+    requests.push(JSON.parse(request.data));
+    return response(event({ type: "done", content: "继续原分支" }));
+  };
+  await sendMessage("general", id, "在原分支继续提问");
+  assert.ok(requests[0].messages.some((message) => message.content === "原分支后续问题"));
+  assert.ok(!requests[0].messages.some((message) => message.content === "修改后的问题"));
+  const current = useAgentStore.getState().details[id];
+  selectMessageBranch(
+    id,
+    edited.map((message) => message.id),
+    collectMessageBranches(current.messages, current.message_branches),
+  );
+  assert.deepEqual(
+    useAgentStore.getState().details[id].messages.map((message) => message.content),
+    edited.map((message) => message.content),
+  );
+  assert.throws(() => selectMessageBranch(id, [edited[1].id], all), /分支无效/);
+});
+
+test("message versions and selected branch survive reloading API history", async () => {
+  const values = new Map();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key) =>
+        key === "dp-work.auth.token" ? "fixture-token" : (values.get(key) ?? null),
+      setItem: (key, value) => values.set(key, value),
+    },
+  });
+  await ensureAgentChat("general");
+  const id = useAgentStore.getState().selected.general;
+  await sendMessage("general", id, "旧版本");
+  const original = useAgentStore.getState().details[id].messages;
+  await editMessage("general", id, original[0].id, "新版本");
+  let current = useAgentStore.getState().details[id];
+  selectMessageBranch(
+    id,
+    original.map((message) => message.id),
+    collectMessageBranches(current.messages, current.message_branches),
+  );
+  await new Promise(setImmediate);
+  resetAgents();
+  await ensureAgentChat("general");
+  current = useAgentStore.getState().details[id];
+  assert.equal(current.messages[0].content, "旧版本");
+  assert.equal(current.message_branches.length, 4);
+  const root = current.message_branches.find((entry) => entry.message.content === "新版本");
+  const reply = current.message_branches.find((entry) => entry.parentId === root.message.id);
+  selectMessageBranch(id, [root.message.id, reply.message.id], current.message_branches);
+  assert.equal(useAgentStore.getState().details[id].messages[0].content, "新版本");
 });

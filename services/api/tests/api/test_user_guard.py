@@ -11,11 +11,11 @@ from fastapi import Depends, FastAPI, Request
 from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
 
-from app.core.exceptions import register_exception_handlers
-from app.core.security import create_access_token
-from app.decorators import require_user
-from app.modules.auth import dependencies
-from app.modules.users.models import User
+from src.core.exceptions import register_exception_handlers
+from src.core.security import create_access_token
+from src.decorators import require_user
+from src.modules.auth import dependencies
+from src.modules.users.models import User
 
 
 class GuardBody(BaseModel):

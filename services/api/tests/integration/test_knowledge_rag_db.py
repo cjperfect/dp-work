@@ -6,16 +6,16 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy import delete, select, func
 from httpx import ASGITransport, AsyncClient
-from app.core.exceptions import ApiError
-from app.core.security import create_access_token
-from app.infrastructure.database import session
-from app.main import create_app
-from app.modules.knowledge import rag, rag_access, parsing
-from app.modules.knowledge.models import KnowledgeBase, KnowledgeDocument
-from app.modules.knowledge.rag_models import KnowledgeParentChunk as Parent, KnowledgeChildChunk as Child
-from app.modules.knowledge.schemas import ParsedDocumentSave
-from app.modules.users import service as users
-from app.modules.users.models import User
+from src.core.exceptions import ApiError
+from src.core.security import create_access_token
+from src.infrastructure.database import session
+from src.main import create_app
+from src.modules.knowledge import rag, rag_access, parsing
+from src.modules.knowledge.models import KnowledgeBase, KnowledgeDocument
+from src.modules.knowledge.rag_models import KnowledgeParentChunk as Parent, KnowledgeChildChunk as Child
+from src.modules.knowledge.schemas import ParsedDocumentSave
+from src.modules.users import service as users
+from src.modules.users.models import User
 
 PROFILE = 'a' * 64
 VECTOR = [1.0] + [0.0] * 1023

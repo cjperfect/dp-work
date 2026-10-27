@@ -1,11 +1,28 @@
-import { streamAgentChat } from "@/apis/agents";
+import { streamAgentChat, generateAgentTitle } from "@/apis/agents";
+import {
+  listConversations,
+  getConversation,
+  createConversation,
+  saveConversationDraft,
+  saveConversationMessages,
+  renameConversation,
+  deleteConversation,
+  importConversation,
+} from "@/apis/conversations";
 import { useAppStore } from "@/stores/app";
 import { useAgentModelStore } from "@/stores/agent-models";
 import { readMock, writeMock } from "@/lib/mock-storage";
 import { create } from "zustand";
 import { useAuthStore } from "@/stores/auth";
 import type { AgentId } from "@/interfaces/app";
-import type { AgentConfig, ChatThread, Skill, ThreadDetail, ChatMessage } from "@/types/agent";
+import type {
+  AgentConfig,
+  ChatThread,
+  Skill,
+  ThreadDetail,
+  ChatMessage,
+  MessageBranch,
+} from "@/types/agent";
 import { AGENTS } from "@/features/agent/constants/agents";
 export type DraftState = {
   text: string;
@@ -44,56 +61,78 @@ const empty = (): State => ({
   switching: false,
 });
 export const useAgentStore = create<State>(() => empty());
-useAgentStore.subscribe((state) => {
+useAgentStore.subscribe((state, previous) => {
   if (
     !state.owner ||
     !state.agents.length ||
-    Object.values(state.drafts).some((draft) => draft.sending)
+    (state.agents === previous.agents && state.selected === previous.selected)
   )
     return;
+  // 本地仅保存 Agent 配置和当前选择，会话正文以 API / PG 为准。
   try {
-    writeMock(`agents:${state.owner}`, {
-      ...state,
-      configBusy: false,
-      switching: false,
-      loading: false,
-      error: null,
-      drafts: Object.fromEntries(
-        Object.entries(state.drafts).map(([id, draft]) => [
-          id,
-          { ...draft, sending: false, saving: false, pending: null },
-        ]),
-      ),
+    writeMock(`agent-config:${state.owner}`, {
+      agents: state.agents,
+      skills: state.skills,
+      selected: state.selected,
     });
   } catch {
-    /* 演示存储不可用时保留当前页面数据。 */
+    /* 配置缓存不可用时不影响服务端会话。 */
   }
 });
 let bootstrap: Promise<void> | null = null;
 let generation = 0;
 const runs = new Map<string, AbortController>();
+const titleRequests = new Map<string, Promise<string | undefined>>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 const saves = new Map<string, Promise<void>>();
 const creates = new Map<string, Promise<string>>();
 const createIds = new Map<string, string>();
 const message = (error: unknown) => (error instanceof Error ? error.message : "操作失败，请重试。");
-/** 构造本地会话，模型执行通过 Agent API 完成。 */
-function localThread(id: string, agentId: number, title = "新会话"): ThreadDetail {
-  const now = new Date().toISOString();
-  return {
-    thread: {
-      id,
-      agent_id: agentId,
-      title,
-      draft: "",
-      draft_revision: 0,
-      created_at: now,
-      updated_at: now,
-    },
-    knowledge_base_ids: [],
-    messages: [],
-  };
+const mutations = new Map<string, Promise<unknown>>();
+const removed = new Set<string>();
+/** 串行提交同一会话的草稿和消息，避免自身请求产生版本冲突。 */
+function mutate<T>(owner: number, id: string, operation: () => Promise<T>): Promise<T> {
+  const key = `${owner}:${id}`;
+  const version = generation;
+  const previous = mutations.get(key) ?? Promise.resolve();
+  const next = previous
+    .catch(() => {})
+    .then(() => {
+      if (!owned(owner) || version !== generation || removed.has(key))
+        throw new Error("会话已关闭或登录状态已改变。");
+      return operation();
+    });
+  mutations.set(key, next);
+  void next
+    .finally(() => {
+      if (mutations.get(key) === next) mutations.delete(key);
+    })
+    .catch(() => {});
+  return next;
 }
+async function persistGraph(code: AgentId, id: string) {
+  const owner = currentOwner();
+  const snapshot = useAgentStore.getState().details[id];
+  if (!snapshot) throw new Error("会话不存在。");
+  return mutate(owner, id, async () => {
+    const detail = useAgentStore.getState().details[id];
+    if (!detail) throw new Error("会话不存在。");
+    const saved = await saveConversationMessages(id, { ...snapshot, thread: detail.thread });
+    if (!owned(owner) || removed.has(`${owner}:${id}`)) return;
+    const current = useAgentStore.getState().details[id];
+    if (
+      current.messages === snapshot.messages &&
+      current.message_branches === snapshot.message_branches
+    )
+      remember(owner, code, saved);
+    else
+      useAgentStore.setState((state) => ({
+        lists: updateList(state, code, saved.thread),
+        details: { ...state.details, [id]: { ...state.details[id], thread: saved.thread } },
+      }));
+  });
+}
+
 export function currentOwner() {
   const owner = useAuthStore.getState().user?.id;
   if (!owner || useAgentStore.getState().owner !== owner)
@@ -105,6 +144,12 @@ export function resetAgents() {
   bootstrap = null;
   for (const controller of runs.values()) controller.abort();
   runs.clear();
+  titleRequests.clear();
+  mutations.clear();
+  removed.clear();
+  creates.clear();
+  createIds.clear();
+  saves.clear();
   for (const timer of timers.values()) clearTimeout(timer);
   timers.clear();
   useAgentStore.setState(empty());
@@ -121,23 +166,15 @@ export function loadAgents(force = false) {
     useAgentStore.setState({ owner });
   }
   if (bootstrap) return bootstrap;
-  if (!force && useAgentStore.getState().agents.length) return Promise.resolve();
+  if (!force && useAgentStore.getState().agents.length && !useAgentStore.getState().error)
+    return Promise.resolve();
   const version = generation;
   useAgentStore.setState({ loading: true, error: null });
   const operation = (async () => {
     try {
-      const saved = readMock<State>(`agents:${owner}`);
-      if (saved?.owner === owner && saved.agents?.length) {
-        if (owned(owner) && version === generation)
-          useAgentStore.setState({
-            ...saved,
-            loading: false,
-            error: null,
-            configBusy: false,
-            switching: false,
-          });
-        return;
-      }
+      const legacy = readMock<State>(`agents:${owner}`);
+      const saved =
+        readMock<Pick<State, "agents" | "skills" | "selected">>(`agent-config:${owner}`) ?? legacy;
       // Agent 配置暂使用本地常量，执行模型由服务端环境配置。
       const seen = new Set<string>();
       const skills: Skill[] = [];
@@ -159,18 +196,39 @@ export function loadAgents(force = false) {
         revision: 1,
         active_thread_id: null,
       }));
-      const data: { agents: AgentConfig[]; skills: Skill[] } = { agents, skills };
+      if (!owned(owner) || version !== generation) return;
+      useAgentStore.setState({
+        agents: saved?.agents?.length ? saved.agents : agents,
+        skills: saved?.skills?.length ? saved.skills : skills,
+        selected: saved?.selected ?? {},
+      });
+      if (legacy?.owner === owner) {
+        for (const entry of Object.values(legacy.details ?? {})) {
+          if (!owned(owner) || version !== generation) return;
+          const draft = legacy.drafts?.[entry.thread.id];
+          await importConversation({
+            ...entry,
+            thread: {
+              ...entry.thread,
+              draft: draft?.text ?? entry.thread.draft,
+              title_source:
+                entry.thread.title_source ??
+                (entry.thread.title === "新会话" ? "pending" : "manual"),
+            },
+            knowledge_base_ids: draft?.ids ?? entry.knowledge_base_ids,
+          });
+        }
+        if (!owned(owner) || version !== generation) return;
+        localStorage.removeItem?.(`dp-work:mock:v1:agents:${owner}`);
+      }
+      const rows = await listConversations();
       if (!owned(owner) || version !== generation) return;
       useAgentStore.setState((state) => ({
-        agents: data.agents,
-        skills: data.skills,
         loading: false,
-        selected: Object.fromEntries(
-          data.agents.map((agent) => [
+        lists: Object.fromEntries(
+          state.agents.map((agent) => [
             agent.code,
-            state.selected[agent.code] === undefined
-              ? agent.active_thread_id
-              : state.selected[agent.code],
+            rows.filter((row) => row.agent_id === agent.id),
           ]),
         ),
       }));
@@ -226,7 +284,7 @@ function updateList(state: State, code: AgentId, thread: ChatThread) {
   };
 }
 function remember(owner: number, code: AgentId, detail: ThreadDetail) {
-  if (!owned(owner)) return;
+  if (!owned(owner) || removed.has(`${owner}:${detail.thread.id}`)) return;
   useAgentStore.setState((state) => {
     const existing = state.drafts[detail.thread.id];
     const previous = state.details[detail.thread.id];
@@ -246,8 +304,8 @@ function remember(owner: number, code: AgentId, detail: ThreadDetail) {
                 savedVersion: 0,
                 error: null,
                 saving: false,
-                sending: false,
-                pending: null,
+                sending: existing?.sending ?? false,
+                pending: existing?.pending ?? null,
               },
       },
     };
@@ -255,7 +313,6 @@ function remember(owner: number, code: AgentId, detail: ThreadDetail) {
 }
 export async function loadThreads(code: AgentId) {
   currentOwner();
-  // 本地会话列表是当前数据源，重新进入页面时保留已有会话。
   return useAgentStore.getState().lists[code] ?? [];
 }
 export function createThread(code: AgentId): Promise<string> {
@@ -271,11 +328,9 @@ export function createThread(code: AgentId): Promise<string> {
       id = crypto.randomUUID();
       createIds.set(key, id);
     }
-    // 本阶段会话历史保存在本地。
     const agent = useAgentStore.getState().agents.find((row) => row.code === code);
     if (!agent) throw new Error("Agent 尚未加载。");
-    const detail = localThread(id, agent.id);
-    detail.knowledge_base_ids = [...agent.knowledge_base_ids];
+    const detail = await createConversation(id, agent.id, agent.knowledge_base_ids);
     createIds.delete(key);
     remember(owner, code, detail);
     if (owned(owner))
@@ -319,9 +374,10 @@ export async function selectThread(code: AgentId, id: string) {
   try {
     const old = useAgentStore.getState().selected[code];
     if (old && old !== id) await flushDraft(code, old);
-    const detail = useAgentStore.getState().details[id];
+    const detail = await getConversation(id);
     const agent = useAgentStore.getState().agents.find((row) => row.code === code);
     if (!detail || detail.thread.agent_id !== agent?.id) throw new Error("会话不存在。");
+    remember(owner, code, detail);
     if (owned(owner))
       useAgentStore.setState((state) => ({ selected: { ...state.selected, [code]: id } }));
   } finally {
@@ -343,8 +399,7 @@ export async function ensureAgentChat(code: AgentId, force = false) {
     await createThread(code);
     return;
   }
-  if (owned(owner) && state.selected[code] !== id)
-    useAgentStore.setState((state) => ({ selected: { ...state.selected, [code]: id } }));
+  if (!state.details[id] || state.selected[code] !== id) await selectThread(code, id);
 }
 function changeDraft(id: string, change: (draft: DraftState) => DraftState) {
   const owner = currentOwner();
@@ -393,15 +448,31 @@ export function flushDraft(code: AgentId, id: string): Promise<void> {
         drafts: { ...state.drafts, [id]: { ...state.drafts[id], saving: true } },
       }));
       try {
-        // 草稿保存在本地，不调用业务 API。
-        if (!owned(owner)) return;
-        useAgentStore.setState((state) => ({
-          lists: updateList(state, code, detail.thread),
-          drafts: {
-            ...state.drafts,
-            [id]: { ...state.drafts[id], savedVersion: draft.version, saving: false, error: null },
-          },
-        }));
+        await mutate(owner, id, async () => {
+          const current = useAgentStore.getState().details[id];
+          const thread = await saveConversationDraft(id, {
+            expected_revision: current.thread.draft_revision,
+            draft: draft.text,
+            knowledge_base_ids: draft.ids,
+          });
+          if (!owned(owner) || removed.has(`${owner}:${id}`)) return;
+          useAgentStore.setState((state) => ({
+            lists: updateList(state, code, thread),
+            details: {
+              ...state.details,
+              [id]: { ...state.details[id], thread, knowledge_base_ids: draft.ids },
+            },
+            drafts: {
+              ...state.drafts,
+              [id]: {
+                ...state.drafts[id],
+                savedVersion: draft.version,
+                saving: false,
+                error: null,
+              },
+            },
+          }));
+        });
       } catch (error) {
         if (owned(owner))
           useAgentStore.setState((state) => ({
@@ -440,14 +511,15 @@ export async function editMessage(code: AgentId, id: string, messageId: string, 
   if (!text.trim()) throw new Error("请输入消息。");
   const index = detail.messages.findIndex((row) => row.id === messageId && row.role === "user");
   if (index < 0) throw new Error("只能编辑当前会话中的用户消息。");
-  useAgentStore.setState((current) => ({
-    details: { ...current.details, [id]: { ...detail, messages: detail.messages.slice(0, index) } },
-    drafts: { ...current.drafts, [id]: { ...current.drafts[id], pending: null, error: null } },
-  }));
-  await sendMessage(code, id, text);
+  await sendMessage(code, id, text, { editedMessageId: messageId });
 }
 
-export async function sendMessage(code: AgentId, id: string, text: string) {
+export async function sendMessage(
+  code: AgentId,
+  id: string,
+  text: string,
+  options?: { editedMessageId: string },
+) {
   const owner = currentOwner();
   if (!text.trim()) throw new Error("请输入消息。");
   const initial = useAgentStore.getState().drafts[id];
@@ -465,6 +537,7 @@ export async function sendMessage(code: AgentId, id: string, text: string) {
   let replyId = "";
   try {
     await flushDraft(code, id);
+    await mutations.get(`${owner}:${id}`);
     const state = useAgentStore.getState();
     if (!owned(owner) || !state.details[id]) return;
     const draft = state.drafts[id];
@@ -474,9 +547,13 @@ export async function sendMessage(code: AgentId, id: string, text: string) {
         ? draft.pending
         : { id: crypto.randomUUID(), signature };
     replyId = `${pending.id}-reply`;
-    const history = state.details[id].messages.filter(
-      (row) => row.id !== pending.id && row.id !== replyId,
-    );
+    const cut = options
+      ? state.details[id].messages.findIndex((row) => row.id === options.editedMessageId)
+      : state.details[id].messages.length;
+    if (cut < 0) throw new Error("待编辑消息已变化，请重新加载。");
+    const history = state.details[id].messages
+      .slice(0, cut)
+      .filter((row) => row.id !== pending.id && row.id !== replyId);
     const now = new Date().toISOString();
     const context: ChatMessage["context"] = {
       knowledge_bases: [],
@@ -490,12 +567,16 @@ export async function sendMessage(code: AgentId, id: string, text: string) {
     };
     const detail: ThreadDetail = {
       ...state.details[id],
+      ...(options
+        ? {
+            message_branches: collectMessageBranches(
+              state.details[id].messages,
+              state.details[id].message_branches,
+            ),
+          }
+        : {}),
       thread: {
         ...state.details[id].thread,
-        title:
-          !history.length && state.details[id].thread.title === "新会话"
-            ? text.slice(0, 24)
-            : state.details[id].thread.title,
         updated_at: now,
       },
       messages: [
@@ -539,6 +620,8 @@ export async function sendMessage(code: AgentId, id: string, text: string) {
         },
       }));
     };
+    await persistGraph(code, id);
+    if (!owned(owner)) return;
     let accumulated = "";
     const selectedModel = useAppStore.getState().currentModel;
     const model = useAgentModelStore.getState().data?.models.some((row) => row.id === selectedModel)
@@ -548,6 +631,8 @@ export async function sendMessage(code: AgentId, id: string, text: string) {
       {
         agent_code: code,
         thread_id: id,
+        response_id: replyId,
+        expected_revision: useAgentStore.getState().details[id].thread.draft_revision,
         knowledge_base_ids: (
           state.agents.find((row) => row.code === code)?.knowledge_base_ids ?? []
         )
@@ -574,30 +659,22 @@ export async function sendMessage(code: AgentId, id: string, text: string) {
       controller.signal,
     );
     updateReply(content, "complete");
+    const saved = await getConversation(id);
     if (!owned(owner) || !useAgentStore.getState().details[id]) return;
-    useAgentStore.setState((current) => {
-      const thread = {
-        ...current.details[id].thread,
-        draft: "",
-        draft_revision: current.details[id].thread.draft_revision + 1,
-        updated_at: new Date().toISOString(),
-      };
-      return {
-        lists: updateList(current, code, thread),
-        details: { ...current.details, [id]: { ...current.details[id], thread } },
-        drafts: {
-          ...current.drafts,
-          [id]: {
-            ...current.drafts[id],
-            text: "",
-            sending: false,
-            pending: null,
-            version: 0,
-            savedVersion: 0,
-          },
+    remember(owner, code, saved);
+    useAgentStore.setState((current) => ({
+      drafts: {
+        ...current.drafts,
+        [id]: {
+          ...current.drafts[id],
+          text: saved.thread.draft,
+          sending: false,
+          pending: null,
+          version: 0,
+          savedVersion: 0,
         },
-      };
-    });
+      },
+    }));
   } catch (error) {
     if (!owned(owner) || !useAgentStore.getState().details[id]) return;
     const cancelled = controller.signal.aborted;
@@ -627,6 +704,15 @@ export async function sendMessage(code: AgentId, id: string, text: string) {
         },
       },
     }));
+    try {
+      const saved = await getConversation(id);
+      const remote = saved.messages.find((row) => row.id === replyId);
+      if (remote?.status === "streaming") {
+        await persistGraph(code, id);
+      } else remember(owner, code, saved);
+    } catch {
+      /* 保存失败保留页面错误和内容，可重新加载服务端版本。 */
+    }
     if (!cancelled) throw error;
   } finally {
     if (runs.get(id) === controller) runs.delete(id);
@@ -638,13 +724,7 @@ export async function renameThread(code: AgentId, id: string, title: string) {
   const existing = state.details[id]?.thread;
   const agent = state.agents.find((row) => row.code === code);
   if (!existing || existing.agent_id !== agent?.id) throw new Error("会话不存在。");
-  // 会话标题保存在本地。
-  const now = new Date().toISOString();
-  const row: ChatThread = {
-    ...existing,
-    title,
-    updated_at: now,
-  };
+  const row = await renameConversation(id, title);
   if (owned(owner))
     useAgentStore.setState((state) => ({
       lists: updateList(state, code, row),
@@ -653,7 +733,7 @@ export async function renameThread(code: AgentId, id: string, title: string) {
             ...state.details,
             [id]: {
               ...state.details[id],
-              thread: { ...state.details[id].thread, title: row.title },
+              thread: { ...state.details[id].thread, title: row.title, title_source: "manual" },
             },
           }
         : state.details,
@@ -662,7 +742,8 @@ export async function renameThread(code: AgentId, id: string, title: string) {
 export async function removeThread(code: AgentId, id: string) {
   const owner = currentOwner();
   cancelMessage(id);
-  // 仅移除当前设备上的会话。
+  await deleteConversation(id);
+  removed.add(`${owner}:${id}`);
   if (!owned(owner)) return;
   useAgentStore.setState((state) => {
     const details = { ...state.details };
@@ -676,4 +757,128 @@ export async function removeThread(code: AgentId, id: string) {
       selected: state.selected[code] === id ? { ...state.selected, [code]: null } : state.selected,
     };
   });
+}
+
+/** 首轮对话后生成标题；去重请求，并防止覆盖重命名或新账号。 */
+export function generateThreadTitle(id: string): Promise<string | undefined> {
+  const owner = currentOwner();
+  const state = useAgentStore.getState();
+  const detail = state.details[id];
+  if (!detail) return Promise.resolve(undefined);
+  if (detail.thread.title_source !== "pending") return Promise.resolve(detail.thread.title);
+  const key = `${owner}:${id}`;
+  const running = titleRequests.get(key);
+  if (running) return running;
+  const version = generation;
+  const firstId = detail.messages.find((row) => row.role === "user")?.id;
+  if (!firstId) return Promise.resolve(undefined);
+  let remaining = 16000;
+  const messages = detail.messages
+    .filter((row) => row.content.trim() && row.status !== "failed" && row.status !== "cancelled")
+    .slice(0, 6)
+    .map((row) => {
+      const content = row.content.slice(0, Math.min(4000, remaining));
+      remaining -= content.length;
+      return { role: row.role, content };
+    })
+    .filter((row) => row.content.length > 0);
+  const selectedModel = useAppStore.getState().currentModel;
+  const model = useAgentModelStore.getState().data?.models.some((row) => row.id === selectedModel)
+    ? selectedModel
+    : undefined;
+  const operation = (async () => {
+    await mutations.get(`${owner}:${id}`);
+    if (!owned(owner) || version !== generation) throw new Error("登录状态已改变。");
+    return generateAgentTitle({ thread_id: id, messages, model });
+  })()
+    .then(async ({ title }) => {
+      if (!owned(owner) || version !== generation) return undefined;
+      const current = useAgentStore.getState().details[id];
+      if (!current) return undefined;
+      if (current.thread.title_source !== "pending") return current.thread.title;
+      if (current.messages.find((row) => row.role === "user")?.id !== firstId) return undefined;
+      const code = getThreadAgentCode(id);
+      if (!code) return undefined;
+      const thread = await renameConversation(id, title, "generated", firstId);
+      if (!owned(owner) || !useAgentStore.getState().details[id]) return undefined;
+      useAgentStore.setState((next) => ({
+        lists: updateList(next, code, thread),
+        details: { ...next.details, [id]: { ...next.details[id], thread } },
+      }));
+      return title;
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      if (titleRequests.get(key) === operation) titleRequests.delete(key);
+    });
+  titleRequests.set(key, operation);
+  return operation;
+}
+
+/** 保存运行时全部消息版本，可恢复旧页面里仍在内存中的分支。 */
+export function preserveMessageBranches(id: string, branches: MessageBranch[]) {
+  currentOwner();
+  const detail = useAgentStore.getState().details[id];
+  if (!detail || useAgentStore.getState().drafts[id]?.sending) return;
+  const merged = new Map((detail.message_branches ?? []).map((entry) => [entry.message.id, entry]));
+  for (const entry of branches) merged.set(entry.message.id, entry);
+  useAgentStore.setState((state) => ({
+    details: {
+      ...state.details,
+      [id]: { ...state.details[id], message_branches: [...merged.values()] },
+    },
+  }));
+}
+
+/** 左右切换只改变当前路径；其他版本继续保存在 PG。 */
+export function selectMessageBranch(id: string, ids: readonly string[], branches: MessageBranch[]) {
+  currentOwner();
+  const state = useAgentStore.getState();
+  const detail = state.details[id];
+  if (!detail || !state.drafts[id] || state.drafts[id].sending) return;
+  const all = new Map(
+    collectMessageBranches(detail.messages, detail.message_branches).map((entry) => [
+      entry.message.id,
+      entry,
+    ]),
+  );
+  for (const entry of branches) all.set(entry.message.id, entry);
+  if (
+    ids.length === detail.messages.length &&
+    ids.every((messageId, index) => detail.messages[index].id === messageId)
+  )
+    return;
+  const selected = ids.map((messageId, index) => {
+    const entry = all.get(messageId);
+    if (!entry || entry.parentId !== (ids[index - 1] ?? null))
+      throw new Error("消息分支无效，请重新加载。");
+    return { ...entry.message, seq: index + 1 };
+  });
+  useAgentStore.setState((current) => ({
+    details: {
+      ...current.details,
+      [id]: { ...current.details[id], messages: selected, message_branches: [...all.values()] },
+    },
+    drafts: { ...current.drafts, [id]: { ...current.drafts[id], pending: null, error: null } },
+  }));
+  const code = getThreadAgentCode(id);
+  if (code)
+    void persistGraph(code, id).catch((error) => {
+      if (!owned(state.owner!)) return;
+      useAgentStore.setState((current) => ({
+        drafts: { ...current.drafts, [id]: { ...current.drafts[id], error: message(error) } },
+      }));
+    });
+}
+
+/** 合并所有历史节点与当前对话路径，按消息 ID 更新流式正文。 */
+export function collectMessageBranches(
+  messages: readonly ChatMessage[],
+  saved: readonly MessageBranch[] = [],
+): MessageBranch[] {
+  const all = new Map(saved.map((entry) => [entry.message.id, entry]));
+  messages.forEach((message, index) =>
+    all.set(message.id, { parentId: messages[index - 1]?.id ?? null, message }),
+  );
+  return [...all.values()];
 }

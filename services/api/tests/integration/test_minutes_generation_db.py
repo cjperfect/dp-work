@@ -4,14 +4,14 @@ from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 import httpx
 from sqlalchemy import delete, select, update, func
-from app.core import config
-from app.core.security import create_access_token
-from app.infrastructure.database import session
-from app.main import create_app
-from app.modules.meetings import generation
-from app.modules.meetings.models import Meeting, MeetingGenerationJob
-from app.modules.users.models import User
-from app.modules.users import service as users_service
+from src.core import config
+from src.core.security import create_access_token
+from src.infrastructure.database import session
+from src.main import create_app
+from src.modules.meetings import generation
+from src.modules.meetings.models import Meeting, MeetingGenerationJob
+from src.modules.users.models import User
+from src.modules.users import service as users_service
 
 
 async def setup(client, user):

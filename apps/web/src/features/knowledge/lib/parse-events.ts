@@ -15,6 +15,8 @@ export type DocumentParseState = {
   vector_done?: number;
   vector_total?: number;
   vectorized_at?: string | null;
+  search_task_id?: string | null;
+  search_status?: "syncing" | "synced" | null;
 };
 type Listener = (rows: DocumentParseState[], snapshot: boolean) => void;
 type Connection = {

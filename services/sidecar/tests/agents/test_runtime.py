@@ -145,3 +145,27 @@ def test_transient_connect_error_retries_once_without_duplicating_output():
                 assert model.max_retries == 1 and model.http_socket_options == ()
     asyncio.run(case())
     assert len(seen) == 2
+
+
+def test_title_generation_uses_llm_and_cleans_short_output(monkeypatch):
+    from src.agents.agent import TitleRequest, generate_title
+    class TitleModel(FakeMessagesListChatModel):
+        pass
+    captured = []
+    def model_factory(settings, *_):
+        captured.append(settings)
+        return TitleModel(responses=[AIMessage(content='标题： “知识库检索接入方案”', response_metadata={'finish_reason': 'stop'})])
+    monkeypatch.setattr(agent, 'create_model', model_factory)
+    request = TitleRequest(thread_id='one', messages=[{'role': 'user', 'content': '如何接入知识库？'}])
+    result = asyncio.run(generate_title(request, ModelSettings(timeout=180, max_tokens=8192)))
+    assert result == '知识库检索接入方案'
+    assert captured[0].max_tokens == 256 and captured[0].timeout == 30
+
+
+def test_title_rejects_long_or_empty_output(monkeypatch):
+    from src.agents.agent import TitleRequest, generate_title
+    request = TitleRequest(thread_id='one', messages=[{'role': 'user', 'content': '问题'}])
+    for content in ('', '冗长' * 31):
+        monkeypatch.setattr(agent, 'create_model', lambda *_: FakeMessagesListChatModel(responses=[AIMessage(content=content)]))
+        with pytest.raises(ModelError):
+            asyncio.run(generate_title(request, ModelSettings()))

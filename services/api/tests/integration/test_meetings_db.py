@@ -3,12 +3,12 @@ import asyncio
 from uuid import uuid4
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, select, func
-from app.core.security import create_access_token
-from app.infrastructure.database import session
-from app.main import create_app
-from app.modules.meetings.models import Meeting, MeetingSegment, MeetingMinutes
-from app.modules.users.models import User
-from app.modules.users import service as users_service
+from src.core.security import create_access_token
+from src.infrastructure.database import session
+from src.main import create_app
+from src.modules.meetings.models import Meeting, MeetingSegment, MeetingMinutes
+from src.modules.users.models import User
+from src.modules.users import service as users_service
 
 
 def test_meeting_lifecycle_and_legacy_import():

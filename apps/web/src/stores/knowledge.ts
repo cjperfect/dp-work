@@ -1,3 +1,5 @@
+import { DOCUMENTS_CHANGED } from "@/features/knowledge/lib/document-events";
+import type { KbFile } from "@/features/knowledge/constants/knowledge-data";
 import { create } from "zustand";
 import * as repository from "@/features/knowledge/lib/knowledge-repository";
 import {
@@ -6,6 +8,7 @@ import {
   updateKnowledgeBaseRequest,
   deleteKnowledgeBaseRequest,
   saveKnowledgeDocumentRequest,
+  renameKnowledgeDocumentRequest,
   deleteKnowledgeDocumentRequest,
   uploadKnowledgeDocumentRequest,
 } from "@/apis/knowledge";
@@ -114,19 +117,42 @@ export async function saveKnowledgeDocument(
   input: EditorDocumentInput,
 ) {
   const file = await saveKnowledgeDocumentRequest(accountId, baseId, input);
-  if (useKnowledgeStore.getState().accountId === accountId) {
-    useKnowledgeStore.setState((state) => ({
-      bases: state.bases.map((base) =>
-        base.id === baseId
-          ? {
-              ...base,
-              files: [file, ...base.files.filter((row) => row.id !== file.id)],
-              updatedAt: file.updatedAt,
-            }
-          : base,
-      ),
-    }));
-  }
+  rememberDocument(accountId, baseId, file);
+  return file;
+}
+
+function rememberDocument(accountId: string, baseId: string, file: KbFile) {
+  if (useKnowledgeStore.getState().accountId !== accountId) return;
+  const cached = useKnowledgeStore
+    .getState()
+    .bases.find((base) => base.id === baseId)
+    ?.files.find((row) => row.id === file.id);
+  if (cached && Date.parse(cached.updatedAt) > Date.parse(file.updatedAt)) return;
+  useKnowledgeStore.setState((state) => ({
+    bases: state.bases.map((base) =>
+      base.id === baseId
+        ? {
+            ...base,
+            files: [file, ...base.files.filter((row) => row.id !== file.id)],
+            updatedAt: file.updatedAt,
+          }
+        : base,
+    ),
+  }));
+  if (typeof window !== "undefined" && typeof window.dispatchEvent === "function")
+    window.dispatchEvent(
+      new CustomEvent(DOCUMENTS_CHANGED, { detail: { accountId, baseId, file } }),
+    );
+}
+
+export async function renameKnowledgeDocument(
+  accountId: string,
+  baseId: string,
+  id: string,
+  title: string,
+) {
+  const file = await renameKnowledgeDocumentRequest(accountId, baseId, id, title);
+  rememberDocument(accountId, baseId, file);
   return file;
 }
 

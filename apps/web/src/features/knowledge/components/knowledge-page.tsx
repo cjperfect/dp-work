@@ -35,7 +35,7 @@ import {
 import { Popover, PopoverContent } from "@/components/ui/popover";
 import {
   deleteKnowledgeDocument,
-  saveKnowledgeDocument,
+  renameKnowledgeDocument,
   uploadKnowledgeDocument,
 } from "@/stores/knowledge";
 import { Input } from "@/components/ui/input";
@@ -554,13 +554,7 @@ export function KnowledgeFilePage() {
     const next = titleDraft.trim().replace(/\.md$/i, "").trim() || "未命名文档";
     if (next === displayTitle || !accountId) return;
     try {
-      await saveKnowledgeDocument(accountId, kbId, {
-        id: file.id,
-        title: next,
-        content: file.content ?? "",
-        blocks: file.blocks,
-        status: "published",
-      });
+      await renameKnowledgeDocument(accountId, kbId, file.id, next);
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "标题保存失败，请重试。");
     }
@@ -702,7 +696,12 @@ export function KnowledgeFilePage() {
           <TabsContent value="source" className="min-h-0 flex-1 overflow-auto">
             {file.source === "editor" ? (
               accountId ? (
-                <EditableSourceEditor accountId={accountId} baseId={kb.id} file={file} />
+                <EditableSourceEditor
+                  key={`${accountId}:${kb.id}:${file.id}`}
+                  accountId={accountId}
+                  baseId={kb.id}
+                  file={file}
+                />
               ) : (
                 <BlockNoteEditor
                   initialContent={file.blocks}

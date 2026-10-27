@@ -4,7 +4,7 @@ import { localAccountId } from "@/features/auth/lib/auth";
 import { loadKnowledgeDocumentsRequest } from "@/apis/knowledge";
 import type { KbFile } from "@/features/knowledge/constants/knowledge-data";
 import { subscribeDocumentParseEvents } from "../lib/parse-events";
-import { DOCUMENTS_CHANGED } from "./use-document-parsing";
+import { DOCUMENTS_CHANGED } from "../lib/document-events";
 
 export function useKnowledgeDocuments(baseId: string) {
   const accountId = useAuthStore((state) => localAccountId(state.user));
@@ -28,7 +28,18 @@ export function useKnowledgeDocuments(baseId: string) {
       try {
         const rows = await loadKnowledgeDocumentsRequest(accountId!, baseId);
         if (!alive) return;
-        setState({ key, files: rows, loading: false, error: null });
+        setState((old) => ({
+          key,
+          files: rows.map((row) => {
+            const currentFile =
+              old.key === key ? old.files.find((file) => file.id === row.id) : undefined;
+            return currentFile && Date.parse(currentFile.updatedAt) > Date.parse(row.updatedAt)
+              ? currentFile
+              : row;
+          }),
+          loading: false,
+          error: null,
+        }));
       } catch (cause) {
         if (alive)
           setState((old) => ({
@@ -51,7 +62,12 @@ export function useKnowledgeDocuments(baseId: string) {
         if (detail.file)
           setState((old) => ({
             ...old,
-            files: old.files.map((file) => (file.id === detail.file.id ? detail.file : file)),
+            files: old.files.map((file) =>
+              file.id === detail.file.id &&
+              Date.parse(detail.file.updatedAt) >= Date.parse(file.updatedAt)
+                ? detail.file
+                : file,
+            ),
           }));
         else reload();
       }

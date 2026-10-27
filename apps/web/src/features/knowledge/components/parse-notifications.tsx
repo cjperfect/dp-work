@@ -1,7 +1,11 @@
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth";
-import { consumeDocumentParseEvents, consumeDocumentVectorEvents } from "@/stores/document-parsing";
+import {
+  consumeDocumentParseEvents,
+  consumeDocumentVectorEvents,
+  consumeDocumentSearchEvents,
+} from "@/stores/document-parsing";
 import { subscribeDocumentParseEvents } from "../lib/parse-events";
 
 /** 页面切换后仍接收解析结果，自动关闭提示。 */
@@ -10,6 +14,13 @@ export function ParseNotifications() {
   useEffect(() => {
     if (!owner) return;
     return subscribeDocumentParseEvents(owner, (rows, snapshot) => {
+      for (const row of consumeDocumentSearchEvents(rows, snapshot)) {
+        toast.success("知识库检索索引已就绪", {
+          id: `document-search:${owner}:${row.id}:${row.search_task_id}`,
+          description: row.name,
+          duration: 6000,
+        });
+      }
       for (const row of consumeDocumentVectorEvents(rows, snapshot)) {
         const options = {
           id: `document-vector:${owner}:${row.id}:${row.vector_task_id}`,
