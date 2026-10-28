@@ -1,3 +1,4 @@
+import { useAgentApprovalStore } from "@/stores/agent-approvals";
 import { useEffect, useMemo, useRef, type PropsWithChildren } from "react";
 import {
   AssistantRuntimeProvider,
@@ -98,6 +99,10 @@ function useThreadRuntimeHook() {
   const aui = useAui();
   const remoteId = useAuiState((s) => s.threadListItem.remoteId);
   const detail = useAgentStore((state) => (remoteId ? state.details[remoteId] : undefined));
+  const approvals = useAgentApprovalStore((s) =>
+    remoteId ? s.entries[remoteId]?.items : undefined,
+  );
+  const awaitingApproval = approvals?.some((row) => row.actionable);
   const draft = useAgentStore((state) => (remoteId ? state.drafts[remoteId] : undefined));
   useEffect(() => {
     if (remoteId && !useAgentStore.getState().details[remoteId])
@@ -149,7 +154,7 @@ function useThreadRuntimeHook() {
     // 空态（remoteId 未定）不禁用：用户输入即触发 onNew → initialize；
     // 仅发送中禁用，避免重复提交。
     isLoading: !!remoteId && !detail,
-    isDisabled: !!draft?.sending,
+    isDisabled: !!draft?.sending || !!awaitingApproval,
     isRunning: !!draft?.sending,
     onCancel: async () => {
       if (remoteId) cancelMessage(remoteId);

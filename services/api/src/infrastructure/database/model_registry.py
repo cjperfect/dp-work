@@ -13,6 +13,7 @@ from src.modules.meetings.record_models import MeetingRecord, MeetingRecordVersi
 from src.infrastructure.tasks.models import TaskOutbox
 
 from src.modules.agents.conversation_models import Conversation, ConversationMessage
+from src.modules.agents.project_models import AgentProject
 from src.modules.agents.run_models import AgentRun
 from src.modules.agents.approval_models import AgentApproval
 

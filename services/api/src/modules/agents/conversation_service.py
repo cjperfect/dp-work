@@ -27,7 +27,7 @@ def missing():
 
 def metadata(row):
     """返回列表字段，不暴露执行令牌。"""
-    return {key: getattr(row, key) for key in ('id', 'agent_id', 'title', 'title_source', 'draft', 'draft_revision', 'created_at', 'updated_at')}
+    return {key: getattr(row, key) for key in ('id', 'agent_id', 'project_id', 'title', 'title_source', 'draft', 'draft_revision', 'created_at', 'updated_at')}
 
 
 def check_revision(row, expected):
@@ -43,9 +43,9 @@ async def expire_run(db, row):
     expired = row.run_token and (row.run_until is None or row.run_until <= datetime.now(timezone.utc))
     if expired or not row.run_token:
         messages = await ConversationRepository(db).messages(row.id)
-        if not expired and not any(message.status == 'streaming' for message in messages): return
+        if not expired and not any(message.status in ('streaming', 'waiting_approval') for message in messages): return
         for message in messages:
-            if message.status == 'streaming':
+            if message.status in ('streaming', 'waiting_approval'):
                 message.status = 'failed'
                 message.content = message.content or '生成中断，请重试。'
         await run_service.finish_locked(db, row, 'interrupted', 'RUN_EXPIRED', '执行中断，请重试。')
@@ -75,11 +75,14 @@ async def list_threads(owner, q='', agent_id=None):
 async def create(owner, body):
     """按客户端请求 ID 幂等创建会话。"""
     async with session.transaction() as db:
+        if body.project_id:
+            from .project_service import owned
+            await owned(db, owner, body.project_id, True)
         await db.execute(insert(Conversation).values(id=body.id, owner_id=owner, agent_id=body.agent_id,
-            knowledge_base_ids=body.knowledge_base_ids).on_conflict_do_nothing(index_elements=[Conversation.id]))
+            knowledge_base_ids=body.knowledge_base_ids, project_id=body.project_id).on_conflict_do_nothing(index_elements=[Conversation.id]))
         row = await ConversationRepository(db).get(owner, body.id, lock=True)
         if row is None: raise missing()
-        if row.agent_id != body.agent_id:
+        if row.agent_id != body.agent_id or row.project_id != body.project_id:
             raise ApiError(ApiCode.STATE_CONFLICT, '会话与 Agent 不匹配。', 409)
         return await detail(db, row)
 
@@ -211,7 +214,7 @@ async def begin_chat(owner, key, body):
         history = [{'role': nodes[mid].role, 'content': nodes[mid].content} for mid in row.active_path[:-1]
             if nodes[mid].content and (nodes[mid].role == 'user' or nodes[mid].status == 'complete')]
         payload = AgentRequest(agent_code='general' if row.agent_id == 1 else 'product', thread_id=key,
-            messages=history[-100:], knowledge_base_ids=body.knowledge_base_ids, model=body.model)
+            messages=history[-100:], knowledge_base_ids=body.knowledge_base_ids, model=body.model, project_id=row.project_id)
         from src.infrastructure.sidecar.context import scope
         db.add(AgentRun(device_id=scope.get()[1], id=token, owner_id=owner, conversation_id=key, agent_id=row.agent_id,
             response_id=body.response_id, model=body.model, status='running',
@@ -244,6 +247,29 @@ async def save_reply(owner, key, response_id, token, content, status, code=None,
 
 
 async def open_chat(owner, key, body):
+    """在领取运行前固定执行设备，审批恢复不能漂移到另一台设备。"""
+    if config.SIDECAR_TRANSPORT == 'device':
+        from src.infrastructure.sidecar.context import scope, execution_scope
+        from src.infrastructure.sidecar.relay import online_device, DeviceOffline
+        target = scope.get()[1]
+        async with session.read_session() as db:
+            thread = await ConversationRepository(db).get(owner, key)
+            if thread and thread.project_id:
+                from .project_service import owned
+                project = await owned(db, owner, thread.project_id)
+                if target and target != project.device_id:
+                    raise ApiError(ApiCode.STATE_CONFLICT, '该项目属于另一台设备，请在对应桌面端打开。', 409)
+                target = project.device_id
+        try:
+            device = await online_device(owner, target)
+        except DeviceOffline as cause:
+            raise ApiError(ApiCode.INTERNAL_ERROR, '本机执行设备未连接。', 503) from cause
+        with execution_scope(owner, device.id):
+            return await _open_chat(owner, key, body)
+    return await _open_chat(owner, key, body)
+
+
+async def _open_chat(owner, key, body):
     """领取生成租约，并在连接上游失败时保存失败状态。"""
     from . import service
     token, payload = await begin_chat(owner, key, body)
@@ -261,14 +287,16 @@ async def open_chat(owner, key, body):
         if isinstance(cause, RunStopped):
             raise ApiError(ApiCode.STATE_CONFLICT, '运行已停止或中断。', 409) from cause
         raise
-    return StoredStream(owner, key, body.response_id, token, upstream, control)
+    return StoredStream(owner, key, body.response_id, token, upstream, control, payload.knowledge_base_ids)
 
 
 class StoredStream:
     """包装 SSE，按秒保存增量，结束和取消保存最终状态。"""
-    def __init__(self, owner, key, response_id, token, upstream, control):
+    def __init__(self, owner, key, response_id, token, upstream, control, knowledge_base_ids=None):
         self.owner, self.key, self.response_id, self.token, self.upstream = owner, key, response_id, token, upstream
         self.content, self.status = '', 'streaming'
+        self.prefix = ''
+        self.knowledge_base_ids = knowledge_base_ids or []
         self.finished = False
         self.control = control
 
@@ -317,10 +345,18 @@ class StoredStream:
                             await self.persist('streaming', model=event.get('model'))
                         if event.get('type') == 'delta': self.content += event.get('text', '')
                         if len(self.content) > 120000: raise ValueError('reply too large')
-                        if event.get('type') == 'done':
+                        if event.get('type') == 'approval':
+                            from .approval_service import pause
+                            await self.persist('streaming')
+                            event['approval_id'] = await pause(self.owner, self.key, self.token,
+                                event.get('interrupts'), self.knowledge_base_ids)
+                            self.finished = True
+                        elif event.get('type') == 'done':
                             if not isinstance(event.get('content'), str) or not event['content'].strip() or len(event['content']) > 120000:
                                 raise ValueError('invalid final reply')
-                            self.content = event['content']
+                            self.content = self.prefix + event['content']
+                            if len(self.content) > 120000: raise ValueError('reply too large')
+                            event['content'] = self.content
                             await self.persist('complete', model=event.get('model'))
                         elif event.get('type') == 'error':
                             self.content = self.content or event.get('message', '生成失败，请重试。')

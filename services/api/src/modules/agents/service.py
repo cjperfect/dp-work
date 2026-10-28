@@ -80,6 +80,17 @@ class AgentStream:
 async def open_chat(body: AgentRequest, owner_id: int | None = None, *, run_id: str | None = None, approval_resume: dict | None = None) -> AgentStream:
     """先连接并校验上游，再向前端开启事件流。"""
     payload = body.model_dump()
+    if body.project_id:
+        if owner_id is None:
+            raise ApiError(ApiCode.UNAUTHORIZED, "请先登录。", 401)
+        from src.infrastructure.database import session
+        from .project_service import owned
+        from src.infrastructure.sidecar.context import scope
+        async with session.read_session() as db:
+            project = await owned(db, owner_id, body.project_id)
+            if scope.get()[1] != project.device_id:
+                raise ApiError(ApiCode.STATE_CONFLICT, "项目执行设备不匹配，请在对应桌面端打开。", 409)
+        payload["workspace_owner_id"] = owner_id
     if approval_resume is not None:
         payload["approval_resume"] = approval_resume
     if run_id:

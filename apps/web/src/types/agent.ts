@@ -13,6 +13,7 @@ export type AgentConfig = {
 };
 export type Skill = { id: string; name: string; department: string; description: string };
 export type ChatThread = {
+  project_id?: string | null;
   title_source?: "pending" | "generated" | "manual";
   id: string;
   agent_id: number;
@@ -23,7 +24,7 @@ export type ChatThread = {
   updated_at: string;
 };
 export type ChatMessage = {
-  status?: "streaming" | "complete" | "failed" | "cancelled";
+  status?: "streaming" | "waiting_approval" | "complete" | "failed" | "cancelled";
   id: string;
   seq: number;
   role: "user" | "assistant";

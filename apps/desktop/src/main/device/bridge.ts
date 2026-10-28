@@ -38,6 +38,14 @@ export class DeviceBridge {
     this.api = apiBaseUrl(api);
   }
 
+  /** 获取当前会话标识，仅供 Main 的原生目录授权使用。 */
+  getIdentity(): { owner: number; deviceId: string } | null {
+    if (!this.token || !this.deviceId || this.stopped) return null;
+    const value = JSON.parse(Buffer.from(this.token.split(".")[1] ?? "", "base64url").toString());
+    const owner = Number(value.sub);
+    return Number.isSafeInteger(owner) && owner > 0 ? { owner, deviceId: this.deviceId } : null;
+  }
+
   async setSession(token: string | null): Promise<{ deviceId: string | null }> {
     if (this.stopped) return { deviceId: null };
     if (token !== null && (typeof token !== "string" || token.length > 8192))

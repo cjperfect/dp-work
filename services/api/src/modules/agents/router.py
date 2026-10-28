@@ -13,10 +13,14 @@ from . import service
 from .schemas import AgentRequest, TitleRequest
 from .conversation_router import router as conversation_router
 from .run_router import router as run_router
+from .approval_router import router as approval_router
+from .project_router import router as project_router
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 router.include_router(conversation_router)
 router.include_router(run_router)
+router.include_router(approval_router)
+router.include_router(project_router)
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 

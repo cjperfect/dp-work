@@ -5,6 +5,7 @@ import type { AgentId } from "@/interfaces/app";
 export type AgentModels = { configured: boolean; models: { id: string; name: string }[] };
 export const getAgentModels = () => request<AgentModels>("/api/agents/models");
 export type AgentChatInput = {
+  approval_request?: { id: string; decision: "approve" | "reject" };
   response_id?: string;
   expected_revision?: number;
   agent_code: AgentId;
@@ -19,14 +20,18 @@ export async function streamAgentChat(
   input: AgentChatInput,
   onDelta: (text: string) => void,
   signal: AbortSignal,
-): Promise<string> {
+): Promise<string | null> {
   const owner = useAuthStore.getState().user?.id;
   const token = getAccessToken();
   const stream = await request<ReadableStream<Uint8Array>>(
-    input.response_id ? `/api/agents/threads/${input.thread_id}/chat` : "/api/agents/chat",
+    input.approval_request
+      ? `/api/agents/approvals/${input.approval_request.id}/decide`
+      : input.response_id
+        ? `/api/agents/threads/${input.thread_id}/chat`
+        : "/api/agents/chat",
     {
       method: "POST",
-      data: input,
+      data: input.approval_request ? { decision: input.approval_request.decision } : input,
       adapter: "fetch",
       responseType: "stream",
       signal,
@@ -39,6 +44,7 @@ export async function streamAgentChat(
   const decoder = new TextDecoder();
   let buffer = "";
   let completed: string | null = null;
+  let paused = false;
   const consume = (frame: string) => {
     const data = frame
       .split("\n")
@@ -47,6 +53,7 @@ export async function streamAgentChat(
       .join("\n");
     if (!data) return;
     const event = JSON.parse(data);
+    if (event.type === "approval") paused = true;
     if (event.type === "error") throw new Error(event.message || "Agent 执行失败，请重试。");
     if (event.type === "delta" && typeof event.text === "string") onDelta(event.text);
     if (event.type === "done" && typeof event.content === "string") completed = event.content;
@@ -64,6 +71,7 @@ export async function streamAgentChat(
         consume(buffer.slice(0, split));
         buffer = buffer.slice(split + 2);
       }
+      if (paused) return null;
       if (completed !== null) return completed;
       if (chunk.done) break;
       if (buffer.length > 2_000_000) throw new Error("Agent 响应片段过大。");

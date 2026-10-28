@@ -10,6 +10,8 @@ import {
   flushDraft,
   removeThread,
   sendMessage,
+  createThread,
+  changeThreadProject,
 } from "../../../stores/agent.ts";
 import { conversationFixture } from "./conversation-fixture.mjs";
 
@@ -51,6 +53,24 @@ beforeEach(() => {
   });
   useAuthStore.setState({ user: { id: 1, username: "tester" } });
   resetAgents();
+});
+
+test("project conversations keep their directory and stay in global history after reload", async () => {
+  await ensureAgentChat("general");
+  const project = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+  const projectThread = await createThread("general", project);
+  const otherThread = await createThread("product");
+  assert.equal(backend.details.get(projectThread).thread.project_id, project);
+  setDraftText(projectThread, "项目草稿");
+  await changeThreadProject(projectThread, null);
+  assert.equal(backend.details.get(projectThread).thread.draft, "项目草稿");
+  assert.equal(backend.details.get(projectThread).thread.project_id, null);
+  await changeThreadProject(projectThread, project);
+  resetAgents();
+  await ensureAgentChat("general");
+  const history = Object.values(useAgentStore.getState().lists).flat();
+  assert.ok(history.some((row) => row.id === projectThread && row.project_id === project));
+  assert.ok(history.some((row) => row.id === otherThread && !row.project_id));
 });
 afterEach(() => {
   resetAgents();

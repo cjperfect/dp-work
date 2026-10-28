@@ -107,6 +107,7 @@ def test_real_agent_runs_default_write_and_read_tools(monkeypatch):
     async def case():
         body = agent.AgentRequest(agent_code="product", thread_id="tools-test", messages=[{"role": "user", "content": "保存并读取文档"}])
         events = [event async for event in agent.run_agent(body, ModelSettings(timeout=10))]
+        assert not any(event["type"] == "approval" for event in events), events
         assert events[-1]["type"] == "done", events
         assert (config.WORKSPACE_DIR / "product/report.md").read_text() == "默认工具已接入"
     asyncio.run(case())

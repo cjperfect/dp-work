@@ -40,10 +40,16 @@ def read_prompt(code: str) -> str:
     return prompt
 
 
-def system_prompt(code: str, tool_names: set[str] | None = None) -> str:
+def system_prompt(code: str, tool_names: set[str] | None = None, working_directory: Path | None = None) -> str:
     """将当前工作区提示词与实际工具信息装配为系统上下文。"""
     prompt = read_prompt(code)
     context = {"agent_code": code, "available_tools": sorted(DEFAULT_TOOLS | (tool_names or set()))}
+    context["file_tools_root"] = "/"
+    context["file_path_rules"] = "文件工具使用工作目录内的虚拟路径，例如 /a.txt 或 /docs/a.txt；不要在文件路径前拼接 working_directory。execute 的当前目录已是工作目录，可使用相对路径。"
+    if working_directory is not None:
+        context["working_directory"] = str(working_directory)
+        context["skills_directory"] = str(agent_workspace(code) / "skills")
+        context["skills_file_tools_prefix"] = "/__agent_skills__/"
     return prompt + "\n\n<runtime_context>\n" + json.dumps(context, ensure_ascii=False) + "\n</runtime_context>"
 
 

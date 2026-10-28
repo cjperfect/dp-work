@@ -52,6 +52,7 @@ import {
 import { ParseDocumentButton } from "./parse-document-button";
 import { EditableSourceEditor } from "./editable-source-editor";
 import { PdfPreview } from "@/features/knowledge/components/pdf-preview";
+import { DocxPreview } from "./docx-preview";
 import { LazyBlockNoteEditor as BlockNoteEditor } from "@/components/editor/lazy-blocknote-editor";
 import { getKbFiles, removeUploadedFile } from "@/stores/knowledge-upload";
 import {
@@ -721,6 +722,18 @@ export function KnowledgeFilePage() {
                   {pdf.error ?? "正在读取 PDF…"}
                 </div>
               )
+            ) : file.type === "docx" && file.storage === "server" && accountId ? (
+              <DocxPreview
+                key={`${accountId}:${kb.id}:${file.id}`}
+                accountId={accountId}
+                baseId={kb.id}
+                fileId={file.id}
+              />
+            ) : file.type === "doc" ? (
+              <div className="flex min-h-64 flex-col items-center justify-center gap-2 p-8 text-center text-sm text-muted-foreground">
+                <Icon className="size-8" />
+                <p>旧版 DOC 暂不支持在线预览，请转换为 DOCX 后上传。</p>
+              </div>
             ) : file.content || file.blocks?.length ? (
               <BlockNoteEditor
                 initialContent={file.blocks}

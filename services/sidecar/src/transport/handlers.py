@@ -23,6 +23,8 @@ from ..providers.settings import RuntimeConfig, defaults, test_connection
 
 
 class AgentInput(AgentRequest):
+    project_id: str | None = Field(default=None, pattern=r"^[a-fA-F0-9-]{36}$")
+    workspace_owner_id: int | None = Field(default=None, gt=0)
     approval_resume: dict[str, dict] | None = None
     run_id: str | None = Field(default=None, pattern=r"^[a-fA-F0-9-]{36}$")
     retrieval_token: str | None = Field(default=None, repr=False, max_length=4096)

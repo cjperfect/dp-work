@@ -53,6 +53,7 @@ registerDesktopIpc({
   getOrigin: () => origin,
   getBridge: () => bridge,
   workspace: storage.workspace,
+  data: storage.data,
 });
 
 if (!app.requestSingleInstanceLock()) {

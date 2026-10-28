@@ -42,7 +42,7 @@ async def stop_locked(db, thread, status, code, message):
     run = await finish_locked(db, thread, status, code, message)
     if run:
         reply = await db.get(ConversationMessage, (thread.id, run.response_id))
-        if reply and reply.status == "streaming":
+        if reply and reply.status in ("streaming", "waiting_approval"):
             reply.status = "cancelled" if status == "cancelled" else "failed"
         thread.run_token = thread.run_until = None
         thread.draft_revision += 1

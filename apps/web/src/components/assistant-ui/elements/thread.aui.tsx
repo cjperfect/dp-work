@@ -102,6 +102,8 @@ const reasoningDuration = (timing: ThreadGroupPart["timing"]) =>
  * tool group; without it they render like any other tool call.
  */
 export type ThreadComponents = {
+  Approvals?: ComponentType | undefined;
+  ComposerHeader?: ComponentType | undefined;
   AssistantMessage?: ComponentType | undefined;
   Welcome?: ComponentType | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
@@ -226,7 +228,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({ isEmpty, aut
 
           <ThreadPrimitive.ViewportFooter
             className={cn(
-              "aui-thread-viewport-footer bg-background flex flex-col gap-4 overflow-visible pb-4 md:pb-6",
+              "aui-thread-viewport-footer z-10 bg-background flex flex-col gap-4 overflow-visible pb-4 md:pb-6",
               // 空态：输入框参与正常文档流，与欢迎语整组居中；非空态 sticky 贴底随消息滚动
               !isEmpty && "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
             )}
@@ -458,35 +460,40 @@ const ThreadWelcome: FC = () => {
 };
 
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
+  const { ComposerHeader, Approvals } = useContext(ThreadComponentsContext);
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
-      <ComposerPrimitive.AttachmentDropzone
-        render={
-          <div
-            data-slot="aui_composer-shell"
-            className="border-foreground/10 focus-within:border-foreground/25 data-[dragging=true]:border-ring flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) transition-[border-color] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
-          />
-        }
-      >
-        <ComposerAttachments />
-        <ComposerPrimitive.Quote
+      {ComposerHeader && <ComposerHeader />}
+      <div className="group/composer-dock flex w-full flex-col">
+        {Approvals && <Approvals />}
+        <ComposerPrimitive.AttachmentDropzone
           render={
-            <div className="border-foreground/10 bg-background/50 flex items-center gap-2 rounded-lg border px-2.5 py-1.5">
-              <QuoteIcon className="text-muted-foreground size-3.5 shrink-0" />
-              <ComposerPrimitive.QuoteText className="text-muted-foreground min-w-0 flex-1 truncate text-sm italic" />
-              <ComposerPrimitive.QuoteDismiss
-                className="text-muted-foreground hover:bg-muted hover:text-foreground size-5 shrink-0 rounded-md text-base leading-none"
-                aria-label="移除引用"
-              >
-                ×
-              </ComposerPrimitive.QuoteDismiss>
-            </div>
+            <div
+              data-slot="aui_composer-shell"
+              className="border-foreground/10 focus-within:border-foreground/25 data-[dragging=true]:border-ring flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) group-has-[[data-slot=agent-approvals]]/composer-dock:rounded-t-none border bg-(--composer-bg) p-(--composer-padding) transition-[border-color] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
+            />
           }
-        />
-        <ChatComposerInput autoFocus={autoFocus} />
-        <ChatSaveError />
-        <ComposerAction />
-      </ComposerPrimitive.AttachmentDropzone>
+        >
+          <ComposerAttachments />
+          <ComposerPrimitive.Quote
+            render={
+              <div className="border-foreground/10 bg-background/50 flex items-center gap-2 rounded-lg border px-2.5 py-1.5">
+                <QuoteIcon className="text-muted-foreground size-3.5 shrink-0" />
+                <ComposerPrimitive.QuoteText className="text-muted-foreground min-w-0 flex-1 truncate text-sm italic" />
+                <ComposerPrimitive.QuoteDismiss
+                  className="text-muted-foreground hover:bg-muted hover:text-foreground size-5 shrink-0 rounded-md text-base leading-none"
+                  aria-label="移除引用"
+                >
+                  ×
+                </ComposerPrimitive.QuoteDismiss>
+              </div>
+            }
+          />
+          <ChatComposerInput autoFocus={autoFocus} />
+          <ChatSaveError />
+          <ComposerAction />
+        </ComposerPrimitive.AttachmentDropzone>
+      </div>
     </ComposerPrimitive.Root>
   );
 };

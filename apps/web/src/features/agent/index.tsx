@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { BookOpen, Bot, Boxes, Package, Plug, Settings2 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { ChatProjectDirectory } from "./components/chat-project-directory";
+import { AgentApprovals } from "./components/agent-approvals";
 import { AgentConfigDialog } from "./components/agent-config-dialog";
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -28,7 +30,11 @@ function AgentWelcome() {
     </div>
   );
 }
-const components = { Welcome: AgentWelcome };
+const components = {
+  Welcome: AgentWelcome,
+  Approvals: AgentApprovals,
+  ComposerHeader: ChatProjectDirectory,
+};
 export function AgentPage({ agentId }: { agentId: AgentId }) {
   const owner = useAuthStore((state) => state.user?.id);
   const state = useAgentStore();
@@ -279,7 +285,7 @@ function AgentPanel({ agent }: { agent: AgentConfig }) {
           </p>
         )}
         <p>
-          会话历史已同步到服务器。关联知识库后可检索已向量化的文档；技能执行与连接器工具将在后续接入。
+          会话历史已同步到服务器。关联知识库后可检索已向量化的文档；技能按需加载；危险操作需要审批。
         </p>
       </div>
     </aside>

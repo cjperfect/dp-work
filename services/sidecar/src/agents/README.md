@@ -11,13 +11,13 @@ Agent 专属逻辑集中在 `agent.py`：
 
 配置读取 `.env`：ARK_API_KEY、ARK_MODEL、ARK_BASE_URL、ARK_TIMEOUT_SECONDS、ARK_MAX_TOKENS、AGENT_MAX_STEPS。
 
-调用链：前端 → API → Electron 设备通道 → Sidecar `agents.chat` JSON-RPC。Sidecar 按方法名直接分发，返回 start、delta、done、error 事件。
+调用链：前端 → API → Electron 设备通道 → Sidecar `agents.chat` JSON-RPC。Sidecar 按方法名直接分发，返回 start、delta、approval、done、error 事件。
 
-会话历史和消息分支由 API 保存到 PostgreSQL；API 从当前选中路径构造普通消息发送给 Sidecar，不启用共享内存 checkpointer。企业技能、连接器与审批后续接入。
+会话历史和消息分支由 API 保存到 PostgreSQL；API 从当前选中路径构造普通消息发送给 Sidecar，审批使用按运行隔离的本机 SQLite 检查点；会话历史仍以 PG 为准。技能已按需加载，连接器工具后续接入。
 
 关联知识库时，由 `knowledge/rag/tool.py` 提供 `search_knowledge` Tool；只有 API 验证知识库归属后签发的短时范围授权可以检索，模型不接收用户登录令牌或自选知识库范围。
 
-标题由 `agent.py` 的 `generate_title` 调用 LLM 生成，内部接口 `/internal/agents/title`；独立限制 30 秒和 256 输出 token，结果限制为单行 30 字以内。前端通过 assistant-ui 的 generateTitle 适配器触发，去重请求、保护手动重命名，并缓存到当前设备。
+标题由 `agent.py` 的 `generate_title` 调用 LLM 生成，RPC 方法 `agents.title`；独立限制 30 秒和 256 输出 token，结果限制为单行 30 字以内。前端通过 assistant-ui 的 generateTitle 适配器触发，去重请求、保护手动重命名，并保存到 PG 会话。
 
 默认工具实现在 [tools](../tools/README.md)，绑定当前 Agent 的独立 workspace；execute 支持超时、输出限制和取消。默认工具始终提供，知识库工具按本次授权追加。
 
@@ -26,3 +26,5 @@ Agent 专属逻辑集中在 `agent.py`：
 各 Agent 的系统提示词保存在 `.dp-work/workspace/<agent_code>/AGENT.md`，每次运行重新读取，修改后下次对话生效。首次使用从 `templates/<agent_code>/AGENT.md` 初始化，已有文件不覆盖。模板随 Sidecar 安装包分发，Python 不内置业务提示词。空文件、非法编码、超大文件会返回配置错误。运行时只追加 Agent 标识与实际工具列表，技能仍由 Deep Agents 按需加载。
 
 聊天侧栏配置弹窗支持编辑提示词，经鉴权 API、设备通道调用 `agents.config.update` 保存本机 AGENT.md。保存使用旧内容校验和原子替换，冲突返回 409；生效范围为下次运行，不改变正在执行的会话。
+
+人工审批：通过 HumanInTheLoopMiddleware 的 `when` 按参数判定风险，子 Agent 使用同一策略。普通文档创建与编辑、简单查看命令直接执行；`.env`、Git 配置、凭证、Agent 提示词和技能的修改，以及删除、重定向、复杂 Shell 或无法分类的命令需要审批。规则位于 `harness/tool_policy.py`。只支持允许原操作一次或拒绝，不允许客户端替换工具参数。待审批记录保存在 PG `agent_approvals`；执行快照位于 `.dp-work/data/agent-checkpoints/<run_id>.sqlite3`，正常完成后清理。刷新页面可以恢复待审批卡片，运行恢复到原设备，原工具结果与当前回复保持连续。等待最长 24 小时，过期、取消、已决定的审批不能重新执行。设备离线或检查点缺失时失败并保留审批回执，不自动重放副作用。

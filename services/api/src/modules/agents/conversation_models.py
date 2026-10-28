@@ -9,9 +9,10 @@ from src.infrastructure.database.base import Base
 class Conversation(Base):
     """当前路径和草稿独立保存，删除后保留 ID 防止旧客户端复活。"""
     __tablename__ = 'conversations'
-    __table_args__ = (Index('idx_conversations_owner_updated', 'owner_id', 'updated_at'),)
+    __table_args__ = (Index('idx_conversations_owner_updated', 'owner_id', 'updated_at'), Index('idx_conversations_project', 'project_id'),)
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'))
+    project_id: Mapped[str | None] = mapped_column(String(36), ForeignKey('agent_projects.id', ondelete='SET NULL', name='fk_conversations_project'), nullable=True, index=False)
     agent_id: Mapped[int] = mapped_column(Integer)
     title: Mapped[str] = mapped_column(String(200), server_default='新会话')
     title_source: Mapped[str] = mapped_column(String(16), server_default='pending')

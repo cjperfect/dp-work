@@ -1,6 +1,6 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import type * as React from "react";
-import { BookOpen, Bot, Boxes, Package, Plug, Sparkles, Video, Settings } from "lucide-react";
+import { BookOpen, Bot, Boxes, Package, Plug, Sparkles, Video } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -14,14 +14,19 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import { ThreadList } from "@/components/assistant-ui/elements/thread-list.aui";
+import { ProjectSidebar } from "@/features/agent/components/project-sidebar";
+import {
+  ThreadListNew,
+  ThreadListRoot,
+  ThreadList,
+} from "@/components/assistant-ui/elements/thread-list.aui";
 import { useAgentStore } from "@/stores/agent";
 import { useAgentCode } from "@/features/agent/hooks/use-agent-code";
 import { useConnectors } from "@/stores/connectors";
 import type { AgentConfig } from "@/types/agent";
 import type { AgentId } from "@/interfaces/app";
 import { useAuthStore } from "@/stores/auth";
-import { SignOutButton } from "@/features/auth/components/sign-out-button";
+import { UserMenu } from "@/features/auth/components/user-menu";
 
 const EMPTY_AGENTS: AgentConfig[] = [];
 
@@ -136,40 +141,22 @@ export function ThreadListSidebar({ ...props }: React.ComponentProps<typeof Side
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        <SidebarGroup className="py-1">
+          <ThreadListRoot>
+            <ThreadListNew className="w-full" />
+          </ThreadListRoot>
+        </SidebarGroup>
+        <ProjectSidebar />
         <SidebarGroup>
-          <SidebarGroupLabel>{"会话历史"}</SidebarGroupLabel>
+          <SidebarGroupLabel>{"最近"}</SidebarGroupLabel>
           <SidebarGroupContent>
-            <ThreadList />
+            <ThreadList showNew={false} />
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
       {props.collapsible !== "none" && <SidebarRail />}
       <SidebarFooter className="aui-sidebar-footer border-t">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton isActive={pathname === "/settings"} render={<Link to="/settings" />}>
-              <Settings />
-              <span>{"设置"}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        {user && (
-          <div className="flex items-center gap-2 px-2 py-1">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-xs font-medium">
-              {user.username.slice(0, 1).toUpperCase()}
-            </div>
-            <span className="min-w-0 flex-1 truncate text-sm">{user.username}</span>
-            <SignOutButton />
-          </div>
-        )}
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <div className="flex items-center gap-2 px-2 py-2 text-xs text-sidebar-foreground/50">
-              <Sparkles className="size-4" />
-              <span>企业Agent平台 v0.1.0</span>
-            </div>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <UserMenu />
       </SidebarFooter>
     </Sidebar>
   );

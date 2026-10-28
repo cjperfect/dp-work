@@ -21,3 +21,7 @@ Agent 由 `create_deep_agent` 创建，所有 Agent 默认使用相同的文件�
 `execute` 的模型工具由 Deep Agents 提供；Backend 的异步执行适配保留 30 秒超时、32 KB 输出上限和取消时清理进程树。指定更长 timeout 也不会超过当前上限；进程只继承基础环境变量，不主动传入模型和 ASR 密钥。Windows 需要安装 Bash 并加入 PATH，macOS / Linux 使用本机 Bash。
 
 版本固定为 `deepagents==0.7.32`。桌面打包收集 Deep Agents 程序资源及元数据，并验证冻结后的模型调用和文件操作。
+
+项目目录：Electron 原生文件夹选择器登记到 `.dp-work/data/projects.json`，PG 只保存项目元信息和会话的 `project_id`。API 将会话所属项目 ID、认证用户 ID 发给对应设备，Sidecar 以本机登记为准解析路径，未授权或已移动的目录直接报错。未关联项目时继续使用 Agent 默认工作目录。项目中的文件工具和 execute 均绑定所选目录；AGENT.md 和技能仍保留在 Agent 管理目录，技能通过 `/__agent_skills__/` 挂载。
+
+运行中及等待审批时不能切换或移除项目，审批继续使用原运行的目录。移除项目仅解除会话归属，不删除文件和历史消息。侧栏“项目”按项目组织会话，“最近”展示所有 Agent 和项目的会话。

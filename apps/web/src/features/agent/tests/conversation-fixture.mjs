@@ -26,6 +26,7 @@ export function conversationFixture() {
           : {
               id: body.id,
               agent_id: body.agent_id,
+              project_id: body.project_id ?? null,
               title: "新会话",
               title_source: "pending",
               draft: "",
@@ -54,6 +55,12 @@ export function conversationFixture() {
       if (method === "DELETE") {
         details.delete(id);
         return wrapped(null);
+      }
+      if (action === "project") {
+        assertRevision(detail, body.expected_revision);
+        detail.thread.project_id = body.project_id;
+        detail.thread.draft_revision++;
+        return wrapped(clone(detail));
       }
       if (action === "draft") {
         detail.thread.draft = body.draft;
@@ -131,4 +138,8 @@ export function conversationFixture() {
       throw new Error(`未实现替身接口 ${method} ${path}`);
     },
   };
+}
+
+function assertRevision(detail, expected) {
+  if (detail.thread.draft_revision !== expected) throw new Error("会话已更新");
 }

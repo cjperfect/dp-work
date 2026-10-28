@@ -10,6 +10,7 @@ class ChatMessage(BaseModel):
 
 
 class AgentRequest(BaseModel):
+    project_id: str | None = Field(default=None, pattern=r'^[a-fA-F0-9-]{36}$')
     model_config = ConfigDict(extra="forbid")
     agent_code: Literal["general", "product"] = "general"
     thread_id: str = Field(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_-]+$")

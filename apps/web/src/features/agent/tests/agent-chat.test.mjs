@@ -351,3 +351,14 @@ test("message versions and selected branch survive reloading API history", async
   selectMessageBranch(id, [root.message.id, reply.message.id], current.message_branches);
   assert.equal(useAgentStore.getState().details[id].messages[0].content, "新版本");
 });
+
+test("approval suspends the stream without treating the pause as a failure", async () => {
+  handler = async () =>
+    response(event({ type: "approval", approval_id: "approval-one", interrupts: [] }));
+  const result = await streamAgentChat(
+    input,
+    () => assert.fail("pause must not generate text"),
+    new AbortController().signal,
+  );
+  assert.equal(result, null);
+});

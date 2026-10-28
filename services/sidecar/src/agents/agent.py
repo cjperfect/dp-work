@@ -71,20 +71,24 @@ def create_model(settings: ModelSettings, async_client, sync_client):
                       http_async_client=async_client, http_client=sync_client)
 
 
-def build_agent(model, agent_code: str, tools: list[BaseTool] | None = None, checkpointer=None):
+def build_agent(model, agent_code: str, tools: list[BaseTool] | None = None, checkpointer=None, project_id=None, workspace_owner_id=None):
     """创建单次运行 Agent，由框架管理模型与工具循环。"""
     tools = tools or []
     from ..tools.workspace import agent_backend
     from ..skills.service import skill_directory
     skill_directory(agent_code)
+    working_directory = None
+    if project_id:
+        from ..tools.projects import project_workspace
+        working_directory = project_workspace(project_id, workspace_owner_id)
     return create_deep_agent(
         model=model,
         tools=tools,
         checkpointer=checkpointer,
         interrupt_on=GATED_TOOLS if checkpointer else None,
-        backend=agent_backend(agent_code),
-        skills=["/skills/"],
-        system_prompt=system_prompt(agent_code, {item.name for item in tools}),
+        backend=agent_backend(agent_code, project_id, workspace_owner_id),
+        skills=["/__agent_skills__/" if project_id else "/skills/"],
+        system_prompt=system_prompt(agent_code, {item.name for item in tools}, working_directory),
         name=f"{agent_code}-agent",
     )
 
@@ -100,15 +104,17 @@ async def agent_events(body: AgentRequest, model, tools=None, checkpointer=None)
     """执行隔离的图状态，输出增量文本及结束标记。"""
     run_id = getattr(body, 'run_id', None) or str(uuid4())
     yield {"type": "start", "run_id": run_id}
-    graph = build_agent(model, body.agent_code, tools, checkpointer)
+    graph = build_agent(model, body.agent_code, tools, checkpointer, getattr(body, "project_id", None), getattr(body, "workspace_owner_id", None))
     messages = [(HumanMessage if row.role == "user" else AIMessage)(row.content) for row in body.messages]
-    run_config = {"recursion_limit": config.AGENT_MAX_STEPS, "run_id": run_id, "configurable": {"thread_id": run_id}}
+    # 一轮模型与工具循环还包含审批、摘要等中间件节点，不能把节点数当作工具轮数。
+    run_config = {"recursion_limit": config.AGENT_MAX_STEPS * 6 + 8, "run_id": run_id, "configurable": {"thread_id": run_id}}
     graph_input = {"messages": messages}
     if getattr(body, "approval_resume", None):
         from ..harness.approvals import resume_input
         graph_input = await resume_input(graph, run_config, body.approval_resume)
     content = ""
     final = None
+    pending_interrupts = []
     async for mode, event in graph.astream(graph_input, stream_mode=["messages", "updates"], config=run_config):
         if mode == "messages":
             chunk, metadata = event
@@ -119,11 +125,12 @@ async def agent_events(body: AgentRequest, model, tools=None, checkpointer=None)
                     content += text
                     yield {"type": "delta", "text": text}
         elif mode == "updates" and event.get("__interrupt__"):
-            yield {"type": "approval", "run_id": run_id,
-                   "interrupts": [{"id": item.id, "value": item.value} for item in event["__interrupt__"]]}
-            return
+            pending_interrupts = [{"id": item.id, "value": item.value} for item in event["__interrupt__"]]
         elif mode == "updates" and event.get("model"):
             final = event["model"]["messages"][-1]
+    if pending_interrupts:
+        yield {"type": "approval", "run_id": run_id, "interrupts": pending_interrupts}
+        return
     if final is None or getattr(final, "tool_calls", None):
         raise ModelError("AGENT_INCOMPLETE", "Agent 未完成回答，请重试。")
     finish_reason = final.response_metadata.get("finish_reason")
@@ -154,8 +161,10 @@ async def run_agent(body: AgentRequest, settings):
                     run_id = getattr(body, "run_id", None) or str(uuid4())
                     # 本地临时调用同样使用独立运行 ID。
                     body = body.model_copy(update={"run_id": run_id})
-                    async with checkpoint(run_id) as saver:
-                        async for event in agent_events(body, model, tools, saver):
+                    async with checkpoint(run_id) as state:
+                        async for event in agent_events(body, model, tools, state.saver):
+                            if event.get("type") == "approval": state.pending = True
+                            elif event.get("type") == "done": state.pending = False
                             yield event
                 finally:
                     with anyio.CancelScope(shield=True):

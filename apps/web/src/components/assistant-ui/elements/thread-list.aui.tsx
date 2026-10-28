@@ -35,13 +35,13 @@ import {
   type FC,
 } from "react";
 
-export const ThreadList: FC = () => {
+export const ThreadList: FC<{ showNew?: boolean }> = ({ showNew = true }) => {
   const [search, setSearch] = useState("");
   const hasThreads = useAuiState((s) => s.threads.threadIds.length > 0);
 
   return (
     <ThreadListRoot>
-      <ThreadListNew />
+      {showNew && <ThreadListNew />}
       {hasThreads && <ThreadListSearch value={search} onValueChange={setSearch} />}
       <ThreadListItems searchQuery={hasThreads ? search : ""} />
     </ThreadListRoot>

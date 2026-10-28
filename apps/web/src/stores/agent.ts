@@ -1,3 +1,5 @@
+import { setConversationProject } from "@/apis/agent-projects";
+import { loadApprovals } from "@/stores/agent-approvals";
 import { streamAgentChat, generateAgentTitle } from "@/apis/agents";
 import {
   listConversations,
@@ -315,9 +317,9 @@ export async function loadThreads(code: AgentId) {
   currentOwner();
   return useAgentStore.getState().lists[code] ?? [];
 }
-export function createThread(code: AgentId): Promise<string> {
+export function createThread(code: AgentId, projectId: string | null = null): Promise<string> {
   const owner = currentOwner();
-  const key = `${owner}:${code}`;
+  const key = `${owner}:${code}:${projectId ?? ""}`;
   const running = creates.get(key);
   if (running) return running;
   const operation = (async () => {
@@ -330,7 +332,7 @@ export function createThread(code: AgentId): Promise<string> {
     }
     const agent = useAgentStore.getState().agents.find((row) => row.code === code);
     if (!agent) throw new Error("Agent 尚未加载。");
-    const detail = await createConversation(id, agent.id, agent.knowledge_base_ids);
+    const detail = await createConversation(id, agent.id, agent.knowledge_base_ids, projectId);
     createIds.delete(key);
     remember(owner, code, detail);
     if (owned(owner))
@@ -658,7 +660,8 @@ export async function sendMessage(
       },
       controller.signal,
     );
-    updateReply(content, "complete");
+    if (content !== null) updateReply(content, "complete");
+    if (content === null) void loadApprovals(id, true);
     const saved = await getConversation(id);
     if (!owned(owner) || !useAgentStore.getState().details[id]) return;
     remember(owner, code, saved);
@@ -713,6 +716,7 @@ export async function sendMessage(
     } catch {
       /* 保存失败保留页面错误和内容，可重新加载服务端版本。 */
     }
+    if (owned(owner)) await loadApprovals(id, true);
     if (!cancelled) throw error;
   } finally {
     if (runs.get(id) === controller) runs.delete(id);
@@ -881,4 +885,103 @@ export function collectMessageBranches(
     all.set(message.id, { parentId: messages[index - 1]?.id ?? null, message }),
   );
   return [...all.values()];
+}
+
+/** 在原会话与原回复上恢复审批后的执行，不另建一条提问。 */
+export async function resumeApprovedRun(
+  approval: import("@/apis/agent-approvals").AgentApproval,
+  decision: "approve" | "reject",
+) {
+  const owner = currentOwner();
+  const id = approval.conversation_id;
+  const code = getThreadAgentCode(id);
+  if (!code || runs.has(id)) throw new Error("会话正在执行，请稍后重试。");
+  if (!useAgentStore.getState().details[id]) await selectThreadById(id);
+  const controller = new AbortController();
+  runs.set(id, controller);
+  useAgentStore.setState((state) => ({
+    drafts: { ...state.drafts, [id]: { ...state.drafts[id], sending: true, error: null } },
+  }));
+  let accumulated =
+    useAgentStore.getState().details[id].messages.find((row) => row.id === approval.response_id)
+      ?.content ?? "";
+  try {
+    await streamAgentChat(
+      {
+        agent_code: code,
+        thread_id: id,
+        messages: [],
+        approval_request: { id: approval.id, decision },
+      },
+      (delta) => {
+        if (!owned(owner)) return;
+        accumulated += delta;
+        useAgentStore.setState((state) => ({
+          details: {
+            ...state.details,
+            [id]: {
+              ...state.details[id],
+              messages: state.details[id].messages.map((row) =>
+                row.id === approval.response_id
+                  ? { ...row, content: accumulated, status: "streaming" }
+                  : row,
+              ),
+            },
+          },
+        }));
+      },
+      controller.signal,
+    );
+  } finally {
+    if (runs.get(id) === controller) runs.delete(id);
+    if (owned(owner)) {
+      try {
+        remember(owner, code, await getConversation(id));
+      } finally {
+        if (owned(owner)) {
+          useAgentStore.setState((state) => ({
+            drafts: { ...state.drafts, [id]: { ...state.drafts[id], sending: false } },
+          }));
+          await loadApprovals(id, true);
+        }
+      }
+    }
+  }
+}
+
+/** 选择会话工作目录前排空草稿保存，保持版本一致。 */
+export async function changeThreadProject(id: string, projectId: string | null) {
+  const owner = currentOwner();
+  const code = getThreadAgentCode(id);
+  if (!code) throw new Error("会话不存在。");
+  await flushDraft(code, id);
+  await mutate(owner, id, async () => {
+    const detail = useAgentStore.getState().details[id];
+    const saved = await setConversationProject(id, projectId, detail.thread.draft_revision);
+    if (owned(owner)) remember(owner, code, saved);
+  });
+}
+
+/** 移除项目后刷新会话归属，保留所有消息与未保存草稿。 */
+export async function refreshProjectConversations(projectId: string) {
+  const owner = currentOwner();
+  const affected = Object.values(useAgentStore.getState().details)
+    .filter((detail) => detail.thread.project_id === projectId)
+    .map((detail) => detail.thread.id);
+  const rows = await listConversations();
+  if (!owned(owner)) return;
+  useAgentStore.setState((state) => ({
+    lists: Object.fromEntries(
+      state.agents.map((agent) => [agent.code, rows.filter((row) => row.agent_id === agent.id)]),
+    ),
+  }));
+  await Promise.all(
+    affected.map(async (id) => {
+      const code = getThreadAgentCode(id);
+      if (code) {
+        const detail = await getConversation(id);
+        if (owned(owner)) remember(owner, code, detail);
+      }
+    }),
+  );
 }

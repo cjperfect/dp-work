@@ -15,7 +15,7 @@ class ConversationRepository:
 
     async def list(self, owner, q='', agent_id=None):
         """只读取列表元数据，按最近活动排序。"""
-        query = select(Conversation.id, Conversation.agent_id, Conversation.title, Conversation.title_source,
+        query = select(Conversation.id, Conversation.agent_id, Conversation.project_id, Conversation.title, Conversation.title_source,
             Conversation.draft_revision, Conversation.created_at, Conversation.updated_at).where(Conversation.owner_id == owner, Conversation.deleted_at.is_(None))
         if q.strip(): query = query.where(Conversation.title.icontains(q.strip(), autoescape=True))
         if agent_id: query = query.where(Conversation.agent_id == agent_id)

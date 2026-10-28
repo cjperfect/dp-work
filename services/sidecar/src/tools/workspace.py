@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import re
 
-from deepagents.backends import LocalShellBackend
+from deepagents.backends import LocalShellBackend, CompositeBackend, FilesystemBackend
 
 from .. import config
 from .shell import execute_command
@@ -24,6 +24,17 @@ def agent_workspace(agent_code: str) -> Path:
 
 class WorkspaceBackend(LocalShellBackend):
     """复用 Deep Agents 文件工具，命令执行支持异步取消。"""
+    def _resolve_path(self, key: str) -> Path:
+        """将工作目录内的真实绝对路径转换为工具虚拟路径。"""
+        if self.virtual_mode and ".." not in key:
+            try:
+                relative = Path(key).relative_to(self.cwd)
+            except ValueError:
+                pass
+            else:
+                key = '/' + relative.as_posix()
+        return super()._resolve_path(key)
+
     def execute(self, command: str, *, timeout: int | None = None):
         return asyncio.run(self.aexecute(command, timeout=timeout))
 
@@ -34,9 +45,18 @@ class WorkspaceBackend(LocalShellBackend):
         return await execute_command(self.cwd, command, effective_timeout, self._max_output_bytes, self._env)
 
 
-def agent_backend(agent_code: str):
+def agent_backend(agent_code: str, project_id: str | None = None, owner: int | None = None):
     """所有 Agent 默认绑定独立目录及相同的文件和命令能力。"""
     allowed = {"PATH", "HOME", "USER", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL", "SYSTEMROOT", "WINDIR", "COMSPEC"}
     environment = {key: value for key, value in os.environ.items() if key.upper() in allowed}
-    return WorkspaceBackend(root_dir=agent_workspace(agent_code), virtual_mode=True,
+    root = agent_workspace(agent_code)
+    if project_id:
+        from .projects import project_workspace
+        root = project_workspace(project_id, owner)
+    backend = WorkspaceBackend(root_dir=root, virtual_mode=True,
         timeout=30, max_output_bytes=32768, env=environment, inherit_env=False)
+    if not project_id:
+        return backend
+    skills = agent_workspace(agent_code) / "skills"
+    skills.mkdir(exist_ok=True)
+    return CompositeBackend(default=backend, routes={"/__agent_skills__/": FilesystemBackend(root_dir=skills, virtual_mode=True)})

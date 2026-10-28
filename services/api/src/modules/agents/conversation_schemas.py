@@ -12,7 +12,7 @@ class MessageIn(BaseModel):
     seq: int = Field(default=0, ge=0)
     role: Literal['user', 'assistant']
     content: str = Field(max_length=120000)
-    status: Literal['streaming', 'complete', 'failed', 'cancelled'] = 'complete'
+    status: Literal['streaming', 'waiting_approval', 'complete', 'failed', 'cancelled'] = 'complete'
     created_at: datetime
     context: dict = Field(default_factory=dict)
 
@@ -23,6 +23,7 @@ class BranchIn(BaseModel):
 
 
 class ThreadCreate(BaseModel):
+    project_id: str | None = Field(default=None, pattern=r'^[a-fA-F0-9-]{36}$')
     model_config = ConfigDict(extra='forbid')
     id: str = Field(default_factory=lambda: str(uuid4()), pattern=r'^[a-zA-Z0-9_-]{1,128}$')
     agent_id: Literal[1, 2]

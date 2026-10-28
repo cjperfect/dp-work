@@ -368,11 +368,12 @@ export async function downloadKnowledgeDocumentRequest(
   accountId: string,
   baseId: string,
   documentId: string,
+  signal?: AbortSignal,
 ): Promise<Blob> {
   const { data } = await knowledgeRequest(
     accountId,
     `/${serverId(baseId)}/documents/${encodeURIComponent(documentId)}/file`,
-    { responseType: "blob" },
+    { responseType: "blob", signal },
   );
   if (!(data instanceof Blob)) throw new Error("源文件数据无效。");
   return data;

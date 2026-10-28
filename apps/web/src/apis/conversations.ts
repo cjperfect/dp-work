@@ -8,7 +8,12 @@ export const createConversation = (
   id: string,
   agent_id: number,
   knowledge_base_ids: (string | number)[],
-) => request<ThreadDetail>(root, { method: "POST", data: { id, agent_id, knowledge_base_ids } });
+  project_id: string | null = null,
+) =>
+  request<ThreadDetail>(root, {
+    method: "POST",
+    data: { id, agent_id, knowledge_base_ids, project_id },
+  });
 export const saveConversationDraft = (
   id: string,
   data: { expected_revision: number; draft: string; knowledge_base_ids: (string | number)[] },
