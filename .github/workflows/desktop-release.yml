@@ -1,11 +1,12 @@
-name: Desktop release draft
+name: 桌面客户端打包与发布
+run-name: 桌面发布 ${{ inputs.tag || github.ref_name }}
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing release tag, for example v0.1.0"
+        description: "已存在的版本标签，例如 v0.1.0"
         required: true
         type: string
 permissions:
@@ -15,6 +16,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
+    name: 构建安装包（${{ matrix.platform }} / ${{ matrix.arch }}）
     strategy:
       fail-fast: false
       matrix:
@@ -38,48 +40,79 @@ jobs:
         shell: bash
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-      DESKTOP_API_BASE_URL: ${{ vars.DESKTOP_API_BASE_URL }}
+      DESKTOP_API_BASE_URL: ${{ vars.DESKTOP_API_BASE_URL || 'http://localhost:8000' }}
       MEMORY_AUTO_ENABLED: "0"
     steps:
-      - uses: actions/checkout@v4
+      - name: 检出指定版本代码
+        uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.ref }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - name: 配置 pnpm
+        uses: pnpm/action-setup@v4
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: pnpm
-      - uses: actions/setup-python@v5
+      - name: 配置 Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Validate release version and signing configuration
+      - name: 校验版本、API 地址和签名配置
         env:
           TARGET_PLATFORM: ${{ matrix.platform }}
           HAS_CERTIFICATE: ${{ (matrix.platform == 'mac' && secrets.MAC_CSC_LINK != '') || (matrix.platform == 'win' && secrets.WIN_CSC_LINK != '') }}
           HAS_PASSWORD: ${{ (matrix.platform == 'mac' && secrets.MAC_CSC_KEY_PASSWORD != '') || (matrix.platform == 'win' && secrets.WIN_CSC_KEY_PASSWORD != '') }}
           HAS_NOTARIZATION: ${{ secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
         run: |
-          node --input-type=module -e 'import fs from "node:fs"; const v=JSON.parse(fs.readFileSync("apps/desktop/package.json")).version; if (!/^v\d+\.\d+\.\d+$/.test(process.env.RELEASE_TAG) || process.env.RELEASE_TAG!==`v${v}`) throw Error("Tag must match desktop package version"); const u=new URL(process.env.DESKTOP_API_BASE_URL); if(u.protocol!=="https:" || u.username || u.password || u.search || u.hash) throw Error("Set repository variable DESKTOP_API_BASE_URL to the public HTTPS API");'
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const version = JSON.parse(fs.readFileSync("apps/desktop/package.json")).version;
+          const tag = process.env.RELEASE_TAG;
+          if (!/^v\d+\.\d+\.\d+$/.test(tag) || tag !== `v${version}`) {
+            throw Error(`版本不一致：当前 Tag 为 ${tag}，桌面版本为 ${version}，请使用 v${version}`);
+          }
+          let url;
+          try {
+            url = new URL(process.env.DESKTOP_API_BASE_URL);
+          } catch {
+            throw Error("DESKTOP_API_BASE_URL 无效，请填写完整地址，例如 http://localhost:8000");
+          }
+          const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+          if ((url.protocol !== "https:" && !(url.protocol === "http:" && local)) ||
+              url.username || url.password || url.search || url.hash) {
+            throw Error("API 地址仅支持 HTTPS 或本机 HTTP 地址，不能包含凭证、查询参数或锚点");
+          }
+          console.log(`发布版本：${version}；API 地址：${url.origin}${url.pathname}`);
+          if (local) console.log("当前为本机测试包，使用前需在同一台电脑启动 API 服务（端口需与配置一致）");
+          NODE
           if [ "$TARGET_PLATFORM" != linux ]; then
-            test "$HAS_CERTIFICATE" = true || { echo 'Configure signing certificate secret'; exit 1; }
-            test "$HAS_PASSWORD" = true || { echo 'Configure certificate password secret'; exit 1; }
+            test "$HAS_CERTIFICATE" = true || { echo '请配置对应平台的签名证书 Secret'; exit 1; }
+            test "$HAS_PASSWORD" = true || { echo '请配置对应平台的证书密码 Secret'; exit 1; }
           fi
           if [ "$TARGET_PLATFORM" = mac ]; then
-            test "$HAS_NOTARIZATION" = true || { echo 'Configure Apple notarization secrets'; exit 1; }
+            test "$HAS_NOTARIZATION" = true || { echo '请配置 Apple 公证所需的 Secrets'; exit 1; }
           fi
-      - run: pnpm install --frozen-lockfile
-      - name: Install native Python build dependencies
+      - name: 安装前端与桌面依赖
+        run: pnpm install --frozen-lockfile
+      - name: 安装模板包与 Python 构建依赖
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ./packages/agent-templates -e './services/sidecar[packaging,test]'
           echo "SIDECAR_BUILD_PYTHON=$(python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
-      - run: pnpm --filter @dp-work/desktop build
-      - run: pnpm --filter @dp-work/desktop test
-      - run: pnpm --filter @dp-work/web test:settings
-      - run: pnpm --filter @dp-work/desktop build:web
-      - run: pnpm --filter @dp-work/desktop build:sidecar
-      - run: pnpm --filter @dp-work/desktop smoke:sidecar
-      - name: Build signed native installer and update metadata
+      - name: 编译桌面客户端
+        run: pnpm --filter @dp-work/desktop build
+      - name: 运行桌面端测试
+        run: pnpm --filter @dp-work/desktop test
+      - name: 运行设置与更新状态测试
+        run: pnpm --filter @dp-work/web test:settings
+      - name: 构建 Web 静态资源
+        run: pnpm --filter @dp-work/desktop build:web
+      - name: 打包 Python Sidecar
+        run: pnpm --filter @dp-work/desktop build:sidecar
+      - name: 检查 Sidecar 独立程序
+        run: pnpm --filter @dp-work/desktop smoke:sidecar
+      - name: 构建签名安装包与更新清单
         env:
           TARGET_PLATFORM: ${{ matrix.platform }}
           TARGET_ARCH: ${{ matrix.arch }}
@@ -96,7 +129,8 @@ jobs:
           else
             pnpm --filter @dp-work/desktop exec electron-builder --linux "--$TARGET_ARCH" --publish never
           fi
-      - uses: actions/upload-artifact@v4
+      - name: 保存平台安装包
+        uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
           if-no-files-found: error
@@ -109,6 +143,7 @@ jobs:
             apps/desktop/release/*.blockmap
             apps/desktop/release/latest*.yml
   draft:
+    name: 汇总产物并创建 Release 草稿
     needs: build
     runs-on: ubuntu-22.04
     environment: desktop-release
@@ -118,22 +153,27 @@ jobs:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
       GH_REPO: ${{ github.repository }}
     steps:
-      - uses: actions/checkout@v4
+      - name: 检出指定版本代码
+        uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.ref }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - name: 配置 pnpm
+        uses: pnpm/action-setup@v4
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v4
+      - name: 安装前端与桌面依赖
+        run: pnpm install --frozen-lockfile
+      - name: 下载所有平台产物
+        uses: actions/download-artifact@v4
         with:
           pattern: desktop-*
           path: downloaded
-      - name: Verify files and merge architecture manifests
+      - name: 校验产物并合并多架构更新清单
         run: node apps/desktop/scripts/merge-release.mjs downloaded release-assets "${RELEASE_TAG#v}"
-      - name: Upload all assets to a draft (never publish automatically)
+      - name: 上传安装包并保存 Release 草稿
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

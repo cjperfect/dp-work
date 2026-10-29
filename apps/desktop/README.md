@@ -110,7 +110,7 @@ Renderer 启用沙箱和上下文隔离，关闭 Node.js 集成。页面通过 `
 
 PyInstaller 需在目标操作系统和架构上原生构建；本次验证 macOS arm64。签名与公证仍使用发布者自己的证书配置。模型服务凭证不内置，个人配置可通过云端设置传给当前用户的设备；本机默认配置读取 `~/.dp-work/config/sidecar.env`。
 
-构建安装包前设置 `DESKTOP_API_BASE_URL=https://你的API域名`；该地址是公开配置，会写入 Web 配置文件，并用于 Main 的 WSS 连接和 Sidecar 的检索回调地址。登录后 Main 自动连接，登出后断开，不在安装包内写入账号 Token 或云端密钥。
+构建安装包可设置 `DESKTOP_API_BASE_URL=https://你的API域名`；当前 GitHub 工作流未配置时默认 `http://localhost:8000`，仅供同一台电脑启动 API 后测试；远程 HTTP 地址不允许。该地址是公开配置，会写入 Web 配置文件，并用于 Main 的 WSS 连接和 Sidecar 的检索回调地址。登录后 Main 自动连接，登出后断开，不在安装包内写入账号 Token 或云端密钥。
 
 ## 本机业务通信
 
@@ -128,14 +128,14 @@ macOS 构建同时生成 DMG 和 ZIP，ZIP 是自动更新所需产物；Windows
 
 ### 发布配置
 
-`.github/workflows/desktop-release.yml` 在推送 `v*` 标签或手动选择已有标签时运行，标签必须等于 `apps/desktop/package.json` 的版本（例如 `v0.1.1` 对应 `0.1.1`），暂不发布预览频道。以下配置需要在 GitHub 仓库中填写，不能提交到代码或放入安装包：
+GitHub Actions 中显示为“桌面客户端打包与发布”，构建任务会显示平台与架构，各步骤使用中文名称。`.github/workflows/desktop-release.yml` 在推送 `v*` 标签或手动选择已有标签时运行，标签必须等于 `apps/desktop/package.json` 的版本（例如 `v0.1.1` 对应 `0.1.1`），暂不发布预览频道。以下配置需要在 GitHub 仓库中填写，不能提交到代码或放入安装包：
 
-| 类型                | 名称                                                       | 用途                                                         |
-| ------------------- | ---------------------------------------------------------- | ------------------------------------------------------------ |
-| Repository variable | `DESKTOP_API_BASE_URL`                                     | 对外业务 API 的 HTTPS 地址，发布构建不允许默认 localhost     |
-| Secret              | `MAC_CSC_LINK`、`MAC_CSC_KEY_PASSWORD`                     | macOS Developer ID Application 证书 P12（可用 Base64）及密码 |
-| Secret              | `APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID` | Apple 公证                                                   |
-| Secret              | `WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD`                     | Windows 代码签名证书 PFX（可用 Base64）及密码                |
+| 类型                | 名称                                                       | 用途                                                                                   |
+| ------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Repository variable | `DESKTOP_API_BASE_URL`                                     | API 地址；当前未配置时默认 `http://localhost:8000` 供本机测试，正式部署填写 HTTPS 地址 |
+| Secret              | `MAC_CSC_LINK`、`MAC_CSC_KEY_PASSWORD`                     | macOS Developer ID Application 证书 P12（可用 Base64）及密码                           |
+| Secret              | `APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID` | Apple 公证                                                                             |
+| Secret              | `WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD`                     | Windows 代码签名证书 PFX（可用 Base64）及密码                                          |
 
 创建名为 `desktop-release` 的 GitHub Environment，可配置审批人保护草稿上传阶段。证书缺失时发布工作流明确失败，不悄悄生成未签名的正式更新。所有平台构建成功后才汇总产物，核验清单版本、文件大小和 SHA-512，并合并 Mac 双架构的 `latest-mac.yml`，防止两个构建覆盖同一更新清单。
 
