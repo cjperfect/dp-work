@@ -1,12 +1,29 @@
-import { BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, nativeImage, shell } from "electron";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { isAppUrl, canCaptureMicrophone } from "./config";
+import { DESKTOP_TITLEBAR_HEIGHT } from "@dp-work/protocols/desktop";
 
 /** 创建主窗口并限制导航和媒体权限。 */
 export function createMainWindow(url: string, onClosed: () => void): BrowserWindow {
   const origin = new URL(url).origin;
+  const icon = nativeImage.createFromBuffer(
+    readFileSync(path.join(app.getAppPath(), "resources/icon.png")),
+  );
+  if (process.platform === "darwin") app.dock?.setIcon(icon);
   const window = new BrowserWindow({
+    icon,
     title: "企业 Agent 平台",
+    titleBarStyle: "hidden",
+    ...(process.platform === "darwin"
+      ? { trafficLightPosition: { x: 12, y: 9 } }
+      : {
+          titleBarOverlay: {
+            color: "#f3f3f3",
+            symbolColor: "#171717",
+            height: DESKTOP_TITLEBAR_HEIGHT,
+          },
+        }),
     width: 1440,
     height: 940,
     minWidth: 1000,
@@ -14,6 +31,7 @@ export function createMainWindow(url: string, onClosed: () => void): BrowserWind
     show: false,
     backgroundColor: "#ffffff",
     webPreferences: {
+      additionalArguments: [`--dp-titlebar-height=${DESKTOP_TITLEBAR_HEIGHT}`],
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,
       nodeIntegration: false,

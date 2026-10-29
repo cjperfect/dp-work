@@ -82,7 +82,10 @@ export function ServiceForm({
   };
   return (
     <Group>
-      <Row label={"使用个人配置"} description={"仅对当前账号生效。关闭后使用平台默认配置。"}>
+      <Row
+        label={"使用个人配置"}
+        description={"仅保存在当前设备，对当前账号生效。关闭后使用默认配置。"}
+      >
         <div className="flex items-center justify-end gap-3">
           <span className="text-muted-foreground text-xs">
             {form.enabled ? "个人配置" : "平台默认"}
@@ -166,7 +169,10 @@ export function ServiceForm({
           </Row>
         </>
       )}
-      <Row label="API Key" description={"密钥加密保存在服务端，不回传明文。留空保留已保存的密钥。"}>
+      <Row
+        label="API Key"
+        description={"密钥加密保存在当前设备，不回传明文。留空保留已保存的密钥。"}
+      >
         {form.enabled ? (
           <div className="flex items-center gap-2">
             <Input

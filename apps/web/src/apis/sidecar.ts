@@ -5,7 +5,7 @@ export function getSidecarAsrConfig(): Promise<{ configured: boolean }> {
   return request("/api/settings/asr/configured");
 }
 
-/** 获取短时连接票据；API Key 仅在 API 和 Sidecar 之间传递。 */
+/** 获取短时连接票据；API Key 由本机 Sidecar 读取，不经过云端 API。 */
 export function createAsrSession(meetingId: string): Promise<{ ticket: string }> {
-  return request(`/api/settings/asr/session/${encodeURIComponent(meetingId)}`, { method: "POST" });
+  return request(`/api/meetings/${encodeURIComponent(meetingId)}/asr/session`, { method: "POST" });
 }

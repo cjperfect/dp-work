@@ -19,8 +19,12 @@ export function installationId(file: string): string {
 
 /** Main 主动连接云端，只转发白名单中的本机 Sidecar 调用。 */
 export class DeviceBridge {
+  get hasActiveJobs(): boolean {
+    return this.tasks.size > 0;
+  }
   private socket: WebSocket | null = null;
   private token: string | null = null;
+  private verifiedToken: string | null = null;
   private deviceId: string | null = null;
   private tasks = new Map<string, AbortController>();
   private reconnect: ReturnType<typeof setTimeout> | null = null;
@@ -46,7 +50,14 @@ export class DeviceBridge {
     return Number.isSafeInteger(owner) && owner > 0 ? { owner, deviceId: this.deviceId } : null;
   }
 
-  async setSession(token: string | null): Promise<{ deviceId: string | null }> {
+  isVerifiedSession(token: string): boolean {
+    return this.verifiedToken === token;
+  }
+
+  async setSession(
+    token: string | null,
+    waitForConnection = true,
+  ): Promise<{ deviceId: string | null }> {
     if (this.stopped) return { deviceId: null };
     if (token !== null && (typeof token !== "string" || token.length > 8192))
       throw new Error("登录凭证无效。");
@@ -54,6 +65,7 @@ export class DeviceBridge {
       this.disconnect();
       this.connecting = null;
       this.token = token;
+      this.verifiedToken = null;
       if (token) {
         const payload = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString());
         if (!/^\d+$/.test(String(payload.sub))) throw new Error("登录凭证无效。");
@@ -74,7 +86,7 @@ export class DeviceBridge {
           })
           .catch(() => {});
       }
-      await this.connecting.catch(() => {});
+      if (waitForConnection) await this.connecting.catch(() => {});
     }
     return { deviceId: token === this.token ? this.deviceId : null };
   }
@@ -108,6 +120,7 @@ export class DeviceBridge {
           if (message.type === "connected") {
             if (message.device_id !== this.deviceId) throw new Error("设备身份不匹配。");
             ready = true;
+            this.verifiedToken = token;
             this.attempts = 0;
             clearTimeout(timeout);
             resolve();

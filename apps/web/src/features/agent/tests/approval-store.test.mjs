@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { beforeEach, afterEach, test } from "node:test";
 import { httpClient } from "../../../lib/http.ts";
 import { useAuthStore } from "../../../stores/auth.ts";
-import { loadApprovals, useAgentApprovalStore } from "../../../stores/agent-approvals.ts";
+import {
+  loadApprovals,
+  markApprovalDecided,
+  useAgentApprovalStore,
+} from "../../../stores/agent-approvals.ts";
 
 let originalStorage, originalWindow, interceptor;
 let handler;
@@ -64,4 +68,23 @@ test("late approval responses cannot enter the next account", async () => {
   finish();
   await loading;
   assert.deepEqual(useAgentApprovalStore.getState().entries, {});
+});
+
+test("an older read cannot turn an acknowledged approval back into a pending one", async () => {
+  const approval = { id: "approval", conversation_id: "one", status: "pending", actionable: true };
+  useAgentApprovalStore.setState({
+    entries: { one: { items: [approval], loading: false, error: null } },
+  });
+  let finish;
+  handler = () =>
+    new Promise((resolve) => {
+      finish = () => resolve([approval]);
+    });
+  const loading = loadApprovals("one");
+  while (!finish) await new Promise((resolve) => setTimeout(resolve, 0));
+  markApprovalDecided(approval, "approve");
+  finish();
+  await loading;
+  assert.equal(useAgentApprovalStore.getState().entries.one.items[0].actionable, false);
+  assert.equal(useAgentApprovalStore.getState().entries.one.items[0].status, "approved");
 });

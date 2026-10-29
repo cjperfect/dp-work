@@ -54,12 +54,7 @@ import { EditableSourceEditor } from "./editable-source-editor";
 import { PdfPreview } from "@/features/knowledge/components/pdf-preview";
 import { DocxPreview } from "./docx-preview";
 import { LazyBlockNoteEditor as BlockNoteEditor } from "@/components/editor/lazy-blocknote-editor";
-import { getKbFiles, removeUploadedFile } from "@/stores/knowledge-upload";
-import {
-  FILE_TYPE_META,
-  KNOWLEDGE_BASES,
-  type KbFile,
-} from "@/features/knowledge/constants/knowledge-data";
+import { FILE_TYPE_META, type KbFile } from "@/features/knowledge/constants/knowledge-data";
 
 export { KnowledgePage } from "./knowledge-list-page";
 
@@ -74,17 +69,8 @@ export function KnowledgeBaseDetailPage() {
   const { kbId } = useParams({ from: "/_app/knowledge/$kbId/" });
   const { bases, loading, error, reload } = useKnowledgeBases();
   const documents = useKnowledgeDocuments(kbId);
-  // 后端知识库/文档接口不可用或未接入时，降级为本地 mock + 本地上传数据，页面始终可看
-  const kb = bases.find((k) => k.id === kbId) ?? KNOWLEDGE_BASES.find((k) => k.id === kbId);
-  const backendUnavailable = Boolean(error || documents.error);
-  const files = Array.from(
-    new Map(
-      [
-        ...(backendUnavailable || documents.loading ? (kb?.files ?? []) : documents.files),
-        ...getKbFiles(kbId),
-      ].map((file) => [file.id, file]),
-    ).values(),
-  );
+  const kb = bases.find((base) => base.id === kbId);
+  const files = documents.files;
   const accountId = useAuthStore((state) => localAccountId(state.user));
   const [uploadMsg, setUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const parsing = useDocumentParsing(kbId);
@@ -122,9 +108,7 @@ export function KnowledgeBaseDetailPage() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      if (target.file.source === "editor" || target.file.storage === "server")
-        await deleteKnowledgeDocument(accountId, kbId, target.file.id);
-      else removeUploadedFile(kbId, target.file.id, accountId);
+      await deleteKnowledgeDocument(accountId, kbId, target.file.id);
       if (localAccountId(useAuthStore.getState().user) !== accountId) return;
       setDeleteOpen(false);
       documents.reload();
@@ -136,8 +120,7 @@ export function KnowledgeBaseDetailPage() {
     }
   }
 
-  // 仅当本地也无对应知识库时才阻断：加载中显示加载态，其余按不存在处理
-  if ((loading || error || documents.loading || documents.error) && !kb)
+  if (loading || error || documents.loading || documents.error)
     return (
       <KnowledgeLoadState
         error={error ?? documents.error}
@@ -219,12 +202,6 @@ export function KnowledgeBaseDetailPage() {
           </Button>
         </div>
       </header>
-
-      {backendUnavailable && (
-        <p className="text-amber-600 text-xs" role="status">
-          后端知识库服务暂不可用，当前展示本地预览数据
-        </p>
-      )}
 
       {uploadMsg && (
         <p
@@ -528,7 +505,7 @@ export function KnowledgeFilePage() {
   const kb = bases.find((k) => k.id === kbId);
   const documents = useKnowledgeDocuments(kbId);
   const vectorization = useDocumentVectorization(kbId);
-  const file = [...documents.files, ...getKbFiles(kbId)].find((f) => f.id === fileId);
+  const file = documents.files.find((file) => file.id === fileId);
   const pdf = useDocumentPdf(kbId, file);
   const accountId = useAuthStore((state) => localAccountId(state.user));
   const [editingTitle, setEditingTitle] = useState(false);

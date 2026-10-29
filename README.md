@@ -130,7 +130,7 @@ pnpm dev:web
 pnpm dev:desktop   # Electron 客户端
 ```
 
-> 当前目标架构为本地 Web / Electron / Sidecar，云端 API / PG / ES / RabbitMQ / Worker。开发时在本机运行 API 和 Worker，并设置 `SIDECAR_TRANSPORT=device`；运行 `pnpm dev:desktop` 自动启动 Web 与 Sidecar，登录后建立设备连接。纯浏览器集中式调试可显式使用 `SIDECAR_TRANSPORT=http`。详情见 [设备通道说明](services/api/src/modules/devices/README.md)。
+> 当前架构为本地 Web / Electron / Sidecar，云端 API / PG / ES / RabbitMQ / Worker。业务边界：只有登录注册、会议、知识库访问远程 API；聊天、项目、个人设置、技能和飞书连接器通过 Electron IPC → stdio JSON-RPC 直接在本机执行与保存。本机已验证的登录支持离线恢复本地功能，知识库检索仍需要连接远程知识库。云端设备通道只用于会议和知识库任务，不承载聊天或个人密钥。开发时运行 `pnpm dev:desktop` 自动启动 Web 与 Sidecar；纯浏览器仅能使用远程模块，本地功能需要桌面桥接。
 
 ---
 

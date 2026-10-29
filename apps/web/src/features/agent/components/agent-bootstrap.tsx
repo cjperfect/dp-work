@@ -11,7 +11,10 @@ export function AgentBootstrap() {
     void loadAgents()
       .then(async () => {
         if (useAuthStore.getState().user?.id !== owner) return;
-        const agents = useAgentStore.getState().agents;
+        const { agents: catalog, partnerCodes } = useAgentStore.getState();
+        const agents = catalog.filter(
+          (agent) => agent.code === "general" || partnerCodes.includes(agent.code),
+        );
         await Promise.all(
           agents.map(async (agent) => {
             await window.desktop?.ensureAgentWorkspace?.(agent.code);

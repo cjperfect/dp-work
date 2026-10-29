@@ -16,6 +16,22 @@ router = APIRouter(prefix="/api/knowledge-bases", tags=["knowledge"])
 router.include_router(events_router)
 
 
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class RetrievalCapabilityInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    knowledge_base_ids: list[int] = Field(min_length=1, max_length=20)
+
+
+@router.post("/retrieval-capability", response_model=ApiResponse[dict], summary="授权本机 Agent 检索知识库")
+async def retrieval_capability(body: RetrievalCapabilityInput, user: Annotated[User, Depends(get_current_user)]):
+    """只签发已授权知识库的短时令牌，不接收或保存聊天内容。"""
+    from . import rag, rag_access
+    await rag.authorize_bases(user.id, body.knowledge_base_ids)
+    return ok({"capability": rag_access.issue_capability(user.id, body.knowledge_base_ids)})
+
+
 @router.post(
     "",
     response_model=ApiResponse[KnowledgeBaseOut],

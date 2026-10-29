@@ -12,4 +12,5 @@ export const VIEW_TITLES: Record<ViewKey, string> = {
 export const AGENT_WELCOME: Record<AgentId, string> = {
   general: "你好，我是通用 Agent。",
   product: "你好，我是产品 Agent。",
+  ui: "你好，我是 UI Agent。",
 };

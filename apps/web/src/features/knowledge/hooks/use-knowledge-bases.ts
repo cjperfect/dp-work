@@ -2,7 +2,7 @@ import { localAccountId } from "@/features/auth/lib/auth";
 import { useEffect } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { loadKnowledgeBases, resetKnowledgeBases, useKnowledgeStore } from "@/stores/knowledge";
-import type { StoredKnowledgeBase } from "@/features/knowledge/lib/knowledge-repository";
+import type { StoredKnowledgeBase } from "@/types/knowledge";
 
 const EMPTY: StoredKnowledgeBase[] = [];
 

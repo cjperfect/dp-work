@@ -1,3 +1,4 @@
+import { agentPath } from "@/features/agent/constants/agents";
 import { useMemo, useState } from "react";
 import { ThreadListPrimitive, useAui, useAuiState } from "@assistant-ui/react";
 import { useNavigate } from "@tanstack/react-router";
@@ -30,7 +31,7 @@ export function ProjectSidebar() {
     Object.values(lists)
       .flatMap((rows) => rows ?? [])
       .forEach((thread) => {
-        if (thread.project_id)
+        if (thread.project_id && thread.has_history)
           result.set(thread.project_id, [...(result.get(thread.project_id) ?? []), thread]);
       });
     result.forEach((rows) => rows.sort((a, b) => b.updated_at.localeCompare(a.updated_at)));
@@ -40,7 +41,7 @@ export function ProjectSidebar() {
     const target = await selectThreadById(id);
     useAppStore.getState().setAgentId(target);
     await aui.threads.switchToThread(id);
-    await navigate({ to: target === "product" ? "/product" : "/" });
+    await navigate({ to: agentPath(target) });
   }
   async function newChat(projectId: string) {
     const id = await createThread(code, projectId);

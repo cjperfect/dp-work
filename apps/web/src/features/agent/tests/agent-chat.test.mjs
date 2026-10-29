@@ -1,3 +1,4 @@
+import { ensureTestChat as ensureAgentChat } from "./conversation-fixture.mjs";
 import { conversationFixture } from "./conversation-fixture.mjs";
 import assert from "node:assert/strict";
 import { beforeEach, afterEach, test } from "node:test";
@@ -5,10 +6,11 @@ import { httpClient } from "../../../lib/http.ts";
 import { streamAgentChat } from "../../../apis/agents.ts";
 import { useAuthStore } from "../../../stores/auth.ts";
 import {
-  ensureAgentChat,
   cancelMessage,
   sendMessage,
   editMessage,
+  regenerateMessage,
+  setDraftText,
   selectMessageBranch,
   collectMessageBranches,
   generateThreadTitle,
@@ -151,6 +153,15 @@ test("stopping generation preserves partial text and clears the running state", 
     assert.equal(useAgentStore.getState().drafts[id].error, null);
     assert.equal(useAgentStore.getState().details[id].messages.at(-1).status, "cancelled");
     assert.equal(useAgentStore.getState().details[id].messages.at(-1).content, "partial");
+    const stoppedId = useAgentStore.getState().details[id].messages.at(-1).id;
+    unsubscribe();
+    handler = async () => response(event({ type: "done", content: "继续完成剩余工作" }));
+    await sendMessage("general", id, "接着运行");
+    const messages = useAgentStore.getState().details[id].messages;
+    assert.equal(messages.at(-2).content, "接着运行");
+    assert.notEqual(messages.at(-1).id, stoppedId);
+    assert.equal(messages.find((message) => message.id === stoppedId).status, "cancelled");
+    assert.equal(messages.at(-1).status, "complete");
   } finally {
     unsubscribe();
   }
@@ -241,6 +252,7 @@ test("LLM titles are generated once and persisted to the API thread", async () =
   resolve();
   assert.equal(await first, "知识库检索工具设计");
   assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0].messages, [{ role: "user", content: "如何设计知识库检索工具？" }]);
   assert.equal(useAgentStore.getState().details[id].thread.title_source, "generated");
   assert.equal(await generateThreadTitle(id), "知识库检索工具设计");
   assert.equal(requests.length, 1);
@@ -361,4 +373,132 @@ test("approval suspends the stream without treating the pause as a failure", asy
     new AbortController().signal,
   );
   assert.equal(result, null);
+});
+
+test("SSE forwards persisted tool traces without mixing them into reply text", async () => {
+  const change = {
+    id: "change1",
+    path: "a.txt",
+    additions: 1,
+    deletions: 0,
+    lines: [{ kind: "added", text: "文件" }],
+  };
+  const trace = {
+    id: "c1",
+    name: "read_file",
+    args: { path: "/a.txt" },
+    started_at: 1000,
+    status: "running",
+  };
+  handler = async () =>
+    response(
+      event({ type: "tool_call", trace }) +
+        event({ type: "file_change", change }) +
+        event({
+          type: "tool_result",
+          trace: { ...trace, status: "complete", result: "文件", ended_at: 1200 },
+        }) +
+        event({ type: "delta", text: "回答" }) +
+        event({ type: "done", content: "回答" }),
+    );
+  const changes = [],
+    calls = [],
+    text = [];
+  const result = await streamAgentChat(
+    input,
+    (delta) => text.push(delta),
+    new AbortController().signal,
+    undefined,
+    undefined,
+    (call) => calls.push(call),
+    (file) => changes.push(file),
+  );
+  assert.equal(result, "回答");
+  assert.deepEqual(text, ["回答"]);
+  assert.deepEqual(changes, [change]);
+  assert.deepEqual(
+    calls.map((call) => call.status),
+    ["running", "complete"],
+  );
+});
+
+test("regeneration preserves the user node, old response branch and composer draft", async () => {
+  await ensureAgentChat("general");
+  const id = useAgentStore.getState().selected.general;
+  await sendMessage("general", id, "第一问");
+  await sendMessage("general", id, "第二问");
+  const original = useAgentStore.getState().details[id].messages;
+  setDraftText(id, "正在输入的内容");
+  const requests = [];
+  handler = async (config) => {
+    requests.push(JSON.parse(config.data));
+    return response(event({ type: "done", content: "重新生成的回答" }));
+  };
+  await regenerateMessage("general", id, original[0].id);
+  const detail = useAgentStore.getState().details[id];
+  assert.equal(detail.messages.length, 2);
+  assert.equal(detail.messages[0].id, original[0].id);
+  assert.equal(detail.messages[1].content, "重新生成的回答");
+  assert.notEqual(detail.messages[1].id, original[1].id);
+  assert.deepEqual(
+    requests[0].messages.map((row) => row.content),
+    ["第一问"],
+  );
+  assert.equal(useAgentStore.getState().drafts[id].text, "正在输入的内容");
+  const branches = collectMessageBranches(detail.messages, detail.message_branches);
+  assert.ok(branches.some((entry) => entry.message.id === original[1].id));
+  await assert.rejects(regenerateMessage("general", id, "missing"), /原消息不存在/);
+});
+
+test("reasoning SSE is delivered separately and never concatenated into the answer", async () => {
+  handler = async () =>
+    response(
+      event({ type: "reasoning", id: "r1", text: "先查看资料", started_at: 1000 }) +
+        event({ type: "reasoning_end", id: "r1", started_at: 1000, completed_at: 1200 }) +
+        event({ type: "delta", text: "最终回答" }) +
+        event({ type: "done", content: "最终回答" }),
+    );
+  const thoughts = [],
+    answers = [];
+  const result = await streamAgentChat(
+    input,
+    (text) => answers.push(text),
+    new AbortController().signal,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    (event) => thoughts.push(event),
+  );
+  assert.equal(result, "最终回答");
+  assert.deepEqual(answers, ["最终回答"]);
+  assert.deepEqual(
+    thoughts.map((event) => event.type),
+    ["reasoning", "reasoning_end"],
+  );
+  assert.equal(thoughts[0].text, "先查看资料");
+});
+
+test("reported usage SSE stays separate from assistant reply text", async () => {
+  const usage = { run_id: "usage-one", input_tokens: 100, output_tokens: 20, total_tokens: 120 };
+  handler = async () =>
+    response(
+      event({ type: "usage", usage }) +
+        event({ type: "delta", text: "回答" }) +
+        event({ type: "done", content: "回答" }),
+    );
+  const values = [];
+  const text = await streamAgentChat(
+    input,
+    () => {},
+    new AbortController().signal,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    (value) => values.push(value),
+  );
+  assert.equal(text, "回答");
+  assert.deepEqual(values, [usage]);
 });

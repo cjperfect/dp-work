@@ -1,0 +1,145 @@
+name: Desktop release draft
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag, for example v0.1.0"
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: desktop-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            platform: mac
+            arch: arm64
+          - runner: macos-15-intel
+            platform: mac
+            arch: x64
+          - runner: windows-2022
+            platform: win
+            arch: x64
+          - runner: ubuntu-22.04
+            platform: linux
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      DESKTOP_API_BASE_URL: ${{ vars.DESKTOP_API_BASE_URL }}
+      MEMORY_AUTO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate release version and signing configuration
+        env:
+          TARGET_PLATFORM: ${{ matrix.platform }}
+          HAS_CERTIFICATE: ${{ (matrix.platform == 'mac' && secrets.MAC_CSC_LINK != '') || (matrix.platform == 'win' && secrets.WIN_CSC_LINK != '') }}
+          HAS_PASSWORD: ${{ (matrix.platform == 'mac' && secrets.MAC_CSC_KEY_PASSWORD != '') || (matrix.platform == 'win' && secrets.WIN_CSC_KEY_PASSWORD != '') }}
+          HAS_NOTARIZATION: ${{ secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
+        run: |
+          node --input-type=module -e 'import fs from "node:fs"; const v=JSON.parse(fs.readFileSync("apps/desktop/package.json")).version; if (!/^v\d+\.\d+\.\d+$/.test(process.env.RELEASE_TAG) || process.env.RELEASE_TAG!==`v${v}`) throw Error("Tag must match desktop package version"); const u=new URL(process.env.DESKTOP_API_BASE_URL); if(u.protocol!=="https:" || u.username || u.password || u.search || u.hash) throw Error("Set repository variable DESKTOP_API_BASE_URL to the public HTTPS API");'
+          if [ "$TARGET_PLATFORM" != linux ]; then
+            test "$HAS_CERTIFICATE" = true || { echo 'Configure signing certificate secret'; exit 1; }
+            test "$HAS_PASSWORD" = true || { echo 'Configure certificate password secret'; exit 1; }
+          fi
+          if [ "$TARGET_PLATFORM" = mac ]; then
+            test "$HAS_NOTARIZATION" = true || { echo 'Configure Apple notarization secrets'; exit 1; }
+          fi
+      - run: pnpm install --frozen-lockfile
+      - name: Install native Python build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ./packages/agent-templates -e './services/sidecar[packaging,test]'
+          echo "SIDECAR_BUILD_PYTHON=$(python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
+      - run: pnpm --filter @dp-work/desktop build
+      - run: pnpm --filter @dp-work/desktop test
+      - run: pnpm --filter @dp-work/web test:settings
+      - run: pnpm --filter @dp-work/desktop build:web
+      - run: pnpm --filter @dp-work/desktop build:sidecar
+      - run: pnpm --filter @dp-work/desktop smoke:sidecar
+      - name: Build signed native installer and update metadata
+        env:
+          TARGET_PLATFORM: ${{ matrix.platform }}
+          TARGET_ARCH: ${{ matrix.arch }}
+          CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MAC_CSC_LINK || matrix.platform == 'win' && secrets.WIN_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MAC_CSC_KEY_PASSWORD || matrix.platform == 'win' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ "$TARGET_PLATFORM" = mac ]; then
+            pnpm --filter @dp-work/desktop exec electron-builder --mac "--$TARGET_ARCH" --publish never -c.forceCodeSigning=true -c.mac.notarize=true
+          elif [ "$TARGET_PLATFORM" = win ]; then
+            pnpm --filter @dp-work/desktop exec electron-builder --win "--$TARGET_ARCH" --publish never -c.forceCodeSigning=true
+          else
+            pnpm --filter @dp-work/desktop exec electron-builder --linux "--$TARGET_ARCH" --publish never
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest*.yml
+  draft:
+    needs: build
+    runs-on: ubuntu-22.04
+    environment: desktop-release
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: downloaded
+      - name: Verify files and merge architecture manifests
+        run: node apps/desktop/scripts/merge-release.mjs downloaded release-assets "${RELEASE_TAG#v}"
+      - name: Upload all assets to a draft (never publish automatically)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$RELEASE_TAG" --json isDraft > release-state.json 2>/dev/null; then
+            node -e 'if (!JSON.parse(require("fs").readFileSync("release-state.json")).isDraft) throw Error("Cannot modify an already published release");'
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "DP Work $RELEASE_TAG" --notes 'Native installers and update metadata. Complete installation, upgrade and sandbox acceptance before publishing.'
+          fi
+          gh release upload "$RELEASE_TAG" release-assets/* --clobber

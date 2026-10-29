@@ -3,6 +3,7 @@ import axios, {
   type AxiosResponse,
   type InternalAxiosRequestConfig,
 } from "axios";
+import { isLocalBusiness, localAdapter, LocalTransportError } from "./local-transport";
 import { getStoredToken } from "./token-storage";
 
 export type RequestOptions = Omit<AxiosRequestConfig, "auth" | "url"> & {
@@ -44,6 +45,11 @@ function notifyUnauthorized(token: string | null): void {
 async function interceptRequest(
   config: InternalAxiosRequestConfig,
 ): Promise<InternalAxiosRequestConfig> {
+  if (isLocalBusiness(config.url || "")) {
+    if (typeof config.adapter !== "function") config.adapter = localAdapter;
+    config.sessionToken = getStoredToken();
+    return config;
+  }
   const token = config.requiresAuth === false ? null : getStoredToken();
   config.sessionToken = token;
   if (token) {
@@ -93,6 +99,7 @@ async function interceptResponse(response: AxiosResponse): Promise<AxiosResponse
 
 /** 统一处理网络异常、超时和取消。 */
 function interceptResponseError(cause: unknown): never {
+  if (cause instanceof LocalTransportError) throw cause;
   throw new Error("暂时无法连接服务，请稍后重试。", { cause });
 }
 

@@ -8,7 +8,7 @@
 cd services/sidecar
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e ../../packages/agent-templates -e .
 cp .env.example .env
 uvicorn src.main:app --reload --host 127.0.0.1 --port 8001
 ```

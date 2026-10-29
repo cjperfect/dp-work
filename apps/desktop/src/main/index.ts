@@ -8,7 +8,11 @@ import { sidecarOptions } from "./sidecar/config";
 import { SidecarManager } from "./sidecar/manager";
 import { DeviceBridge, installationId } from "./device/bridge";
 import { createMainWindow } from "./window";
+import { LocalIdentity } from "./local/identity";
+import { LocalGateway } from "./local/gateway";
 import { registerDesktopIpc } from "./ipc";
+import { autoUpdater } from "electron-updater";
+import { UpdateManager, UpdateBusyError } from "./updates/manager";
 
 let window: BrowserWindow | null = null;
 let webServer: Awaited<ReturnType<typeof startWebServer>> | null = null;
@@ -16,7 +20,29 @@ let quitting = false;
 let origin = "";
 let sidecar: SidecarManager | null = null;
 let bridge: DeviceBridge | null = null;
+let localGateway: LocalGateway | null = null;
+let cloudApi = "";
 let cleanupComplete = false;
+let updates: UpdateManager | null = null;
+let shutdownPromise: Promise<void> | null = null;
+
+/** 正常退出和更新安装共用清理过程，清理完成后才交给更新器退出。 */
+function prepareShutdown(): Promise<void> {
+  if (shutdownPromise) return shutdownPromise;
+  quitting = true;
+  updates?.close();
+  localGateway?.cancelAll();
+  webServer?.close();
+  webServer?.closeAllConnections();
+  webServer = null;
+  bridge?.stop();
+  shutdownPromise = (sidecar?.stop() ?? Promise.resolve())
+    .catch(() => sidecar?.forceStop())
+    .then(() => {
+      cleanupComplete = true;
+    });
+  return shutdownPromise;
+}
 
 app.setName("DP Work");
 const legacyDataPath = app.getPath("userData");
@@ -48,10 +74,15 @@ async function createWindow(url: string): Promise<void> {
   await window.loadURL(url);
 }
 
+const localIdentity = new LocalIdentity(path.join(storage.data, "local-identity.json"));
+
 registerDesktopIpc({
   getWindow: () => window,
   getOrigin: () => origin,
   getBridge: () => bridge,
+  getLocalGateway: () => localGateway,
+  getUpdates: () => updates,
+  onSignOut: () => localIdentity.clear(),
   workspace: storage.workspace,
   data: storage.data,
 });
@@ -85,6 +116,7 @@ if (!app.requestSingleInstanceLock()) {
       const api = apiBaseUrl(
         process.env.DESKTOP_API_BASE_URL ?? publicConfig?.apiBaseUrl ?? "http://127.0.0.1:8000",
       );
+      cloudApi = api;
       const managedSidecar = sidecarOptions(
         app.isPackaged,
         path.resolve(__dirname, "../../../.."),
@@ -110,13 +142,45 @@ if (!app.requestSingleInstanceLock()) {
         bridge = new DeviceBridge(
           api,
           installationId(path.join(storage.data, "device-id")),
-          (job, signal) => sidecar!.request(job, signal),
+          (job, signal) => {
+            if (updates?.getState().status === "installing")
+              throw new Error("正在准备应用更新，请稍后重试。");
+            if (
+              ![
+                "meetings.minutes.generate",
+                "knowledge.parse",
+                "knowledge.chunks",
+                "knowledge.embed",
+                "asr.sessions",
+              ].includes(job.method)
+            )
+              throw new Error("远程任务仅允许会议和知识库操作。");
+            return sidecar!.request(job, signal);
+          },
           () => {
             if (window && !window.isDestroyed())
               window.webContents.send("desktop:device-connected");
           },
         );
       }
+      localGateway = new LocalGateway(
+        (job, signal) => {
+          if (updates?.getState().status === "installing")
+            throw new Error("正在准备应用更新，请稍后重试。");
+          if (!sidecar) throw new Error("本机 Sidecar 未连接。");
+          return sidecar.request(job, signal);
+        },
+        async (token) => {
+          if (!bridge) throw new Error("本机执行服务未连接。");
+          const identity = await localIdentity.resolve(token, bridge);
+          return identity;
+        },
+        () => cloudApi,
+        (chunk) => {
+          if (window && !window.isDestroyed())
+            window.webContents.send("desktop:local-chunk", chunk);
+        },
+      );
       if (quitting) return;
       let url: string;
       if (bundled) {
@@ -143,7 +207,30 @@ if (!app.requestSingleInstanceLock()) {
       }
       origin = new URL(url).origin;
       await waitForWeb(url, () => quitting || (bundled && !webServer));
-      if (!quitting) await createWindow(url);
+      if (!quitting) {
+        updates = new UpdateManager({
+          packaged: app.isPackaged,
+          platform: process.platform,
+          appImage: process.env.APPIMAGE,
+          version: app.getVersion(),
+          backend: autoUpdater,
+          emit: (state) => {
+            if (window && !window.isDestroyed())
+              window.webContents.send("desktop:update-state", state);
+          },
+          prepareInstall: async () => {
+            if (quitting || localGateway?.hasActiveRequests || bridge?.hasActiveJobs)
+              throw new UpdateBusyError();
+            try {
+              await sidecar?.assertIdleForUpdate();
+            } catch {
+              throw new UpdateBusyError();
+            }
+          },
+        });
+        await createWindow(url);
+        updates.start();
+      }
       app.on("activate", () => {
         if (!quitting && BrowserWindow.getAllWindows().length === 0)
           void createWindow(url).catch((cause: unknown) =>
@@ -161,15 +248,7 @@ app.on("before-quit", (event) => {
   if (cleanupComplete) return;
   event.preventDefault();
   if (quitting) return;
-  quitting = true;
-  webServer?.close();
-  webServer?.closeAllConnections();
-  webServer = null;
-  bridge?.stop();
-  void (sidecar?.stop() ?? Promise.resolve()).finally(() => {
-    cleanupComplete = true;
-    app.quit();
-  });
+  void prepareShutdown().finally(() => app.quit());
 });
 process.once("exit", () => sidecar?.forceStop());
 process.once("SIGTERM", () => app.quit());

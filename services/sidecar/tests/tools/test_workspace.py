@@ -65,7 +65,7 @@ def test_bash_workspace_output_limits_and_timeout():
 def test_bash_cancellation_kills_subprocesses(tmp_path):
     async def case():
         backend = agent_backend("general")
-        marker = tmp_path / "pid"
+        marker = Path(backend.cwd) / "pid"
         program = "import os,time;open(" + repr(str(marker)) + ",'w').write(str(os.getpid()));time.sleep(30)"
         command = shlex.quote(sys.executable) + " -c " + shlex.quote(program)
         task = asyncio.create_task(backend.aexecute(command))
@@ -110,6 +110,9 @@ def test_real_agent_runs_default_write_and_read_tools(monkeypatch):
         assert not any(event["type"] == "approval" for event in events), events
         assert events[-1]["type"] == "done", events
         assert (config.WORKSPACE_DIR / "product/report.md").read_text() == "默认工具已接入"
+        change = next(event['change'] for event in events if event['type'] == 'file_change')
+        assert change['additions'] == 1 and change['deletions'] == 0
+        assert change['lines'] == [{'kind': 'added', 'text': '默认工具已接入'}]
     asyncio.run(case())
 
 

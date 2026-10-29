@@ -38,6 +38,16 @@ export class SidecarManager {
     };
   }
 
+  /** 检查是否存在阻止更新安装的本地转写任务。 */
+  async assertIdleForUpdate(): Promise<void> {
+    if (!this.rpc || this.stopped) throw new Error("本机服务未就绪。");
+    const state = (await this.rpc.health(AbortSignal.timeout(3000))) as {
+      ok?: boolean;
+      active_asr_sessions?: number;
+    };
+    if (!state.ok || state.active_asr_sessions !== 0) throw new Error("请先结束会议转写。");
+  }
+
   /** 启动子进程，并等待正确的 RPC 健康回执。 */
   start(): Promise<void> {
     if (this.stopped) return Promise.reject(new Error("Sidecar 管理器已停止。"));

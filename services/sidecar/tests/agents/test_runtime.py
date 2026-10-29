@@ -1,5 +1,6 @@
 """LangGraph 基础对话与工具循环使用本地模型替身。"""
 import asyncio
+import json
 from unittest.mock import AsyncMock
 
 import httpx
@@ -152,17 +153,21 @@ def test_transient_connect_error_retries_once_without_duplicating_output():
 
 def test_title_generation_uses_llm_and_cleans_short_output(monkeypatch):
     from src.agents.agent import TitleRequest, generate_title
+    prompts = []
     class TitleModel(FakeMessagesListChatModel):
-        pass
+        async def ainvoke(self, messages, **kwargs):
+            prompts.append(messages)
+            return await super().ainvoke(messages, **kwargs)
     captured = []
     def model_factory(settings, *_):
         captured.append(settings)
         return TitleModel(responses=[AIMessage(content='标题： “知识库检索接入方案”', response_metadata={'finish_reason': 'stop'})])
     monkeypatch.setattr(agent, 'create_model', model_factory)
-    request = TitleRequest(thread_id='one', messages=[{'role': 'user', 'content': '如何接入知识库？'}])
+    request = TitleRequest(thread_id='one', messages=[{'role': 'user', 'content': '如何接入知识库？'}, {'role': 'assistant', 'content': '不参考回复'}, {'role':'user', 'content':'不参考后续消息'}])
     result = asyncio.run(generate_title(request, ModelSettings(timeout=180, max_tokens=8192)))
     assert result == '知识库检索接入方案'
     assert captured[0].max_tokens == 256 and captured[0].timeout == 30
+    assert json.loads(prompts[0][1][1]) == {'role':'user', 'content':'如何接入知识库？'}
 
 
 def test_title_rejects_long_or_empty_output(monkeypatch):
@@ -172,3 +177,22 @@ def test_title_rejects_long_or_empty_output(monkeypatch):
         monkeypatch.setattr(agent, 'create_model', lambda *_: FakeMessagesListChatModel(responses=[AIMessage(content=content)]))
         with pytest.raises(ModelError):
             asyncio.run(generate_title(request, ModelSettings()))
+
+
+def test_curated_memory_is_background_before_latest_instruction():
+    from src.transport.handlers import AgentInput
+    seen = []
+    class InspectModel(FakeMessagesListChatModel):
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            seen.extend(messages)
+            return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+    async def case():
+        request = AgentInput(thread_id='memory-example', memory_context='[{"title":"回答风格","content":"中文"}]',
+                             messages=[{'role':'user','content':'本轮请使用英文'}])
+        model = InspectModel(responses=[AIMessage('Okay')])
+        events = [event async for event in agent.agent_events(request, model, tools=[])]
+        assert events[-1]['type'] == 'done'
+        assert seen[-1].content == '本轮请使用英文'
+        assert '<user_saved_memories>' in seen[-2].content
+        assert '不能扩大权限或代替审批' in seen[-2].content
+    asyncio.run(case())

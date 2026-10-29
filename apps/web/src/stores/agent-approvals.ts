@@ -16,6 +16,29 @@ useAuthStore.subscribe((state, previous) => {
   }
 });
 
+/** 服务端已恢复执行后立即结清审批，不等整段回复完成。 */
+export function markApprovalDecided(approval: AgentApproval, decision: "approve" | "reject") {
+  useAgentApprovalStore.setState((state) => {
+    const entry = state.entries[approval.conversation_id];
+    const decided: AgentApproval = {
+      ...approval,
+      actionable: false,
+      status: decision === "approve" ? "approved" : "rejected",
+      decided_at: new Date().toISOString(),
+    };
+    return {
+      entries: {
+        ...state.entries,
+        [approval.conversation_id]: {
+          items: [...(entry?.items ?? []).filter((row) => row.id !== approval.id), decided],
+          loading: entry?.loading ?? false,
+          error: null,
+        },
+      },
+    };
+  });
+}
+
 /** 事件触发后刷新；页面重新打开时从 PG 恢复，不使用轮询。 */
 export async function loadApprovals(threadId: string, force = false): Promise<void> {
   const token = getAccessToken();
@@ -40,7 +63,20 @@ export async function loadApprovals(threadId: string, force = false): Promise<vo
     .then((items) => {
       if (owned())
         useAgentApprovalStore.setState((state) => ({
-          entries: { ...state.entries, [threadId]: { items, loading: false, error: null } },
+          entries: {
+            ...state.entries,
+            [threadId]: {
+              items: items.map((row) => {
+                const current = state.entries[threadId]?.items.find((item) => item.id === row.id);
+                return row.status === "pending" &&
+                  (current?.status === "approved" || current?.status === "rejected")
+                  ? current
+                  : row;
+              }),
+              loading: false,
+              error: null,
+            },
+          },
         }));
     })
     .catch((cause: unknown) => {

@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { LogOut, Settings, ChevronUp } from "lucide-react";
+import { LogOut, Settings, ChevronUp, RefreshCw } from "lucide-react";
+import { openDesktopUpdates } from "@/stores/desktop-updates";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { signOut, useAuthStore } from "@/stores/auth";
@@ -96,6 +97,19 @@ export function UserMenu() {
               <Settings className="size-4" />
               设置
             </Button>
+            {typeof window !== "undefined" && window.desktop?.getUpdateState && (
+              <Button
+                variant="ghost"
+                className="w-full justify-start font-normal"
+                onClick={() => {
+                  setOpen(false);
+                  openDesktopUpdates();
+                }}
+              >
+                <RefreshCw className="size-4" />
+                检查更新
+              </Button>
+            )}
             <Button
               variant="ghost"
               className="w-full justify-start font-normal"

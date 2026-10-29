@@ -1,0 +1,11 @@
+{
+  "name": "@dp-work/agent-templates",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent 默认提示词模板，供 Python Sidecar 初始化工作区使用",
+  "files": [
+    "templates",
+    "pyproject.toml",
+    "README.md"
+  ]
+}

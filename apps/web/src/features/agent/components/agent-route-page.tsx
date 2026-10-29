@@ -21,3 +21,7 @@ export function GeneralAgentPage() {
 export function ProductAgentPage() {
   return <AgentRoutePage agentId="product" />;
 }
+
+export function UiAgentPage() {
+  return <AgentRoutePage agentId="ui" />;
+}

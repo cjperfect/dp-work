@@ -14,7 +14,6 @@ import {
   ChatSaveError,
   MessageKnowledgeContext,
 } from "@/features/agent/components/chat-composer";
-import { Quote } from "@/components/assistant-ui/elements/quote";
 import {
   Reasoning,
   ReasoningContent,
@@ -22,8 +21,10 @@ import {
   ReasoningText,
   ReasoningTrigger,
 } from "@/components/assistant-ui/elements/reasoning.aui";
-import { SelectionToolbar } from "@/components/assistant-ui/elements/selection-toolbar.aui";
 import { ToolFallback } from "@/components/assistant-ui/elements/tool-fallback.aui";
+import { FileChanges } from "@/features/agent/components/file-changes";
+import { RunUsage } from "@/features/agent/components/run-usage";
+import { StoppedRunNotice } from "@/features/agent/components/stopped-run";
 import {
   ToolGroupContent,
   ToolGroupRoot,
@@ -33,6 +34,7 @@ import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-ic
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { MessageCopyButton } from "@/features/agent/components/message-copy-button";
 import { AGENT_WELCOME } from "@/constants/app";
 import { useAppStore } from "@/stores/app";
 import {
@@ -56,17 +58,14 @@ import {
   ArrowDownIcon,
   ArrowUpIcon,
   AudioLinesIcon,
-  CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  CopyIcon,
   DownloadIcon,
   MicIcon,
   MoreHorizontalIcon,
   PencilIcon,
   PhoneIcon,
   PlayIcon,
-  QuoteIcon,
   RefreshCwIcon,
   SquareIcon,
   ThumbsDownIcon,
@@ -104,6 +103,8 @@ const reasoningDuration = (timing: ThreadGroupPart["timing"]) =>
 export type ThreadComponents = {
   Approvals?: ComponentType | undefined;
   ComposerHeader?: ComponentType | undefined;
+  ComposerQueue?: ComponentType | undefined;
+  ComposerControls?: ComponentType | undefined;
   AssistantMessage?: ComponentType | undefined;
   Welcome?: ComponentType | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
@@ -200,15 +201,14 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({ isEmpty, aut
         ["--composer-padding" as string]: "8px",
       }}
     >
-      <SelectionToolbar />
       <ThreadPrimitive.Viewport
         turnAnchor="top"
         data-slot="aui_thread-viewport"
-        className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth"
+        className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth [scrollbar-gutter:stable]"
       >
         <div
           className={cn(
-            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-8",
+            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-10 py-1",
             // 空态：问候语 + 输入框整组垂直居中；非空态保留顶部间距
             isEmpty ? "justify-center gap-6 pt-0" : "pt-4",
           )}
@@ -259,7 +259,6 @@ const ThreadMessage: FC = () => {
   return (
     <div data-message-index={index}>
       {showDaySeparator && <DaySeparator date={createdAt} />}
-      <Quote />
       {isEditing ? (
         <EditComposer />
       ) : isSpoken ? (
@@ -355,14 +354,7 @@ const SpokenActionBar: FC = () => {
       autohide="always"
       className="aui-spoken-action-bar text-muted-foreground flex shrink-0 gap-1"
     >
-      <ActionBarPrimitive.Copy render={<TooltipIconButton tooltip="复制" className="size-6" />}>
-        <AuiIf condition={(s) => s.message.isCopied}>
-          <CheckIcon className="animate-in zoom-in-50 fade-in duration-200 ease-out" />
-        </AuiIf>
-        <AuiIf condition={(s) => !s.message.isCopied}>
-          <CopyIcon className="animate-in zoom-in-75 fade-in duration-150" />
-        </AuiIf>
-      </ActionBarPrimitive.Copy>
+      <MessageCopyButton />
     </ActionBarPrimitive.Root>
   );
 };
@@ -460,9 +452,10 @@ const ThreadWelcome: FC = () => {
 };
 
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
-  const { ComposerHeader, Approvals } = useContext(ThreadComponentsContext);
+  const { ComposerHeader, ComposerQueue, Approvals } = useContext(ThreadComponentsContext);
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
+      {ComposerQueue && <ComposerQueue />}
       {ComposerHeader && <ComposerHeader />}
       <div className="group/composer-dock flex w-full flex-col">
         {Approvals && <Approvals />}
@@ -475,20 +468,6 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
           }
         >
           <ComposerAttachments />
-          <ComposerPrimitive.Quote
-            render={
-              <div className="border-foreground/10 bg-background/50 flex items-center gap-2 rounded-lg border px-2.5 py-1.5">
-                <QuoteIcon className="text-muted-foreground size-3.5 shrink-0" />
-                <ComposerPrimitive.QuoteText className="text-muted-foreground min-w-0 flex-1 truncate text-sm italic" />
-                <ComposerPrimitive.QuoteDismiss
-                  className="text-muted-foreground hover:bg-muted hover:text-foreground size-5 shrink-0 rounded-md text-base leading-none"
-                  aria-label="移除引用"
-                >
-                  ×
-                </ComposerPrimitive.QuoteDismiss>
-              </div>
-            }
-          />
           <ChatComposerInput autoFocus={autoFocus} />
           <ChatSaveError />
           <ComposerAction />
@@ -499,6 +478,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
 };
 
 const ComposerAction: FC = () => {
+  const { ComposerControls } = useContext(ThreadComponentsContext);
   // The stop control only cancels the send while no run it could stop is going.
   const isSending = useAuiState(
     (s) =>
@@ -511,6 +491,7 @@ const ComposerAction: FC = () => {
         <ModelPicker />
       </div>
       <div className="flex items-center gap-1.5">
+        {ComposerControls && <ComposerControls />}
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
           <AuiIf condition={(s) => s.composer.dictation == null}>
             <ComposerPrimitive.Dictate
@@ -643,7 +624,7 @@ const AssistantMessage: FC = () => {
     >
       <div
         data-slot="aui_assistant-message-content"
-        className="text-foreground px-2 leading-relaxed wrap-break-word"
+        className="text-foreground px-2 text-sm leading-relaxed wrap-break-word"
       >
         <MessagePrimitive.GroupedParts groupBy={groupBy}>
           {({ part, children }) => {
@@ -657,7 +638,7 @@ const AssistantMessage: FC = () => {
                   return <ToolGroup group={part}>{children}</ToolGroup>;
                 }
                 return (
-                  <ToolGroupRoot variant="ghost">
+                  <ToolGroupRoot variant="ghost" defaultOpen>
                     <ToolGroupTrigger
                       count={part.indices.length}
                       active={part.status.type === "running"}
@@ -714,6 +695,8 @@ const AssistantMessage: FC = () => {
             }
           }}
         </MessagePrimitive.GroupedParts>
+        <FileChanges />
+        <StoppedRunNotice />
         <MessageError />
       </div>
 
@@ -723,6 +706,7 @@ const AssistantMessage: FC = () => {
       >
         <BranchPicker />
         <AssistantActionBar />
+        <RunUsage />
       </div>
     </MessagePrimitive.Root>
   );
@@ -735,14 +719,7 @@ const AssistantActionBar: FC = () => {
       autohide="not-last"
       className="aui-assistant-action-bar-root text-muted-foreground animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-200"
     >
-      <ActionBarPrimitive.Copy render={<TooltipIconButton tooltip="复制" />}>
-        <AuiIf condition={(s) => s.message.isCopied}>
-          <CheckIcon className="animate-in zoom-in-50 fade-in duration-200 ease-out" />
-        </AuiIf>
-        <AuiIf condition={(s) => !s.message.isCopied}>
-          <CopyIcon className="animate-in zoom-in-75 fade-in duration-150" />
-        </AuiIf>
-      </ActionBarPrimitive.Copy>
+      <MessageCopyButton />
       <AuiIf condition={(s) => s.thread.capabilities.feedback}>
         <ActionBarPrimitive.FeedbackPositive
           render={
@@ -832,7 +809,7 @@ const UserMessage: FC = () => {
 
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
         <MessageKnowledgeContext />
-        <div className="aui-user-message-content peer bg-muted text-foreground rounded-(--composer-radius) px-4 py-2 wrap-break-word empty:hidden">
+        <div className="aui-user-message-content peer bg-muted text-foreground rounded-(--composer-radius) px-4 py-2 text-sm leading-relaxed wrap-break-word empty:hidden">
           <MessagePrimitive.Parts
             components={{ File: UserFilePart, Image: UserImagePart, Text: MarkdownText }}
           />

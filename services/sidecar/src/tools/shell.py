@@ -7,6 +7,7 @@ import signal
 
 import anyio
 from deepagents.backends.protocol import ExecuteResponse
+from .isolation import isolated_command, IsolationUnavailable
 
 
 async def terminate_tree(process):
@@ -35,12 +36,26 @@ async def execute_command(workspace: Path, command: str, timeout: float, max_out
     """执行单次 Bash 命令，被取消时清理整个命令进程组。"""
     if not isinstance(command, str) or not command.strip() or len(command) > 16000:
         return ExecuteResponse(output="命令不能为空，最多 16000 字符。", exit_code=1)
-    executable = shutil.which("bash")
-    if not executable and Path("/bin/bash").is_file():
-        executable = "/bin/bash"
-    if not executable:
-        return ExecuteResponse(output="本机未安装 Bash。Windows 可安装 Git Bash 并加入 PATH。", exit_code=1)
-    process = await asyncio.create_subprocess_exec(executable, "--noprofile", "--norc", "-c", command,
+    try:
+        if os.name == 'nt':
+            from .. import config
+            from .sandbox_container import execute_in_container
+            return await execute_in_container(workspace, command, timeout, max_output_bytes,
+                                              environment, run_process, config.AGENT_SANDBOX_IMAGE)
+        executable = shutil.which("bash")
+        if not executable and Path("/bin/bash").is_file():
+            executable = "/bin/bash"
+        if not executable:
+            raise IsolationUnavailable('本机未安装 Bash，命令未执行。')
+        with isolated_command(workspace, executable, command, environment) as (args, env):
+            return await run_process(args, workspace, env, timeout, max_output_bytes)
+    except (IsolationUnavailable, OSError) as cause:
+        return ExecuteResponse(output=str(cause), exit_code=126)
+
+
+async def run_process(args, workspace, environment, timeout, max_output_bytes):
+    """沙箱生命周期覆盖完整进程树，保留超时、输出限制和取消语义。"""
+    process = await asyncio.create_subprocess_exec(*args,
         cwd=workspace, env=environment, stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
         start_new_session=os.name != "nt")

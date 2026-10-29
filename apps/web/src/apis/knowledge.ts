@@ -4,12 +4,12 @@ import type { KbFile } from "@/features/knowledge/constants/knowledge-data";
 import {
   listLocalEditorDocuments,
   removeLocalEditorDocuments,
-} from "@/features/knowledge/lib/knowledge-repository";
+} from "@/features/knowledge/lib/legacy-documents";
 import type {
   EditorDocumentInput,
   KnowledgeBaseInput,
   StoredKnowledgeBase,
-} from "@/features/knowledge/lib/knowledge-repository";
+} from "@/types/knowledge";
 
 type ServerKnowledgeBase = {
   id: number;
@@ -278,7 +278,7 @@ export async function listKnowledgeDocumentsRequest(
   );
 }
 
-/** 旧版浏览器文档仅迁移一次，SQLite 中已有同 ID 时保留数据库版本。 */
+/** 旧版浏览器文档仅迁移一次，服务端已有同 ID 时保留数据库版本。 */
 const documentLoads = new Map<string, Promise<KbFile[]>>();
 
 export async function loadKnowledgeDocumentsRequest(

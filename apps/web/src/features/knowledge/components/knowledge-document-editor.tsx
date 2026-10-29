@@ -9,13 +9,13 @@ import { localAccountId } from "@/features/auth/lib/auth";
 import { useKnowledgeDocuments } from "@/features/knowledge/hooks/use-knowledge-documents";
 import { useKnowledgeBases } from "@/features/knowledge/hooks/use-knowledge-bases";
 import { saveKnowledgeDocument } from "@/stores/knowledge";
-import type { EditorDocumentInput } from "../lib/knowledge-repository";
+import type { EditorDocumentInput } from "@/types/knowledge";
 import { ParseDocumentButton } from "./parse-document-button";
 import type { KbFile, KnowledgeBase } from "../constants/knowledge-data";
 
 function savedDate(value: string | null): Date | null {
   if (!value) return null;
-  // SQLite 返回的无时区时间按服务端 UTC 解释。
+  // 服务端返回的无时区时间按服务端 UTC 解释。
   const timestamp = /T/.test(value) && !/(Z|[+-]\d{2}:\d{2})$/i.test(value) ? `${value}Z` : value;
   const date = new Date(timestamp);
   return Number.isNaN(date.getTime()) ? null : date;

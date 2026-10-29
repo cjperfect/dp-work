@@ -58,3 +58,15 @@ async def delete_meeting(meeting_id: MeetingId, user: CurrentUser):
 async def generate_minutes(meeting_id: MeetingId, body: GenerateMinutes, user: CurrentUser):
     """提交异步生成任务并返回当前状态。"""
     return ok(await generation.enqueue(user.id, meeting_id, body))
+
+
+@router.post("/{meeting_id}/asr/session", response_model=ApiResponse[dict], summary="申请会议转写连接票据")
+async def asr_session(meeting_id: MeetingId, user: CurrentUser):
+    """校验远程会议归属，凭证由当前设备本地读取。"""
+    from src.core.exceptions import ApiError
+    from src.core.responses import ApiCode
+    from src.infrastructure.sidecar.service import sidecar
+    workspace = await service.get(user.id, meeting_id)
+    if workspace.meeting.status != "active":
+        raise ApiError(ApiCode.STATE_CONFLICT, "会议尚未开始或已结束。", 409)
+    return ok(await sidecar("/asr/sessions", {"owner_id": user.id, "meeting_id": meeting_id}))

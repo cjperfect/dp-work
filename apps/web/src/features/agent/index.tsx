@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Bot, Boxes, Package, Plug, Settings2 } from "lucide-react";
+import { BookOpen, Bot, Boxes, Palette, Package, Plug, Settings2 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { ChatProjectDirectory } from "./components/chat-project-directory";
 import { AgentApprovals } from "./components/agent-approvals";
+import { ChatMessageQueue, ChatQueueActions } from "./components/chat-message-queue";
 import { AgentConfigDialog } from "./components/agent-config-dialog";
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import type { AgentId } from "@/interfaces/app";
 import type { AgentConfig } from "@/types/agent";
 import { ensureAgentChat, saveAgent, useAgentStore } from "@/stores/agent";
 import { useAgentCode } from "@/features/agent/hooks/use-agent-code";
+import { agentPath } from "./constants/agents";
 export { AGENTS } from "./constants/agents";
 export type { AgentMeta } from "./constants/agents";
 function AgentWelcome() {
@@ -34,12 +36,15 @@ const components = {
   Welcome: AgentWelcome,
   Approvals: AgentApprovals,
   ComposerHeader: ChatProjectDirectory,
+  ComposerQueue: ChatMessageQueue,
+  ComposerControls: ChatQueueActions,
 };
 export function AgentPage({ agentId }: { agentId: AgentId }) {
   const owner = useAuthStore((state) => state.user?.id);
   const state = useAgentStore();
   const agent =
     state.owner === owner ? state.agents.find((row) => row.code === agentId) : undefined;
+  const added = agentId === "general" || state.partnerCodes.includes(agentId);
   const selected = state.selected[agentId];
   const [error, setError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
@@ -72,12 +77,18 @@ export function AgentPage({ agentId }: { agentId: AgentId }) {
     return (
       <div className="grid h-full place-content-center gap-4 p-6 text-center">
         <p className="text-sm text-muted-foreground">请登录后使用 Agent 会话。</p>
-        <Link
-          to="/sign-in"
-          search={{ redirect: agentId === "general" ? "/" : "/product" }}
-          className={buttonVariants()}
-        >
+        <Link to="/sign-in" search={{ redirect: agentPath(agentId) }} className={buttonVariants()}>
           前往登录
+        </Link>
+      </div>
+    );
+  if (state.agents.length && !state.loading && !added)
+    return (
+      <div className="grid h-full place-content-center gap-4 p-6 text-center">
+        <h1 className="text-lg font-semibold">添加{agent?.name ?? "部门伙伴"}</h1>
+        <p className="text-sm text-muted-foreground">先在伙伴中添加，就可以开始协作。</p>
+        <Link to="/partners" className={buttonVariants()}>
+          前往伙伴
         </Link>
       </div>
     );
@@ -138,7 +149,7 @@ function AgentPanel({ agent }: { agent: AgentConfig }) {
       return false;
     }
   }
-  const Icon = agent.code === "general" ? Bot : Boxes;
+  const Icon = agent.code === "ui" ? Palette : agent.code === "general" ? Bot : Boxes;
   return (
     <aside className="flex w-72 shrink-0 flex-col gap-6 overflow-y-auto border-l bg-background px-4 py-5 md:w-80">
       <section>
@@ -285,7 +296,7 @@ function AgentPanel({ agent }: { agent: AgentConfig }) {
           </p>
         )}
         <p>
-          会话历史已同步到服务器。关联知识库后可检索已向量化的文档；技能按需加载；危险操作需要审批。
+          会话历史保存在当前设备。关联知识库后可检索已向量化的文档；技能按需加载；危险操作需要审批。
         </p>
       </div>
     </aside>

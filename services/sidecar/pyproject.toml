@@ -8,9 +8,11 @@ version = "0.1.0"
 description = "豆包流式 ASR 与转写事件推送（Sidecar）"
 requires-python = ">=3.11"
 dependencies = [
+    "dp-work-agent-templates==0.1.0",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "httpx>=0.27",
+    "cryptography>=46,<51",
     "python-dotenv>=1.0",
     "websockets>=15,<18",
     "langchain-community>=0.4,<0.5",
@@ -31,7 +33,6 @@ include = ["src*"]
 
 [tool.setuptools.package-data]
 "src.meetings" = ["prompts/*.md"]
-"src.agents" = ["templates/*/AGENT.md"]
 
 [project.optional-dependencies]
 test = ["pytest>=8"]

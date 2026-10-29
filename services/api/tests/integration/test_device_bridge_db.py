@@ -19,7 +19,6 @@ from src.core.security import create_access_token
 from src.infrastructure.database import session
 from src.modules.users import service as users
 from src.modules.users.models import User
-from src.modules.agents.run_models import AgentRun
 from src.modules.knowledge.models import KnowledgeBase
 from src.modules.devices.models import Device,DeviceCall
 from src.infrastructure.sidecar.relay import cipher,notify
@@ -52,10 +51,6 @@ def test_live_device_bridge(monkeypatch,tmp_path,migrated_test_database):
     node=None
     task_ids=[]
     def sql(coro):return asyncio.run(coro)
-    async def row_state(run_id):
-        await session.init_db()
-        async with session.read_session() as db:run=await db.get(AgentRun,run_id)
-        await session.close_db();return run
     try:
         with httpx.Client(base_url=api,timeout=20,trust_env=False) as client:
             for _ in range(100):
@@ -76,17 +71,8 @@ def test_live_device_bridge(monkeypatch,tmp_path,migrated_test_database):
             else:pytest.fail('Main 测试桥接未连接')
             device=json.loads(ready.read_text())['deviceId']
             headers={'Authorization':'Bearer '+token,'X-Device-ID':device}
-            response=client.get('/api/agents/models',headers=headers)
-            assert response.status_code==200,response.text
-            assert response.json()['data']['models'][0]['id']=='fixture-model'
-            assert client.get('/api/skills',headers=headers,params={'agent_code':'general'}).json()['data']['items']==[]
-            assert client.get('/api/skills/search',headers=headers,params={'q':'fixture'}).json()['data']['items'][0]['name']=='test-skill'
-            response=client.post('/api/skills/install',headers=headers,json={'agent_code':'general','source':'acme/repo@test-skill'})
-            assert response.status_code==200,response.text
-            assert client.get('/api/skills',headers=headers,params={'agent_code':'general'}).json()['data']['items'][0]['name']=='test-skill'
-            assert client.get('/api/skills',headers=headers,params={'agent_code':'product'}).json()['data']['items']==[]
-            assert client.post('/api/skills/uninstall',headers=headers,json={'agent_code':'general','skill_id':'acme/repo@test-skill'}).status_code==200
-            assert client.get('/api/skills',headers=headers,params={'agent_code':'general'}).json()['data']['items']==[]
+            assert client.get('/api/agents/models',headers=headers).status_code==404
+            assert client.get('/api/skills',headers=headers).status_code==404
             # 即使输入记录被伪造成非白名单路径，Main 也不能转发任意本机地址。
             fake_call=str(uuid4())
             async def forged_call():
@@ -111,36 +97,6 @@ def test_live_device_bridge(monkeypatch,tmp_path,migrated_test_database):
             # 执行结束后不能再次读取原输入，即使属于同一账号。
             assert client.get(f'/api/devices/calls/{fake_call}/input',headers=headers).status_code==404
 
-            key='device-thread-'+uuid4().hex
-            assert client.post('/api/agents/threads',headers=headers,json={'id':key,'agent_id':1}).status_code==200
-            def prepare(question,revision):
-                now=datetime.now(timezone.utc).isoformat()
-                return client.put(f'/api/agents/threads/{key}/messages',headers=headers,json={'expected_revision':revision,'messages':[
-                    {'id':'u-'+str(revision),'role':'user','content':question,'created_at':now},
-                    {'id':'a-'+str(revision),'role':'assistant','content':'','status':'streaming','created_at':now}]}).json()['data']
-            detail=prepare('hello',0)
-            body={'thread_id':key,'response_id':'a-0','expected_revision':detail['thread']['draft_revision'],
-                  'messages':[{'role':'user','content':'hello'}]}
-            response=client.post(f'/api/agents/threads/{key}/chat',headers=headers,json=body)
-            assert response.status_code==200,response.text
-            events=[json.loads(line[5:]) for line in response.text.splitlines() if line.startswith('data:')]
-            assert events[-1]['content']=='本地执行测试完成'
-            run=sql(row_state(events[-1]['run_id']))
-            assert run.status=='completed' and run.device_id==device
-            # 取消需要穿过另一个云端请求，最终中止本机 HTTP 流。
-            current=client.get(f'/api/agents/threads/{key}',headers=headers).json()['data']
-            detail=prepare('stall',current['thread']['draft_revision'])
-            body.update(response_id=detail['messages'][-1]['id'],expected_revision=detail['thread']['draft_revision'])
-            with client.stream('POST',f'/api/agents/threads/{key}/chat',headers=headers,json=body) as streaming:
-                iterator=streaming.iter_lines();run_id=None
-                for line in iterator:
-                    if line.startswith('data:'):
-                        event=json.loads(line[5:]);run_id=event.get('run_id')
-                        if event['type']=='delta':break
-                assert run_id
-                assert client.post(f'/api/agents/runs/{run_id}/cancel',headers=headers).json()['data']['status']=='cancelled'
-                assert 'RUN_STOPPED' in '\n'.join(iterator)
-            assert sql(row_state(run_id)).status=='cancelled'
             # 云端独立 Worker 通过同一设备通道解析文件，不能依赖 WebSocket 所在进程内存。
             base=client.post('/api/knowledge-bases',headers=headers,json={'name':'设备解析测试','description':''}).json()['data']['id']
             document=client.post(f'/api/knowledge-bases/{base}/documents/upload',headers=headers,
@@ -162,12 +118,7 @@ def test_live_device_bridge(monkeypatch,tmp_path,migrated_test_database):
             assert client.get(docpath,headers=headers).json()['data']['parse_status']=='parsed'
             # 设备离线时数据接口可用，执行接口不会回退到服务器本机。
             os.killpg(node.pid,signal.SIGTERM);node.wait(timeout=5);node=None
-            for _ in range(30):
-                response=client.get('/api/agents/models',headers=headers)
-                if response.status_code==503:break
-                time.sleep(.1)
-            assert response.status_code==503
-            assert client.get('/api/agents/threads',headers=headers).status_code==200
+            assert client.get('/api/agents/threads',headers=headers).status_code==404
             second='editor-'+uuid4().hex
             second_path=f'/api/knowledge-bases/{base}/documents/'+second
             assert client.put(second_path,headers=headers,json={'title':'离线保留','content':'离线文档'}).status_code==200

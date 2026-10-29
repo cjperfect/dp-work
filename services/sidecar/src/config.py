@@ -44,6 +44,27 @@ PDF_PARSE_TIMEOUT = float(os.environ.get("PDF_PARSE_TIMEOUT", "90"))
 
 # ---- Agent 执行限制 ----
 AGENT_MAX_STEPS = int(os.environ.get("AGENT_MAX_STEPS", "12"))
+# 相同工具、参数、结果的连续重复次数；达到后阻止下一次相同调用。
+AGENT_REPEAT_LIMIT = max(1, int(os.environ.get("AGENT_REPEAT_LIMIT", "3")))
+# 连续明确标记为 error 的工具结果上限；达到后不再执行新工具。
+AGENT_TOOL_ERROR_LIMIT = max(1, int(os.environ.get("AGENT_TOOL_ERROR_LIMIT", "5")))
+# Windows Linux 容器沙箱只接受本机已构建镜像的不可变 sha256 ID，不自动拉取。
+AGENT_SANDBOX_IMAGE = os.environ.get("AGENT_SANDBOX_IMAGE", "").strip()
+# 每个运行的预算；0 表示不设限制，达到已报告用量后阻止下一次模型调用。
+AGENT_RUN_TOKEN_LIMIT = max(0, int(os.environ.get("AGENT_RUN_TOKEN_LIMIT", "0")))
+AGENT_RUN_COST_LIMIT = os.environ.get("AGENT_RUN_COST_LIMIT", "0")
+# 所有配置单价使用同一币种，按每百万 Token 计价；不内置供应商价格。
+AGENT_COST_CURRENCY = os.environ.get("AGENT_COST_CURRENCY", "CNY").upper()
+AGENT_MODEL_PRICES = os.environ.get("AGENT_MODEL_PRICES", "{}")
+
+# ---- 本机长期记忆后台生成 ----
+MEMORY_AUTO_ENABLED = os.environ.get("MEMORY_AUTO_ENABLED", "1") == "1"
+MEMORY_IDLE_HOURS = max(0.01, float(os.environ.get("MEMORY_IDLE_HOURS", "6")))
+MEMORY_SCAN_SECONDS = max(10, float(os.environ.get("MEMORY_SCAN_SECONDS", "60")))
+MEMORY_MAX_AGE_DAYS = max(1, min(90, int(os.environ.get("MEMORY_MAX_AGE_DAYS", "30"))))
+MEMORY_BATCH_SIZE = max(1, min(16, int(os.environ.get("MEMORY_BATCH_SIZE", "4"))))
+MEMORY_EXTRACT_MODEL = os.environ.get("MEMORY_EXTRACT_MODEL", "").strip()
+MEMORY_CONSOLIDATION_MODEL = os.environ.get("MEMORY_CONSOLIDATION_MODEL", "").strip()
 
 # ---- 知识库文本向量化（与聊天模型配置分开） ----
 EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY", "").strip()
@@ -53,3 +74,7 @@ EMBEDDING_DIMENSIONS = int(os.environ.get("EMBEDDING_DIMENSIONS", "1024"))
 EMBEDDING_TIMEOUT_SECONDS = float(os.environ.get("EMBEDDING_TIMEOUT_SECONDS", "30"))
 # API 内部检索回调地址；只由服务端环境指定，不接受浏览器提交。
 API_INTERNAL_URL = os.environ.get("API_INTERNAL_URL", "http://127.0.0.1:8000").rstrip("/")
+
+# 长期记忆语义检索的最低余弦相似度及单轮超时（秒）。
+MEMORY_MIN_SIMILARITY = max(-1.0, min(1.0, float(os.environ.get("MEMORY_MIN_SIMILARITY", "0.25"))))
+MEMORY_RETRIEVAL_TIMEOUT_SECONDS = max(1, float(os.environ.get("MEMORY_RETRIEVAL_TIMEOUT_SECONDS", "10")))

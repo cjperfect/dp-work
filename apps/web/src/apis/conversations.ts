@@ -1,9 +1,11 @@
 import { request } from "@/lib/http";
 import type { ChatThread, MessageBranch, ThreadDetail } from "@/types/agent";
+import { hydrateChatImages } from "./chat-images";
 
 const root = "/api/agents/threads";
 export const listConversations = () => request<ChatThread[]>(root);
-export const getConversation = (id: string) => request<ThreadDetail>(`${root}/${id}`);
+export const getConversation = (id: string) =>
+  request<ThreadDetail>(`${root}/${id}`).then(hydrateChatImages);
 export const createConversation = (
   id: string,
   agent_id: number,

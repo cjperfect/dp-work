@@ -15,14 +15,15 @@ import { Route as authSignUpRouteImport } from "./routes/(auth)/sign-up";
 import { Route as AppIndexRouteImport } from "./routes/_app/index";
 import { Route as AppProductRouteImport } from "./routes/_app/product";
 import { Route as AppSettingsRouteImport } from "./routes/_app/settings";
+import { Route as AppUiRouteImport } from "./routes/_app/ui";
 import { Route as AppConnectorsIndexRouteImport } from "./routes/_app/connectors/index";
 import { Route as AppKnowledgeIndexRouteImport } from "./routes/_app/knowledge/index";
 import { Route as AppMeetingsIndexRouteImport } from "./routes/_app/meetings/index";
 import { Route as AppMeetingsActiveRouteImport } from "./routes/_app/meetings/active";
 import { Route as AppMeetingsMinutesRouteImport } from "./routes/_app/meetings/minutes";
+import { Route as AppPartnersIndexRouteImport } from "./routes/_app/partners/index";
 import { Route as AppSkillsIndexRouteImport } from "./routes/_app/skills/index";
 import { Route as SharedMeetingRecordsTokenRouteImport } from "./routes/shared/meeting-records/$token";
-import { Route as SharedMeetingsTokenRouteImport } from "./routes/shared/meetings/$token";
 import { Route as AppKnowledgeKbIdIndexRouteImport } from "./routes/_app/knowledge/$kbId/index";
 import { Route as AppKnowledgeKbIdNewRouteImport } from "./routes/_app/knowledge/$kbId/new";
 import { Route as AppKnowledgeKbIdEditFileIdRouteImport } from "./routes/_app/knowledge/$kbId/edit/$fileId";
@@ -57,6 +58,11 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: "/settings",
   getParentRoute: () => AppRouteRoute,
 } as any);
+const AppUiRoute = AppUiRouteImport.update({
+  id: "/ui",
+  path: "/ui",
+  getParentRoute: () => AppRouteRoute,
+} as any);
 const AppConnectorsIndexRoute = AppConnectorsIndexRouteImport.update({
   id: "/connectors/",
   path: "/connectors/",
@@ -82,6 +88,11 @@ const AppMeetingsMinutesRoute = AppMeetingsMinutesRouteImport.update({
   path: "/meetings/minutes",
   getParentRoute: () => AppRouteRoute,
 } as any);
+const AppPartnersIndexRoute = AppPartnersIndexRouteImport.update({
+  id: "/partners/",
+  path: "/partners/",
+  getParentRoute: () => AppRouteRoute,
+} as any);
 const AppSkillsIndexRoute = AppSkillsIndexRouteImport.update({
   id: "/skills/",
   path: "/skills/",
@@ -93,11 +104,6 @@ const SharedMeetingRecordsTokenRoute =
     path: "/shared/meeting-records/$token",
     getParentRoute: () => rootRouteImport,
   } as any);
-const SharedMeetingsTokenRoute = SharedMeetingsTokenRouteImport.update({
-  id: "/shared/meetings/$token",
-  path: "/shared/meetings/$token",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const AppKnowledgeKbIdIndexRoute = AppKnowledgeKbIdIndexRouteImport.update({
   id: "/knowledge/$kbId/",
   path: "/knowledge/$kbId/",
@@ -127,13 +133,14 @@ export interface FileRoutesByFullPath {
   "/sign-up": typeof authSignUpRoute;
   "/product": typeof AppProductRoute;
   "/settings": typeof AppSettingsRoute;
+  "/ui": typeof AppUiRoute;
   "/meetings/active": typeof AppMeetingsActiveRoute;
   "/meetings/minutes": typeof AppMeetingsMinutesRoute;
   "/shared/meeting-records/$token": typeof SharedMeetingRecordsTokenRoute;
-  "/shared/meetings/$token": typeof SharedMeetingsTokenRoute;
   "/connectors/": typeof AppConnectorsIndexRoute;
   "/knowledge/": typeof AppKnowledgeIndexRoute;
   "/meetings/": typeof AppMeetingsIndexRoute;
+  "/partners/": typeof AppPartnersIndexRoute;
   "/skills/": typeof AppSkillsIndexRoute;
   "/knowledge/$kbId/new": typeof AppKnowledgeKbIdNewRoute;
   "/knowledge/$kbId/": typeof AppKnowledgeKbIdIndexRoute;
@@ -145,14 +152,15 @@ export interface FileRoutesByTo {
   "/sign-up": typeof authSignUpRoute;
   "/product": typeof AppProductRoute;
   "/settings": typeof AppSettingsRoute;
+  "/ui": typeof AppUiRoute;
   "/": typeof AppIndexRoute;
   "/meetings/active": typeof AppMeetingsActiveRoute;
   "/meetings/minutes": typeof AppMeetingsMinutesRoute;
   "/shared/meeting-records/$token": typeof SharedMeetingRecordsTokenRoute;
-  "/shared/meetings/$token": typeof SharedMeetingsTokenRoute;
   "/connectors": typeof AppConnectorsIndexRoute;
   "/knowledge": typeof AppKnowledgeIndexRoute;
   "/meetings": typeof AppMeetingsIndexRoute;
+  "/partners": typeof AppPartnersIndexRoute;
   "/skills": typeof AppSkillsIndexRoute;
   "/knowledge/$kbId/new": typeof AppKnowledgeKbIdNewRoute;
   "/knowledge/$kbId": typeof AppKnowledgeKbIdIndexRoute;
@@ -166,14 +174,15 @@ export interface FileRoutesById {
   "/(auth)/sign-up": typeof authSignUpRoute;
   "/_app/product": typeof AppProductRoute;
   "/_app/settings": typeof AppSettingsRoute;
+  "/_app/ui": typeof AppUiRoute;
   "/_app/": typeof AppIndexRoute;
   "/_app/meetings/active": typeof AppMeetingsActiveRoute;
   "/_app/meetings/minutes": typeof AppMeetingsMinutesRoute;
   "/shared/meeting-records/$token": typeof SharedMeetingRecordsTokenRoute;
-  "/shared/meetings/$token": typeof SharedMeetingsTokenRoute;
   "/_app/connectors/": typeof AppConnectorsIndexRoute;
   "/_app/knowledge/": typeof AppKnowledgeIndexRoute;
   "/_app/meetings/": typeof AppMeetingsIndexRoute;
+  "/_app/partners/": typeof AppPartnersIndexRoute;
   "/_app/skills/": typeof AppSkillsIndexRoute;
   "/_app/knowledge/$kbId/new": typeof AppKnowledgeKbIdNewRoute;
   "/_app/knowledge/$kbId/": typeof AppKnowledgeKbIdIndexRoute;
@@ -188,13 +197,14 @@ export interface FileRouteTypes {
     | "/sign-up"
     | "/product"
     | "/settings"
+    | "/ui"
     | "/meetings/active"
     | "/meetings/minutes"
     | "/shared/meeting-records/$token"
-    | "/shared/meetings/$token"
     | "/connectors/"
     | "/knowledge/"
     | "/meetings/"
+    | "/partners/"
     | "/skills/"
     | "/knowledge/$kbId/new"
     | "/knowledge/$kbId/"
@@ -206,14 +216,15 @@ export interface FileRouteTypes {
     | "/sign-up"
     | "/product"
     | "/settings"
+    | "/ui"
     | "/"
     | "/meetings/active"
     | "/meetings/minutes"
     | "/shared/meeting-records/$token"
-    | "/shared/meetings/$token"
     | "/connectors"
     | "/knowledge"
     | "/meetings"
+    | "/partners"
     | "/skills"
     | "/knowledge/$kbId/new"
     | "/knowledge/$kbId"
@@ -226,14 +237,15 @@ export interface FileRouteTypes {
     | "/(auth)/sign-up"
     | "/_app/product"
     | "/_app/settings"
+    | "/_app/ui"
     | "/_app/"
     | "/_app/meetings/active"
     | "/_app/meetings/minutes"
     | "/shared/meeting-records/$token"
-    | "/shared/meetings/$token"
     | "/_app/connectors/"
     | "/_app/knowledge/"
     | "/_app/meetings/"
+    | "/_app/partners/"
     | "/_app/skills/"
     | "/_app/knowledge/$kbId/new"
     | "/_app/knowledge/$kbId/"
@@ -246,7 +258,6 @@ export interface RootRouteChildren {
   authSignInRoute: typeof authSignInRoute;
   authSignUpRoute: typeof authSignUpRoute;
   SharedMeetingRecordsTokenRoute: typeof SharedMeetingRecordsTokenRoute;
-  SharedMeetingsTokenRoute: typeof SharedMeetingsTokenRoute;
 }
 
 declare module "@tanstack/react-router" {
@@ -293,6 +304,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AppSettingsRouteImport;
       parentRoute: typeof AppRouteRoute;
     };
+    "/_app/ui": {
+      id: "/_app/ui";
+      path: "/ui";
+      fullPath: "/ui";
+      preLoaderRoute: typeof AppUiRouteImport;
+      parentRoute: typeof AppRouteRoute;
+    };
     "/_app/connectors/": {
       id: "/_app/connectors/";
       path: "/connectors";
@@ -328,6 +346,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AppMeetingsMinutesRouteImport;
       parentRoute: typeof AppRouteRoute;
     };
+    "/_app/partners/": {
+      id: "/_app/partners/";
+      path: "/partners";
+      fullPath: "/partners/";
+      preLoaderRoute: typeof AppPartnersIndexRouteImport;
+      parentRoute: typeof AppRouteRoute;
+    };
     "/_app/skills/": {
       id: "/_app/skills/";
       path: "/skills";
@@ -340,13 +365,6 @@ declare module "@tanstack/react-router" {
       path: "/shared/meeting-records/$token";
       fullPath: "/shared/meeting-records/$token";
       preLoaderRoute: typeof SharedMeetingRecordsTokenRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/shared/meetings/$token": {
-      id: "/shared/meetings/$token";
-      path: "/shared/meetings/$token";
-      fullPath: "/shared/meetings/$token";
-      preLoaderRoute: typeof SharedMeetingsTokenRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/_app/knowledge/$kbId/": {
@@ -383,12 +401,14 @@ declare module "@tanstack/react-router" {
 interface AppRouteRouteChildren {
   AppProductRoute: typeof AppProductRoute;
   AppSettingsRoute: typeof AppSettingsRoute;
+  AppUiRoute: typeof AppUiRoute;
   AppIndexRoute: typeof AppIndexRoute;
   AppMeetingsActiveRoute: typeof AppMeetingsActiveRoute;
   AppMeetingsMinutesRoute: typeof AppMeetingsMinutesRoute;
   AppConnectorsIndexRoute: typeof AppConnectorsIndexRoute;
   AppKnowledgeIndexRoute: typeof AppKnowledgeIndexRoute;
   AppMeetingsIndexRoute: typeof AppMeetingsIndexRoute;
+  AppPartnersIndexRoute: typeof AppPartnersIndexRoute;
   AppSkillsIndexRoute: typeof AppSkillsIndexRoute;
   AppKnowledgeKbIdNewRoute: typeof AppKnowledgeKbIdNewRoute;
   AppKnowledgeKbIdIndexRoute: typeof AppKnowledgeKbIdIndexRoute;
@@ -399,12 +419,14 @@ interface AppRouteRouteChildren {
 const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppProductRoute: AppProductRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppUiRoute: AppUiRoute,
   AppIndexRoute: AppIndexRoute,
   AppMeetingsActiveRoute: AppMeetingsActiveRoute,
   AppMeetingsMinutesRoute: AppMeetingsMinutesRoute,
   AppConnectorsIndexRoute: AppConnectorsIndexRoute,
   AppKnowledgeIndexRoute: AppKnowledgeIndexRoute,
   AppMeetingsIndexRoute: AppMeetingsIndexRoute,
+  AppPartnersIndexRoute: AppPartnersIndexRoute,
   AppSkillsIndexRoute: AppSkillsIndexRoute,
   AppKnowledgeKbIdNewRoute: AppKnowledgeKbIdNewRoute,
   AppKnowledgeKbIdIndexRoute: AppKnowledgeKbIdIndexRoute,
@@ -421,7 +443,6 @@ const rootRouteChildren: RootRouteChildren = {
   authSignInRoute: authSignInRoute,
   authSignUpRoute: authSignUpRoute,
   SharedMeetingRecordsTokenRoute: SharedMeetingRecordsTokenRoute,
-  SharedMeetingsTokenRoute: SharedMeetingsTokenRoute,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

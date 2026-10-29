@@ -24,13 +24,13 @@ def test_device_owner_session_and_input_cleanup():
                 db.add(Device(id=device_id,owner_id=owners[0].id,session_id=sid,lease_until=datetime.now(timezone.utc)+timedelta(minutes=1)))
                 await db.flush()
                 db.add(DeviceCall(id=call_id,owner_id=owners[0].id,device_id=device_id,session_id=sid,method='POST',
-                    path='/internal/agents/chat',query='',content_type='application/json',encrypted_input=cipher().encrypt(b'{"fixture":"private-fixture"}'),
+                    path='/internal/meetings/minutes/generate',query='',content_type='application/json',encrypted_input=cipher().encrypt(b'{"fixture":"private-fixture"}'),
                     state='running',deadline_at=datetime.now(timezone.utc)+timedelta(minutes=1)))
             for owner,device in [(owners[1].id,device_id),(owners[0].id,str(uuid4()))]:
                 with pytest.raises(ApiError) as error:await service.input_data(call_id,device,owner)
                 assert error.value.status_code==404
             visible=await service.input_data(call_id,device_id,owners[0].id)
-            assert visible.data['method']=='agents.chat' and visible.data['params']=={'fixture':'private-fixture'}
+            assert visible.data['method']=='meetings.minutes.generate' and visible.data['params']=={'fixture':'private-fixture'}
             async with session.read_session() as db:
                 row=await db.get(DeviceCall,call_id)
                 assert b'private-fixture' not in row.encrypted_input

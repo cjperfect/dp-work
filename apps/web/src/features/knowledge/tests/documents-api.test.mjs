@@ -15,12 +15,7 @@ import {
   loadKnowledgeDocumentsRequest,
   parseKnowledgeDocumentRequest,
 } from "../../../apis/knowledge.ts";
-import {
-  appendUploadedFile,
-  removeUploadedFile,
-  getKbFiles,
-} from "../../../stores/knowledge-upload.ts";
-import { listLocalEditorDocuments } from "../lib/knowledge-repository.ts";
+import { listLocalEditorDocuments } from "../lib/legacy-documents.ts";
 
 const originals = Object.fromEntries(
   ["window", "localStorage"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
@@ -140,7 +135,7 @@ test("migration failure retains the old browser copy for retry", async () => {
   assert.equal(listLocalEditorDocuments("user:12", base.id).length, 1);
 });
 
-test("existing SQLite document wins over a stale browser copy", async () => {
+test("existing server document wins over a stale browser copy", async () => {
   cache([legacy()]);
   const request = mockHttpRequest(async () => Response.json({ code: 0, data: [doc] }));
   const files = await loadKnowledgeDocumentsRequest("user:12", base.id);
@@ -149,7 +144,7 @@ test("existing SQLite document wins over a stale browser copy", async () => {
   assert.deepEqual(listLocalEditorDocuments("user:12", base.id), []);
 });
 
-test("document deletion calls SQLite API before removing the memory record", async () => {
+test("document deletion calls the server API before removing the memory record", async () => {
   useKnowledgeStore.setState({
     bases: [{ ...base, files: [{ id: doc.id, source: "editor" }], documentCount: 1 }],
   });
@@ -167,24 +162,6 @@ test("failed deletion retains the document for retry", async () => {
   mockHttpRequest(async () => Response.json({ code: 5000, message: "删除失败" }, { status: 500 }));
   await assert.rejects(deleteKnowledgeDocument("user:12", base.id, doc.id), /删除失败/);
   assert.deepEqual(useKnowledgeStore.getState().bases[0].files, [file]);
-});
-
-test("local upload deletion removes the file without an API request", () => {
-  const file = { id: "upload-1", name: "本地.md", type: "md", content: "上传内容" };
-  appendUploadedFile(base.id, file, "user:12");
-  assert.equal(
-    getKbFiles(base.id).some((row) => row.id === file.id),
-    true,
-  );
-  const request = mockHttpRequest(async () => {
-    throw new Error("不应请求 API");
-  });
-  removeUploadedFile(base.id, file.id, "user:12");
-  assert.equal(
-    getKbFiles(base.id).some((row) => row.id === file.id),
-    false,
-  );
-  assert.equal(request.mock.callCount(), 0);
 });
 
 test("upload sends authenticated multipart data and returns a server-backed document", async () => {
@@ -332,4 +309,27 @@ test("a delayed old autosave response cannot undo a newer title in the cache", a
   finishOldSave();
   await oldSave;
   assert.equal(useKnowledgeStore.getState().bases[0].files[0].name, "最新标题.md");
+});
+
+test("missing legacy storage never creates seeded knowledge bases", async () => {
+  values.clear();
+  assert.deepEqual(listLocalEditorDocuments("user:12", base.id), []);
+  assert.equal(values.size, 0);
+  mockHttpRequest(async () => Response.json({ code: 0, data: [doc] }));
+  const files = await loadKnowledgeDocumentsRequest("user:12", base.id);
+  assert.equal(files[0].id, doc.id);
+  assert.equal(values.size, 0);
+});
+
+test("failed legacy cleanup retains the old copy without hiding committed server documents", async () => {
+  cache([legacy()]);
+  localStorage.setItem = () => {
+    throw new Error("Browser storage is read only");
+  };
+  mockHttpRequest(async (_url, init) =>
+    Response.json({ code: 0, data: init.method === "PUT" ? doc : [] }),
+  );
+  const files = await loadKnowledgeDocumentsRequest("user:12", base.id);
+  assert.equal(files[0].id, doc.id);
+  assert.equal(listLocalEditorDocuments("user:12", base.id).length, 1);
 });

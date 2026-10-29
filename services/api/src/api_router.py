@@ -6,22 +6,17 @@ from src.core.exceptions import ApiError
 from src.core.responses import ApiCode
 from src.infrastructure.database import session
 from src.modules.auth.router import router as auth_router
-from src.modules.agents.router import router as agents_router
-from src.modules.settings.router import router as settings_router
 from src.modules.knowledge.router import router as knowledge_router
 from src.modules.knowledge.rag_router import router as rag_router
-from src.modules.connectors.router import router as connectors_router
 
 from src.modules.meetings.router import router as meetings_router
 
 from src.modules.devices.router import router as devices_router
 
 api_router = APIRouter()
-from src.modules.skills.router import router as skills_router
 
 api_router.include_router(devices_router)
-api_router.include_router(skills_router)
-for router in (auth_router, knowledge_router, connectors_router, meetings_router, agents_router, settings_router, rag_router):
+for router in (auth_router, knowledge_router, meetings_router, rag_router):
     api_router.include_router(router)
 
 

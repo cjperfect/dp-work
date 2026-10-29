@@ -17,7 +17,6 @@ from .models import MeetingMinutes
 from . import records
 from .schemas import GenerateMinutes, GenerationAccepted, MeetingState
 from .service import _workspace
-from src.modules.settings import service as personal_settings
 
 log = logging.getLogger(__name__)
 SAFE_ERRORS = {
@@ -83,9 +82,7 @@ async def call_sidecar(payload: dict, transport=None, owner_id: int | None = Non
     if config.SIDECAR_TRANSPORT != "device" and not config.SIDECAR_INTERNAL_TOKEN:
         raise ValueError("API 与 Sidecar 的内部服务凭证尚未配置。")
     if owner_id is not None:
-        override = await personal_settings.runtime(owner_id, "model")
-        if override:
-            payload = {**payload, "runtime": override}
+        payload = {**payload, "owner_id": owner_id}
     try:
         async with asyncio.timeout(config.MINUTES_TASK_TIMEOUT):
             async with sidecar_client(timeout=config.MINUTES_TASK_TIMEOUT, transport=transport) as client:

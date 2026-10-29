@@ -185,3 +185,23 @@
   color: #1d4ed8;
   text-decoration-color: #2563eb;
 }
+
+/* Electron 隐藏原生标题栏后，保留标题和原生窗口按钮的空间。 */
+html[data-desktop-titlebar] #root {
+  padding-top: var(--desktop-titlebar-height);
+}
+html[data-desktop-titlebar] .h-dvh {
+  height: calc(100dvh - var(--desktop-titlebar-height));
+}
+html[data-desktop-titlebar] .h-svh {
+  height: calc(100svh - var(--desktop-titlebar-height));
+}
+html[data-desktop-titlebar] .min-h-svh {
+  min-height: calc(100svh - var(--desktop-titlebar-height));
+}
+html[data-desktop-titlebar] .min-h-dvh {
+  min-height: calc(100dvh - var(--desktop-titlebar-height));
+}
+html[data-desktop-titlebar] [data-slot="sidebar-container"] {
+  top: var(--desktop-titlebar-height);
+}

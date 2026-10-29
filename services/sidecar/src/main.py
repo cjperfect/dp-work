@@ -14,14 +14,20 @@ from .infrastructure.parent_watch import watch_parent
 
 @asynccontextmanager
 async def lifespan(app):
-    """管理转写任务生命周期。"""
+    """管理转写和本机记忆后台任务生命周期。"""
+    from .memory.worker import MemoryWorker
+    memory_worker = MemoryWorker()
     app.state.asr_meetings = {}
     app.state.asr_tickets = {}
     parent = os.environ.get("DP_SIDECAR_PARENT_PID", "")
     guard = asyncio.create_task(watch_parent(int(parent))) if parent.isdigit() else None
+    memory_worker.start()
     try:
         yield
     finally:
+        await memory_worker.close()
+        from .connectors.service import shutdown
+        await shutdown()
         if guard:
             guard.cancel()
             with suppress(asyncio.CancelledError):

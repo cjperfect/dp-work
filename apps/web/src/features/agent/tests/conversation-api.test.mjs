@@ -1,9 +1,9 @@
+import { ensureTestChat as ensureAgentChat } from "./conversation-fixture.mjs";
 import assert from "node:assert/strict";
 import { beforeEach, afterEach, test } from "node:test";
 import { httpClient } from "../../../lib/http.ts";
 import { useAuthStore } from "../../../stores/auth.ts";
 import {
-  ensureAgentChat,
   useAgentStore,
   resetAgents,
   setDraftText,
@@ -11,6 +11,7 @@ import {
   removeThread,
   sendMessage,
   createThread,
+  addPartner,
   changeThreadProject,
 } from "../../../stores/agent.ts";
 import { conversationFixture } from "./conversation-fixture.mjs";
@@ -59,6 +60,7 @@ test("project conversations keep their directory and stay in global history afte
   await ensureAgentChat("general");
   const project = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
   const projectThread = await createThread("general", project);
+  await addPartner("product");
   const otherThread = await createThread("product");
   assert.equal(backend.details.get(projectThread).thread.project_id, project);
   setDraftText(projectThread, "项目草稿");
@@ -66,6 +68,8 @@ test("project conversations keep their directory and stay in global history afte
   assert.equal(backend.details.get(projectThread).thread.draft, "项目草稿");
   assert.equal(backend.details.get(projectThread).thread.project_id, null);
   await changeThreadProject(projectThread, project);
+  await sendMessage("general", projectThread, "项目对话");
+  await sendMessage("product", otherThread, "产品对话");
   resetAgents();
   await ensureAgentChat("general");
   const history = Object.values(useAgentStore.getState().lists).flat();

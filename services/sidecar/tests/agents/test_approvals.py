@@ -1,5 +1,7 @@
 """真实图中断与磁盘检查点恢复，不调用付费模型。"""
 import asyncio
+import shlex
+import sys
 from uuid import uuid4
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
@@ -8,6 +10,7 @@ from src import config
 from src.agents import agent
 from src.providers.llm.schemas import ModelSettings
 from src.transport.handlers import AgentInput
+from src.tools.isolation import sandbox_backend
 
 
 class Model(FakeMessagesListChatModel):
@@ -34,6 +37,7 @@ def test_durable_pause_and_single_decision(monkeypatch, tmp_path, decision):
         initial = [item async for item in agent.run_agent(body, ModelSettings(timeout=10))]
         pending = initial[-1]
         assert pending['type'] == 'approval'
+        assert not any(item['type'] == 'file_change' for item in initial)
         assert not (config.WORKSPACE_DIR / 'general/.env.reviewed').exists()
         assert list((tmp_path / 'data/agent-checkpoints').glob('*.sqlite3'))
         # 新模型实例和新图从磁盘恢复，相当于 Sidecar 重启。
@@ -83,6 +87,7 @@ def test_edit_and_shell_require_approval(monkeypatch, tmp_path, tool_name, args,
         body = input_body()
         events = [event async for event in agent.run_agent(body, ModelSettings(timeout=10))]
         assert events[-1]['type'] == 'approval', events
+        assert not any(item['type'] == 'file_change' for item in events)
         if tool_name == 'edit_file': assert (folder / file_name).read_text() == 'before'
         else: assert not (folder / file_name).exists()
         resumed = body.model_copy(update={'approval_resume': answers(events[-1], decision)})
@@ -90,6 +95,28 @@ def test_edit_and_shell_require_approval(monkeypatch, tmp_path, tool_name, args,
         assert result[-1]['type'] == 'done', result
         if tool_name == 'edit_file': assert (folder / file_name).read_text() == ('after' if decision == 'approve' else 'before')
         else: assert (folder / file_name).exists() == (decision == 'approve')
+    asyncio.run(case())
+
+
+@pytest.mark.skipif(sandbox_backend() not in ('macos', 'linux'), reason='需要本机原生沙箱')
+def test_approved_python_still_cannot_write_outside_workspace(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, 'WORKSPACE_DIR', tmp_path / 'workspace')
+    outside = tmp_path / 'outside.txt'
+    program = f'from pathlib import Path; Path("inside.txt").write_text("allowed"); Path({str(outside)!r}).write_text("denied")'
+    command = shlex.quote(sys.executable) + ' -c ' + shlex.quote(program)
+    model = Model(responses=[AIMessage('', tool_calls=[{'name': 'execute', 'args': {'command': command}, 'id': 'script', 'type': 'tool_call'}]), AIMessage('已处理')])
+    monkeypatch.setattr(agent, 'create_model', lambda *_: model)
+    async def case():
+        body = input_body()
+        events = [event async for event in agent.run_agent(body, ModelSettings(timeout=10))]
+        assert events[-1]['type'] == 'approval'
+        inside = config.WORKSPACE_DIR / 'general/inside.txt'
+        assert not inside.exists() and not outside.exists()
+        resumed = body.model_copy(update={'approval_resume': answers(events[-1], 'approve')})
+        completed = [event async for event in agent.run_agent(resumed, ModelSettings(timeout=10))]
+        assert completed[-1]['type'] == 'done', completed
+        assert inside.read_text() == 'allowed'
+        assert not outside.exists()
     asyncio.run(case())
 
 
@@ -135,7 +162,8 @@ def test_normal_write_edit_and_pwd_run_without_pause_but_deletion_waits(monkeypa
     model = Model(responses=[
         AIMessage('', tool_calls=[{'name':'write_file','args':{'file_path':'a.txt','content':'123'},'id':'write','type':'tool_call'}]),
         AIMessage('', tool_calls=[{'name':'edit_file','args':{'file_path':'a.txt','old_string':'123','new_string':'456'},'id':'edit','type':'tool_call'}]),
-        AIMessage('', tool_calls=[{'name':'execute','args':{'command':'pwd'},'id':'pwd','type':'tool_call'}]),
+        AIMessage('', tool_calls=[{'name':'execute','args':{'command':'pwd && ls -la'},'id':'pwd','type':'tool_call'}]),
+        AIMessage('', tool_calls=[{'name':'execute','args':{'command':"wc -c a.txt; head -3 a.txt; echo '---'; tail -2 a.txt"},'id':'verify','type':'tool_call'}]),
         AIMessage('', tool_calls=[{'name':'execute','args':{'command':'rm a.txt'},'id':'delete','type':'tool_call'}]),
         AIMessage('保留文件'),
     ])

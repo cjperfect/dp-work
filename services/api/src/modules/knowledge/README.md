@@ -6,6 +6,7 @@
 - [x] 在线文档新建、编辑、自动保存、列表、读取与删除，使用PostgreSQL。
 - [x] 保存标题、Markdown 正文、BlockNote 富文本块及创建/更新时间。
 - [x] 旧 localStorage 在线文档首次读取时迁移；成功后清理旧副本。
+- [x] 页面仅展示服务端知识库和文档；已移除示例库、本地上传回退及演示缓存 CRUD。旧在线文档迁移独立保留，接口失败展示错误并支持重试。
 
 - [x] 上传 TXT / Markdown / PDF / Word（最大 20 MB），源文件保存到 `.dp-work/data/knowledge/<用户ID>/<知识库ID>/`，记录写入 PostgreSQL。
 - [x] 上传文件列表、鉴权读取、PDF 预览及删除源文件；失败上传不保留记录和临时文件。

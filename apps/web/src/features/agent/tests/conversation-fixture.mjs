@@ -1,3 +1,18 @@
+import {
+  ensureAgentChat as initializeAgent,
+  createThread,
+  addPartner,
+  useAgentStore,
+} from "../../../stores/agent.ts";
+
+/** 已有测试显式准备一个草稿会话，页面初始化本身不创建记录。 */
+export async function ensureTestChat(code, force = false) {
+  await initializeAgent(code, force);
+  if (code !== "general") await addPartner(code);
+  const state = useAgentStore.getState();
+  if (state.owner && state.agents.length && !state.selected[code]) await createThread(code);
+}
+
 /** API 协议替身，保留服务端数据以测试刷新、分支和账号隔离。 */
 export function conversationFixture() {
   const details = new Map();
@@ -14,11 +29,26 @@ export function conversationFixture() {
     details,
     async handle(request, upstream) {
       const path = request.url;
+      if (path === "/api/agents/config")
+        return wrapped({
+          agent_code: request.params.agent_code,
+          prompt: "# Agent",
+          prompt_file: "AGENT.md",
+        });
       if (!path.startsWith("/api/agents/threads")) return upstream(request);
       const body = typeof request.data === "string" ? JSON.parse(request.data) : request.data;
       const method = request.method.toUpperCase();
       if (path === "/api/agents/threads" && method === "GET")
-        return wrapped([...details.values()].map((d) => clone(d.thread)));
+        return wrapped(
+          [...details.values()]
+            .filter((d) =>
+              d.messages.some(
+                (row) =>
+                  row.role === "assistant" && row.status === "complete" && row.content.trim(),
+              ),
+            )
+            .map((d) => clone({ ...d.thread, has_history: true })),
+        );
       if ((path === "/api/agents/threads" && method === "POST") || path.endsWith("/import")) {
         const imported = path.endsWith("/import");
         const thread = imported
@@ -75,13 +105,15 @@ export function conversationFixture() {
         detail.thread.draft_revision++;
         return wrapped(clone(detail));
       }
+      if (action === "steer") return wrapped(await upstream(request));
       if (action === "chat") {
         const reader = (await upstream(request)).getReader();
         let buffer = "",
-          content = "";
+          content = "",
+          responseId = body.response_id;
         const decoder = new TextDecoder();
         function save(status) {
-          const reply = detail.messages.find((message) => message.id === body.response_id);
+          const reply = detail.messages.find((message) => message.id === responseId);
           if (reply) {
             reply.content = content;
             reply.status = status;
@@ -109,6 +141,20 @@ export function conversationFixture() {
                 .join("\n");
               if (data) {
                 const event = JSON.parse(data);
+                if (event.type === "steering") {
+                  detail.messages = detail.messages.flatMap((message) =>
+                    message.id !== event.previous_response_id
+                      ? [message]
+                      : event.previous_removed
+                        ? []
+                        : [{ ...message, content: event.previous_content, status: "complete" }],
+                  );
+                  detail.messages.push(clone(event.message), clone(event.response));
+                  detail.thread = { ...detail.thread, ...clone(event.thread) };
+                  responseId = event.response_id;
+                  content = "";
+                  combine(detail);
+                }
                 if (event.type === "delta") {
                   content += event.text;
                   save("streaming");

@@ -17,4 +17,4 @@ def test_other_database_driver_is_not_silently_accepted():
 
 
 def test_model_registry_covers_all_existing_tables():
-    assert set(Base.metadata.tables) == {"agent_projects", "agent_approvals", "devices", "device_calls", "device_call_chunks", "agent_runs", "conversations", "conversation_messages", "task_outbox", "knowledge_search_sync", "knowledge_parent_chunks", "knowledge_child_chunks", "users", "user_settings", "knowledge_bases", "knowledge_documents", "meetings", "meeting_segments", "meeting_minutes", "meeting_generation_jobs", "meeting_records", "meeting_record_versions"}
+    assert set(Base.metadata.tables) == {"devices", "device_calls", "device_call_chunks", "task_outbox", "knowledge_search_sync", "knowledge_parent_chunks", "knowledge_child_chunks", "users", "knowledge_bases", "knowledge_documents", "meetings", "meeting_segments", "meeting_minutes", "meeting_generation_jobs", "meeting_records", "meeting_record_versions"}

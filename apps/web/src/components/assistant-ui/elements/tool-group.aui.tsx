@@ -88,7 +88,7 @@ function ToolGroupTrigger({
   count: number;
   active?: boolean;
 }) {
-  const label = `${count} tool ${count === 1 ? "call" : "calls"}`;
+  const label = `${active ? "正在执行" : "执行过程"} · ${count} 次工具调用`;
 
   return (
     <CollapsibleTrigger

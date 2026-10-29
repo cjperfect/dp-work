@@ -19,8 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useAuthStore } from "@/stores/auth";
 import { useKnowledgeBasePage } from "@/features/knowledge/hooks/use-knowledge-base-page";
 import { createKnowledgeBase, deleteKnowledgeBase, updateKnowledgeBase } from "@/stores/knowledge";
-import type { StoredKnowledgeBase } from "../lib/knowledge-repository";
-import { getKbFiles } from "@/stores/knowledge-upload";
+import type { StoredKnowledgeBase } from "@/types/knowledge";
 
 export function KnowledgePage() {
   const user = useAuthStore((state) => state.user);
@@ -239,7 +238,7 @@ export function KnowledgePage() {
               <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 border-t pt-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                   <FileText className="size-3.5" />
-                  {getKbFiles(base.id).length + (base.documentCount ?? 0)} 个文件
+                  {base.documentCount ?? 0} 个文件
                 </span>
                 <span>
                   更新于{" "}

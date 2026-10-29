@@ -1,6 +1,29 @@
 import { request } from "@/lib/http";
 import { getAccessToken, useAuthStore } from "@/stores/auth";
 import type { AgentId } from "@/interfaces/app";
+export type ReasoningEvent = {
+  id: string;
+  text?: string;
+  started_at: number;
+  completed_at?: number;
+};
+import type { ChatThread, ChatMessage, ToolExecution, FileChange } from "@/types/agent";
+
+export type SteeringEvent = {
+  id: string;
+  response_id: string;
+  previous_response_id: string;
+  previous_content: string;
+  previous_removed: boolean;
+  thread: ChatThread;
+  message: ChatMessage;
+  response: ChatMessage;
+};
+export const steerAgentRun = (threadId: string, id: string, content: string) =>
+  request<{ id: string; status: "queued" | "applied" }>(`/api/agents/threads/${threadId}/steer`, {
+    method: "POST",
+    data: { id, content },
+  });
 
 export type AgentModels = { configured: boolean; models: { id: string; name: string }[] };
 export const getAgentModels = () => request<AgentModels>("/api/agents/models");
@@ -20,6 +43,12 @@ export async function streamAgentChat(
   input: AgentChatInput,
   onDelta: (text: string) => void,
   signal: AbortSignal,
+  onStart?: (runId: string) => void,
+  onSteering?: (event: SteeringEvent) => void,
+  onTool?: (trace: ToolExecution) => void,
+  onFileChange?: (change: FileChange) => void,
+  onReasoning?: (event: ReasoningEvent) => void,
+  onUsage?: (usage: import("@/types/agent").RunUsage) => void,
 ): Promise<string | null> {
   const owner = useAuthStore.getState().user?.id;
   const token = getAccessToken();
@@ -53,6 +82,13 @@ export async function streamAgentChat(
       .join("\n");
     if (!data) return;
     const event = JSON.parse(data);
+    if (event.type === "usage" && event.usage) onUsage?.(event.usage);
+    if (event.type === "reasoning" || event.type === "reasoning_end") onReasoning?.(event);
+    if (event.type === "file_change" && event.change) onFileChange?.(event.change);
+    if ((event.type === "tool_call" || event.type === "tool_result") && event.trace)
+      onTool?.(event.trace);
+    if (event.type === "steering") onSteering?.(event);
+    if (event.type === "start" && typeof event.run_id === "string") onStart?.(event.run_id);
     if (event.type === "approval") paused = true;
     if (event.type === "error") throw new Error(event.message || "Agent 执行失败，请重试。");
     if (event.type === "delta" && typeof event.text === "string") onDelta(event.text);
@@ -81,6 +117,20 @@ export async function streamAgentChat(
     await reader.cancel().catch(() => {});
     reader.releaseLock();
   }
+}
+
+/** 停止服务端运行并释放会话执行锁，再开始下一条消息。 */
+export async function stopAgentRun(threadId: string, responseId?: string, runId?: string) {
+  if (!runId) {
+    const page = await request<{ item: { id: string; response_id: string }[] }>(
+      "/api/agents/runs",
+      {
+        params: { conversation_id: threadId, status: "running", page: 1, page_size: 20 },
+      },
+    );
+    runId = page?.item?.find((row) => row.response_id === responseId)?.id;
+  }
+  if (runId) await request(`/api/agents/runs/${runId}/cancel`, { method: "POST" });
 }
 
 /** 调用后端 LLM 生成会话标题，再由会话接口保存。 */

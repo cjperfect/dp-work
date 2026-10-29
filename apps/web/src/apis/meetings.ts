@@ -50,29 +50,6 @@ export class MeetingError extends Error {
   }
 }
 
-/** 模拟分享接口：链接在同一浏览器中可阅读或编辑。 */
-export async function createMinutesShare(
-  workspace: Workspace,
-  permission: "read" | "edit",
-): Promise<string> {
-  if (useAuthStore.getState().user?.id !== workspace.meeting.owner_id)
-    throw new MeetingError("登录状态已改变，请重新登录。", 401);
-  const { createLocalShare } = await import("@/features/meetings/lib/mock-sharing");
-  return createLocalShare(workspace, permission);
-}
-export const DEMO_MINUTES = `## 会议结论
-- 优先完成会议记录、纪要编辑与知识库归档的完整流程。
-- 会议重点通过导图展示，方便快速回顾。
-
-## 行动项
-- 产品团队：整理本轮需求与验收标准。
-- 研发团队：完成交互联调并验证分享权限。
-
-## 后续安排
-- 下次会议回顾交付进度，确认待讨论事项。
-
-> 当前内容为本地模拟生成，用于体验页面流程。`;
-
 export type GenerationAccepted = {
   task_id: string;
   source_revision: number;

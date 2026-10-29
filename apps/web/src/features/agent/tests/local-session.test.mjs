@@ -1,3 +1,4 @@
+import { ensureTestChat as ensureAgentChat } from "./conversation-fixture.mjs";
 import { conversationFixture } from "./conversation-fixture.mjs";
 import assert from "node:assert/strict";
 import { httpClient } from "../../../lib/http.ts";
@@ -7,19 +8,21 @@ import {
   createThread,
   getThreadAgentCode,
   selectThreadById,
-  ensureAgentChat,
   loadThreads,
   resetAgents,
   selectThread,
   sendMessage,
   setDraftText,
   useAgentStore,
+  ensureAgentChat as initializeAgent,
 } from "../../../stores/agent.ts";
 
-let streamInterceptor;
+let streamInterceptor, created;
 beforeEach(() => {
   const backend = conversationFixture();
+  created = 0;
   streamInterceptor = httpClient.interceptors.request.use((config) => {
+    if (config.url === "/api/agents/threads" && config.method === "post") created++;
     config.adapter = async (request) => ({
       data: await backend.handle(
         request,
@@ -42,6 +45,19 @@ beforeEach(() => {
   });
   useAuthStore.setState({ user: { id: 123, username: "tester" } });
   resetAgents();
+});
+
+test("opening Agents creates no conversation and the first complete reply makes history visible", async () => {
+  await initializeAgent("general");
+  await initializeAgent("product");
+  assert.equal(created, 0);
+  assert.equal(useAgentStore.getState().selected.general, undefined);
+  assert.equal(useAgentStore.getState().selected.product, undefined);
+  const id = await createThread("general");
+  assert.equal(created, 1);
+  assert.equal(useAgentStore.getState().details[id].thread.has_history, false);
+  await sendMessage("general", id, "第一条消息");
+  assert.equal(useAgentStore.getState().details[id].thread.has_history, true);
 });
 
 test("Agent replies and conversation selection survive reinitializing the page", async () => {

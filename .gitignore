@@ -65,3 +65,6 @@ services/api/data/
 
 # Python editable install metadata
 *.egg-info/
+
+# Python shared package caches
+packages/**/__pycache__/

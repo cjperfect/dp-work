@@ -33,7 +33,11 @@ import type { AgentId } from "@/interfaces/app";
 export function SkillsPage() {
   const initial = useAgentCode();
   const [code, setCode] = useState<AgentId>(initial);
-  const agents = useAgentStore((state) => state.agents);
+  const allAgents = useAgentStore((state) => state.agents);
+  const partnerCodes = useAgentStore((state) => state.partnerCodes);
+  const agents = allAgents.filter(
+    (row) => row.code === "general" || partnerCodes.includes(row.code),
+  );
   const agent = agents.find((row) => row.code === code);
   const setAgentId = useAppStore((state) => state.setAgentId);
   const { skills, loading, error, reload } = useSkills(code);

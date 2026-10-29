@@ -1,6 +1,6 @@
 /** 全局视图与 Agent 相关类型定义 */
 
-export type AgentId = "general" | "product";
+export type AgentId = "general" | "product" | "ui";
 
 export type ViewKey = "chat" | "meetings" | "skills" | "knowledge" | "agent";
 

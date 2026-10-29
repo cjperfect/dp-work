@@ -14,7 +14,7 @@ test("connection tests do not save settings and ASR startup uses opaque tickets"
   const calls = [];
   mockHttpRequest(async (url, init) => {
     calls.push({ url, method: init.method, data: init.body ? JSON.parse(init.body) : null });
-    if (url.includes("/session/")) return reply({ ticket: "one-time-fixture" });
+    if (url.endsWith("/asr/session")) return reply({ ticket: "one-time-fixture" });
     return reply({ ok: true, saved: true });
   });
   const form = {
@@ -31,5 +31,5 @@ test("connection tests do not save settings and ASR startup uses opaque tickets"
   assert.equal(calls[1].method, "PUT");
   const result = await createAsrSession("meeting-1");
   assert.deepEqual(result, { ticket: "one-time-fixture" });
-  assert.equal(calls[2].url, "/api/settings/asr/session/meeting-1");
+  assert.equal(calls[2].url, "/api/meetings/meeting-1/asr/session");
 });

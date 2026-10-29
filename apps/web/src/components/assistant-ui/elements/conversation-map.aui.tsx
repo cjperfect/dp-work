@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuiState, useThreadViewport } from "@assistant-ui/react";
 import type { ThreadMessage } from "@assistant-ui/react";
 import { cn } from "@/lib/utils";
@@ -370,17 +371,21 @@ export function ConversationMapAui({
     [viewport],
   );
 
-  return (
+  // 保留视口上下文，DOM 放在滚动容器外，导航位置不随消息滚动。
+  const overlayRoot = viewport?.parentElement;
+  if (!overlayRoot) return null;
+
+  return createPortal(
     <div
       data-slot="conversation-map-rail"
-      className={cn("pointer-events-none absolute top-0 z-10 h-full w-full", className)}
+      className={cn("pointer-events-none absolute inset-x-0 top-0 z-20", className)}
+      style={{ height: viewportHeight }}
     >
       <div
         className={cn(
-          "pointer-events-auto absolute top-0 px-3 py-10",
-          side === "right" ? "right-0" : "left-0",
+          "pointer-events-auto absolute top-1/2 h-full -translate-y-1/2 px-3 py-10",
+          side === "right" ? "right-4" : "left-4",
         )}
-        style={{ height: viewportHeight }}
       >
         <ConversationMap
           entries={entries}
@@ -390,6 +395,7 @@ export function ConversationMapAui({
           side={side === "right" ? "left" : "right"}
         />
       </div>
-    </div>
+    </div>,
+    overlayRoot,
   );
 }

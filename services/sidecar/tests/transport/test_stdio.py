@@ -48,6 +48,67 @@ def test_stdio_stream_ids_and_cancel():
     asyncio.run(case())
 
 
+def test_repeated_interrupt_does_not_cancel_progress_cleanup_twice():
+    async def case():
+        started, cleaning, release, cleaned = (asyncio.Event() for _ in range(4))
+        async def events():
+            try:
+                started.set()
+                yield {'type': 'delta', 'text': 'partial'}
+                await asyncio.Event().wait()
+            finally:
+                cleaning.set()
+                await release.wait()
+                cleaned.set()
+        async def dispatch(*_):
+            return handlers.EventStream(events())
+        rpc = StdioServer(None, io.BytesIO())
+        with patch.object(handlers, 'dispatch', dispatch):
+            await rpc.handle(json.dumps({'jsonrpc': '2.0', 'id': 'run', 'method': 'agents.chat', 'params': {}}))
+            await asyncio.wait_for(started.wait(), 2)
+            task = rpc.tasks['run']
+            interrupt = json.dumps({'jsonrpc': '2.0', 'method': '$/cancelRequest', 'params': {'id': 'run'}})
+            await rpc.handle(interrupt)
+            await asyncio.wait_for(cleaning.wait(), 2)
+            await rpc.handle(interrupt)
+            await asyncio.sleep(0)
+            assert not task.done()
+            release.set()
+            await rpc.close()
+            assert cleaned.is_set()
+    asyncio.run(case())
+
+
+def test_interrupt_during_head_closes_stream_that_has_not_started():
+    async def case():
+        header, closed = asyncio.Event(), asyncio.Event()
+        entered = []
+        async def events():
+            entered.append(True)
+            yield {'type': 'done'}
+        async def dispatch(*_):
+            async def cleanup():
+                closed.set()
+            return handlers.EventStream(events(), on_close=cleanup)
+        rpc = StdioServer(None, io.BytesIO())
+        original = rpc.emit
+        async def emit(message):
+            if message.get('method') == 'stream.head':
+                header.set()
+                await asyncio.Event().wait()
+            else:
+                await original(message)
+        rpc.emit = emit
+        with patch.object(handlers, 'dispatch', dispatch):
+            await rpc.handle(json.dumps({'jsonrpc': '2.0', 'id': 'early', 'method': 'agents.chat', 'params': {}}))
+            await asyncio.wait_for(header.wait(), 2)
+            await rpc.handle(json.dumps({'jsonrpc': '2.0', 'method': '$/cancelRequest', 'params': {'id': 'early'}}))
+            await asyncio.wait_for(closed.wait(), 2)
+            await rpc.close()
+            assert entered == []
+    asyncio.run(case())
+
+
 def test_stdio_invalid_frames_do_not_execute():
     async def case():
         output = io.BytesIO()

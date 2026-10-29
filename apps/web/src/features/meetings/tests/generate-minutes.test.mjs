@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, mock, test } from "node:test";
 import "fake-indexeddb/auto";
 import { useAuthStore } from "../../../stores/auth.ts";
-import { emptyWorkspace, generateMinutes, createMinutesShare } from "../../../apis/meetings.ts";
+import { emptyWorkspace, generateMinutes } from "../../../apis/meetings.ts";
 import {
   cacheCreated,
   cacheServerWorkspace,
@@ -10,7 +10,6 @@ import {
   syncNow,
 } from "../../../stores/meetings.ts";
 import { readDraft } from "../lib/workspace-storage.ts";
-import { readLocalShare, saveSharedMinutes } from "../lib/mock-sharing.ts";
 import { meetingCategory } from "../lib/minutes-state.ts";
 import { meetingApiFixture } from "./api-fixture.mjs";
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
@@ -75,43 +74,4 @@ test("submission stays in pending with a generating status until a real result i
   const ready = await loadWorkspace(123, workspace.meeting.id);
   assert.equal(ready.meeting.generation_status, "generating");
   assert.equal(ready.minutes, null);
-});
-test("read links open saved minutes and reject edits", async () => {
-  const url = await createMinutesShare(workspace, "read");
-  assert.equal(await createMinutesShare(workspace, "read"), url);
-  const token = new URL(url).pathname.split("/").at(-1);
-  const { share, draft } = await readLocalShare(token);
-  assert.equal(share.permission, "read");
-  assert.equal(draft.meeting.id, workspace.meeting.id);
-  await assert.rejects(saveSharedMinutes(token, "不允许"), /仅可阅读/);
-});
-test("edit links update the original meeting", async () => {
-  const url = await createMinutesShare(workspace, "edit");
-  const token = new URL(url).pathname.split("/").at(-1);
-  await saveSharedMinutes(token, "## 修改后的纪要");
-  assert.equal((await loadWorkspace(123, workspace.meeting.id)).minutes.content, "## 修改后的纪要");
-});
-
-test("rich text blocks and formatting survive shared saves and reloads", async () => {
-  const url = await createMinutesShare(workspace, "edit");
-  const token = new URL(url).pathname.split("/").at(-1);
-  const blocks = [
-    {
-      id: "rich-paragraph",
-      type: "paragraph",
-      content: [{ type: "text", text: "保留加粗格式", styles: { bold: true } }],
-    },
-  ];
-  await saveSharedMinutes(token, "**保留加粗格式**", blocks);
-  const restored = await loadWorkspace(123, workspace.meeting.id);
-  assert.deepEqual(restored.minutes.blocks, blocks);
-  assert.equal(restored.minutes.content, "**保留加粗格式**");
-});
-test("shared edits are blocked once the meeting is archived", async () => {
-  const url = await createMinutesShare(workspace, "edit");
-  const token = new URL(url).pathname.split("/").at(-1);
-  workspace.meeting.status = "archived";
-  meetingApiFixture([workspace]);
-  await cacheCreated(workspace);
-  await assert.rejects(saveSharedMinutes(token, "不允许"), /仅可阅读/);
 });

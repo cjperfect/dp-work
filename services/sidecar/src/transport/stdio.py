@@ -24,7 +24,12 @@ class StdioServer:
     async def emit(self, message):
         data = (json.dumps(message, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
         async with self.lock:
-            await asyncio.to_thread(self._write, data)
+            writing = asyncio.create_task(asyncio.to_thread(self._write, data))
+            try:
+                await asyncio.shield(writing)
+            except asyncio.CancelledError:
+                await writing
+                raise
 
     def _write(self, data):
         self.output.write(data)
@@ -49,7 +54,9 @@ class StdioServer:
             params = message.get("params")
             target = params.get("id") if isinstance(params, dict) else None
             if isinstance(target, str) and target in self.tasks:
-                self.tasks[target].cancel()
+                task = self.tasks[target]
+                if not task.cancelling():
+                    task.cancel()
             return
         if not isinstance(key, str) or not key or len(key) > 128:
             await self.error(None, ERRORS["invalidRequest"], "请求 ID 无效。")
@@ -61,14 +68,23 @@ class StdioServer:
             await self.emit({"jsonrpc": "2.0", "id": key, "result": {
                 "ok": self.ready(), "service": "dp-work-sidecar",
                 "instance_id": os.environ.get("DP_SIDECAR_INSTANCE_ID"),
+                "active_asr_sessions": len(getattr(self.state, 'asr_meetings', {})),
             }})
             return
         if not isinstance(method, str) or method not in METHODS:
             await self.error(key, ERRORS["methodNotFound"], "不支持的方法。")
             return
-        if len(self.tasks) >= LIMITS["maxConcurrentCalls"]:
-            await self.error(key, ERRORS["busy"], "Sidecar 并发任务超限。")
-            return
+        if len(self.tasks) >= LIMITS["maxConcurrentCalls"] and method not in ("agents.steer", "sessions.steer", "sessions.runs.cancel"):
+            short_call = (
+                (method.startswith(("sessions.", "projects.", "settings."))
+                 and method not in ("sessions.chat", "sessions.approval.decide", "settings.test", "settings.test-local"))
+                or method in ("agents.models", "agents.config", "agents.config.update", "skills.list")
+            )
+            if short_call and len(self.tasks) < 16:
+                pass
+            else:
+                await self.error(key, ERRORS["busy"], "Sidecar 并发任务超限。")
+                return
         task = asyncio.create_task(self.execute(key, method, message.get("params")))
         self.tasks[key] = task
         task.add_done_callback(lambda _: self.tasks.pop(key, None))
@@ -100,9 +116,13 @@ class StdioServer:
                 await chunk(json.dumps({"detail": cause.detail}, ensure_ascii=False).encode())
             else:
                 if isinstance(result, handlers.EventStream):
-                    await head(200, "text/event-stream")
-                    async for event in result.events:
-                        await chunk(("data: " + json.dumps(event, ensure_ascii=False) + "\n\n").encode())
+                    try:
+                        await head(200, "text/event-stream")
+                        async for event in result.events:
+                            await chunk(("data: " + json.dumps(event, ensure_ascii=False) + "\n\n").encode())
+                    finally:
+                        # 发送 chunk 时也可能中断，必须显式关闭生成器并等待进度落盘。
+                        await result.aclose()
                 else:
                     await head(200, "application/json")
                     await chunk(json.dumps(result, ensure_ascii=False).encode())
@@ -117,7 +137,8 @@ class StdioServer:
     async def close(self):
         tasks = list(self.tasks.values())
         for task in tasks:
-            task.cancel()
+            if not task.cancelling():
+                task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
 
     async def serve(self, source):

@@ -1,7 +1,6 @@
 import { DOCUMENTS_CHANGED } from "@/features/knowledge/lib/document-events";
 import type { KbFile } from "@/features/knowledge/constants/knowledge-data";
 import { create } from "zustand";
-import * as repository from "@/features/knowledge/lib/knowledge-repository";
 import {
   createKnowledgeBaseRequest,
   listAllKnowledgeBasesRequest,
@@ -16,7 +15,7 @@ import type {
   EditorDocumentInput,
   KnowledgeBaseInput,
   StoredKnowledgeBase,
-} from "@/features/knowledge/lib/knowledge-repository";
+} from "@/types/knowledge";
 
 type KnowledgeState = {
   accountId: string | null;
@@ -47,7 +46,10 @@ export async function loadKnowledgeBases(accountId: string, force = false) {
   try {
     const records = await listAllKnowledgeBasesRequest(accountId);
     if (version !== loadVersion) return;
-    const bases = repository.cacheServerKnowledgeBases(accountId, records);
+    const bases = records.map((record) => ({
+      ...record,
+      files: useKnowledgeStore.getState().bases.find((base) => base.id === record.id)?.files ?? [],
+    }));
     useKnowledgeStore.setState({ bases, status: "ready" });
   } catch (error) {
     if (version === loadVersion)
@@ -72,12 +74,6 @@ function remember(accountId: string, record: StoredKnowledgeBase) {
 
 export async function createKnowledgeBase(accountId: string, input: KnowledgeBaseInput) {
   const record = await createKnowledgeBaseRequest(accountId, input);
-  try {
-    repository.cacheCreatedKnowledgeBase(accountId, record);
-  } catch {
-    remember(accountId, record);
-    throw new Error("知识库已创建，但本地展示缓存保存失败。请勿重复提交。");
-  }
   remember(accountId, record);
   return record;
 }
@@ -88,14 +84,20 @@ export async function updateKnowledgeBase(
   input: KnowledgeBaseInput,
 ) {
   const record = await updateKnowledgeBaseRequest(accountId, id, input);
-  const [cached] = repository.cacheServerKnowledgeBases(accountId, [record], false);
+  const state = useKnowledgeStore.getState();
+  const cached = {
+    ...record,
+    files:
+      state.accountId === accountId
+        ? (state.bases.find((base) => base.id === id)?.files ?? [])
+        : [],
+  };
   remember(accountId, cached);
   return cached;
 }
 
 export async function deleteKnowledgeBase(accountId: string, id: string) {
   await deleteKnowledgeBaseRequest(accountId, id);
-  await repository.deleteKnowledgeBase(accountId, id);
   if (useKnowledgeStore.getState().accountId === accountId) {
     loadVersion += 1;
     useKnowledgeStore.setState((state) => ({

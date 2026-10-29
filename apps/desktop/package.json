@@ -12,18 +12,21 @@
     "build:web": "node scripts/prepare-web.mjs",
     "start": "electron .",
     "preview": "pnpm build && node scripts/preview.mjs",
-    "package": "pnpm build && pnpm build:web && pnpm build:sidecar && electron-builder",
-    "package:dir": "pnpm build && pnpm build:web && pnpm build:sidecar && electron-builder --dir",
+    "package": "pnpm build && pnpm build:web && pnpm build:sidecar && electron-builder --publish never",
+    "package:dir": "pnpm build && pnpm build:web && pnpm build:sidecar && electron-builder --dir --publish never",
     "test": "pnpm --filter @dp-work/protocols build && tsx --test tests/*.test.ts",
-    "build:sidecar": "node scripts/prepare-sidecar.mjs"
+    "build:sidecar": "node scripts/prepare-sidecar.mjs",
+    "smoke:sidecar": "node scripts/smoke-sidecar.mjs"
   },
   "dependencies": {
-    "@dp-work/protocols": "workspace:*"
+    "@dp-work/protocols": "workspace:*",
+    "electron-updater": "6.8.12"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "electron": "45.0.0",
     "electron-builder": "26.18.0",
+    "js-yaml": "^4.3.2",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "vite": "^6.0.0"
@@ -36,6 +39,7 @@
     },
     "files": [
       "dist/**/*",
+      "resources/icon.png",
       "package.json"
     ],
     "extraResources": [
@@ -58,9 +62,11 @@
       }
     ],
     "mac": {
+      "icon": "resources/icon.icns",
       "category": "public.app-category.productivity",
       "target": [
-        "dmg"
+        "dmg",
+        "zip"
       ],
       "extendInfo": {
         "NSMicrophoneUsageDescription": "用于会议录音和实时语音转写。"
@@ -69,19 +75,31 @@
       "entitlementsInherit": "resources/entitlements.mac.plist",
       "binaries": [
         "Contents/Resources/sidecar/dp-work-sidecar"
-      ]
+      ],
+      "hardenedRuntime": true
     },
     "win": {
+      "icon": "resources/icon.ico",
       "target": [
         "nsis"
       ]
     },
     "linux": {
+      "icon": "resources/icon.png",
       "target": [
         "AppImage"
       ],
       "category": "Office"
-    }
+    },
+    "artifactName": "DP-Work-${version}-${os}-${arch}.${ext}",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "cjperfect",
+        "repo": "dp-work",
+        "releaseType": "draft"
+      }
+    ]
   },
   "engines": {
     "node": ">=22.12.0"

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useAui, useAuiState } from "@assistant-ui/react";
+import { useAuiState } from "@assistant-ui/react";
 import { ApprovalCard } from "@/components/assistant-ui/elements/approval-card";
 import { Button } from "@/components/ui/button";
 import { loadApprovals, useAgentApprovalStore } from "@/stores/agent-approvals";
@@ -7,9 +7,8 @@ import { resumeApprovedRun, useAgentStore } from "@/stores/agent";
 import { useAuthStore } from "@/stores/auth";
 import type { AgentApproval } from "@/apis/agent-approvals";
 
-/** 审批状态从 PG 恢复，决定提交期间锁定按钮，失败保留可重试入口。 */
+/** 从本机恢复待执行审批，提交期间锁定按钮，失败保留重试入口。 */
 export function AgentApprovals() {
-  const aui = useAui();
   const id = useAuiState((s) => s.threadListItem.remoteId);
   const owner = useAuthStore((s) => s.user?.id);
   const entry = useAgentApprovalStore((s) => (id ? s.entries[id] : undefined));
@@ -30,7 +29,6 @@ export function AgentApprovals() {
     setError(null);
     try {
       await resumeApprovedRun(approval, decision);
-      if (identity.current === target) aui.composer.setText("");
     } catch (cause) {
       if (identity.current === target)
         setError(cause instanceof Error ? cause.message : "审批提交失败，请重试。");
@@ -53,12 +51,12 @@ export function AgentApprovals() {
           className="rounded-none border-0 shadow-none"
           state="request"
           title="工具执行审批"
-          subtitle="Agent 已暂停，以下操作需要你确认"
+          subtitle="以下操作尚未执行，允许后才会继续；此前完成的步骤不会重做"
           disabled={!!busy || !!sending || !!entry?.loading}
           details={approval.interrupts
             .flatMap((interrupt) => interrupt.value.action_requests)
             .map((action, index) => ({
-              label: `${action.name} · ${index + 1}`,
+              label: `${({ execute: "执行命令", write_file: "写入文件", edit_file: "修改文件" } as Record<string, string>)[action.name] ?? action.name} · ${index + 1}`,
               value: JSON.stringify(action.args, null, 2),
             }))}
           onAllowOnce={() => void answer(approval, "approve")}

@@ -1,3 +1,4 @@
+import { agentPath } from "@/features/agent/constants/agents";
 import { useNavigate } from "@tanstack/react-router";
 import { selectThreadById, useAgentStore } from "@/stores/agent";
 
@@ -37,7 +38,9 @@ import {
 
 export const ThreadList: FC<{ showNew?: boolean }> = ({ showNew = true }) => {
   const [search, setSearch] = useState("");
-  const hasThreads = useAuiState((s) => s.threads.threadIds.length > 0);
+  const hasThreads = useAgentStore((s) =>
+    Object.values(s.lists).some((rows) => rows?.some((row) => row.has_history)),
+  );
 
   return (
     <ThreadListRoot>
@@ -166,15 +169,22 @@ export type ThreadListGroup = { label: string; indices: number[] };
 export const useThreadListGroups = (searchQuery = "") => {
   const threadIds = useAuiState((s) => s.threads.threadIds);
   const threadItems = useAuiState((s) => s.threads.threadItems);
+  const lists = useAgentStore((s) => s.lists);
 
   const query = searchQuery.trim().toLowerCase();
   const startOfToday = useStartOfToday();
 
   return useMemo(() => {
     const itemsById = new Map(threadItems.map((item) => [item.id, item]));
+    const visible = new Set(
+      Object.values(lists).flatMap((rows) =>
+        (rows ?? []).filter((row) => row.has_history).map((row) => row.id),
+      ),
+    );
     const dates = threadIds.map((id) => itemsById.get(id)?.lastMessageAt);
     const filteredIndices = threadIds
       .map((id, index) => ({ id, index }))
+      .filter(({ id }) => visible.has(itemsById.get(id)?.remoteId ?? id))
       .filter(
         ({ id }) => !query || (itemsById.get(id)?.title || "新对话").toLowerCase().includes(query),
       )
@@ -200,7 +210,7 @@ export const useThreadListGroups = (searchQuery = "") => {
       }
     }
     return { threadIds, filteredIndices, groups: result };
-  }, [threadIds, threadItems, query, startOfToday]);
+  }, [threadIds, threadItems, lists, query, startOfToday]);
 };
 
 const ThreadListItemGroups: FC<{ searchQuery?: string }> = ({ searchQuery = "" }) => {
@@ -321,7 +331,7 @@ export const ThreadListItem: FC = () => {
       const code = await selectThreadById(id);
       useAppStore.getState().setAgentId(code);
       await aui.threadListItem.switchTo();
-      await navigate({ to: code === "product" ? "/product" : "/" });
+      await navigate({ to: agentPath(code) });
     } catch (cause) {
       setOpenError(cause instanceof Error ? cause.message : "打开会话失败，请重试。");
     } finally {
