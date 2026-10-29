@@ -1,6 +1,6 @@
 {
   "name": "@dp-work/desktop",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "private": true,
   "description": "企业 Agent 平台桌面客户端",
   "author": "DP Work",
