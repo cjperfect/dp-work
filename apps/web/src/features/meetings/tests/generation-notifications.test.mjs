@@ -6,7 +6,7 @@ import {
   finishGenerations,
   forgetGeneration,
   useMeetingGenerationStore,
-} from "../../../stores/meeting-generation.ts";
+} from "../../../stores/meeting/meeting-generation.ts";
 import { emptyWorkspace } from "../../../apis/meetings.ts";
 import { subscribeGenerationEvents } from "../lib/generation-events.ts";
 

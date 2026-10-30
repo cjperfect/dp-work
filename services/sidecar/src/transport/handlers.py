@@ -271,6 +271,11 @@ class SkillInstall(SkillsAgent):
     source: str = Field(min_length=1, max_length=512)
 
 
+class SkillUpload(SkillsAgent):
+    filename: str = Field(min_length=1, max_length=256)
+    content_base64: str = Field(min_length=1, max_length=12 * 1024 * 1024)
+
+
 class SkillUninstall(SkillsAgent):
     skill_id: str = Field(min_length=1, max_length=256)
 
@@ -286,6 +291,13 @@ async def skill_operation(operation, params):
         if operation == "search":
             body = SkillsSearch.model_validate(params)
             return {"items": await service.search(body.query)}
+        if operation == "upload":
+            body = SkillUpload.model_validate(params)
+            try:
+                content = base64.b64decode(body.content_base64, validate=True)
+            except (ValueError, binascii.Error) as cause:
+                raise service.SkillError("技能文件编码无效。") from cause
+            return await service.upload(body.agent_code, body.filename, content)
         body = (SkillInstall if operation == "install" else SkillUninstall if operation == "uninstall" else SkillsAgent).model_validate(params)
         if operation == "list":
             return {"items": await service.file_operation(service.installed, body.agent_code)}
@@ -416,6 +428,7 @@ HANDLERS = {
     "skills.search": skills_search,
     "skills.descriptions": skills_descriptions,
     "skills.list": skills_list,
+    "skills.upload": lambda params, state: skill_operation("upload", params),
     "skills.install": skills_install,
     "skills.uninstall": skills_uninstall,
     "agents.chat": agent_chat,
@@ -459,7 +472,24 @@ HANDLERS.update({method: partial(session_operation, method.removeprefix("session
 
 async def dispatch(method, params, state):
     """方法名直接对应处理函数，不经过 HTTP 路由。"""
-    return await HANDLERS[method](params, state)
+    from ..usage.ledger import scope
+    params = dict(params)
+    owner = params.pop('_usage_owner_id', None) or params.get('owner_id') or params.get('workspace_owner_id')
+    category = {'agents.title':'title', 'meetings.minutes.generate':'minutes', 'knowledge.embed':'embedding'}.get(method, 'agent')
+    reference = params.get('run_id') or params.get('task_id') or params.get('thread_id')
+    with scope(owner, category, reference):
+        result = await HANDLERS[method](params, state)
+    if isinstance(result, EventStream):
+        events = result.events
+        async def metered():
+            with scope(owner, category, reference):
+                try:
+                    async for event in events:
+                        yield event
+                finally:
+                    await events.aclose()
+        result.events = metered()
+    return result
 
 
 class MemoryInput(BaseModel):
@@ -490,3 +520,14 @@ async def memory_operation(action, params, state):
 
 
 HANDLERS.update({method: partial(memory_operation, method.removeprefix('memory.')) for method in METHODS if method.startswith('memory.')})
+
+
+async def usage_summary(params, state):
+    from ..usage.ledger import summary
+    owner = params.get('owner_id')
+    if type(owner) is not int or owner <= 0:
+        raise OperationError(400, '用户身份无效。')
+    return await asyncio.to_thread(summary, owner)
+
+
+HANDLERS['usage.summary'] = usage_summary

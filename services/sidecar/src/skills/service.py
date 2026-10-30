@@ -201,7 +201,7 @@ def extract_skill(archive, requested, destination):
             if not path.is_relative_to(parent):
                 continue
             relative = path.relative_to(parent)
-            if path.is_absolute() or ".." in path.parts or "\\" in entry.filename or stat.S_ISLNK(entry.external_attr >> 16):
+            if any(":" in part for part in path.parts) or path.is_absolute() or ".." in path.parts or "\\" in entry.filename or stat.S_ISLNK(entry.external_attr >> 16):
                 raise SkillError("技能包含不支持的路径或符号链接。")
             if entry.is_dir():
                 continue
@@ -271,3 +271,47 @@ async def uninstall(agent_code, skill_id):
     """删除操作与安装共用 Agent 锁，取消时等待线程清理完成。"""
     async with LOCKS.setdefault(agent_code, asyncio.Lock()):
         return await file_operation(remove_install, agent_code, skill_id)
+
+
+def commit_upload(agent_code, filename, content):
+    """校验上传技能，原子安装且不覆盖已有技能。"""
+    if not content or len(content) > 8 * 1024 * 1024:
+        raise SkillError('上传技能不能为空，且不能超过 8 MB。', 413)
+    if filename.lower() == 'skill.md':
+        item = metadata(content)
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w') as bundle:
+            bundle.writestr('SKILL.md', content)
+        archive = buffer.getvalue()
+    elif filename.lower().endswith('.zip'):
+        archive = content
+        try:
+            with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
+                entries = bundle.infolist()
+                if len(entries) > 300 or sum(entry.file_size for entry in entries) > 8 * 1024 * 1024:
+                    raise SkillError('技能 ZIP 不能超过 300 个文件或解压后 8 MB。', 413)
+                manifests = [entry for entry in entries if PurePosixPath(entry.filename).name == 'SKILL.md']
+                if len(manifests) != 1 or manifests[0].file_size > 256 * 1024:
+                    raise SkillError('ZIP 中必须包含唯一的 SKILL.md。')
+                item = metadata(bundle.read(manifests[0]))
+        except (zipfile.BadZipFile, RuntimeError, OSError) as cause:
+            raise SkillError('无法读取技能 ZIP，请检查文件是否损坏或加密。') from cause
+    else:
+        raise SkillError('仅支持 SKILL.md 或技能 ZIP。')
+    root, name = skill_directory(agent_code), item['name']
+    if (root / name).exists() or (root / name).is_symlink():
+        raise SkillError('同名技能已存在，请先卸载后再上传。', 409)
+    config.TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='skill-upload-', dir=config.TEMP_DIR) as temporary:
+        stage = Path(temporary) / name
+        stage.mkdir()
+        extract_skill(archive, name, stage)
+        (stage / '.dp-work-skill.json').write_text(json.dumps({'source': ''}), encoding='utf-8')
+        stage.rename(root / name)
+    return {**item, 'id': name, 'source': '', 'url': ''}
+
+
+async def upload(agent_code, filename, content):
+    """上传和市场安装共用 Agent 锁。"""
+    async with LOCKS.setdefault(agent_code, asyncio.Lock()):
+        return await file_operation(commit_upload, agent_code, filename, content)

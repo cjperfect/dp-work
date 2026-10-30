@@ -6,7 +6,7 @@ import {
   loadApprovals,
   markApprovalDecided,
   useAgentApprovalStore,
-} from "../../../stores/agent-approvals.ts";
+} from "../../../stores/agent/agent-approvals.ts";
 
 let originalStorage, originalWindow, interceptor;
 let handler;

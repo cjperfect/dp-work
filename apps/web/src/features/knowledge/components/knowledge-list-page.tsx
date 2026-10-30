@@ -1,3 +1,4 @@
+import type { StoredKnowledgeBase } from "@/interfaces/knowledge";
 import { localAccountId } from "@/features/auth/lib/auth";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { debounce } from "es-toolkit/function";
@@ -19,7 +20,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useAuthStore } from "@/stores/auth";
 import { useKnowledgeBasePage } from "@/features/knowledge/hooks/use-knowledge-base-page";
 import { createKnowledgeBase, deleteKnowledgeBase, updateKnowledgeBase } from "@/stores/knowledge";
-import type { StoredKnowledgeBase } from "@/types/knowledge";
 
 export function KnowledgePage() {
   const user = useAuthStore((state) => state.user);

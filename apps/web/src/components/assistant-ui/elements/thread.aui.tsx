@@ -11,7 +11,6 @@ import { ModelPicker } from "./model-picker";
 import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import {
   ChatComposerInput,
-  ChatSaveError,
   MessageKnowledgeContext,
 } from "@/features/agent/components/chat-composer";
 import {
@@ -469,7 +468,6 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
         >
           <ComposerAttachments />
           <ChatComposerInput autoFocus={autoFocus} />
-          <ChatSaveError />
           <ComposerAction />
         </ComposerPrimitive.AttachmentDropzone>
       </div>

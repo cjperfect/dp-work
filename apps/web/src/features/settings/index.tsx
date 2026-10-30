@@ -1,6 +1,8 @@
+import type { PersonalSettings } from "@/interfaces/settings";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ChevronRight,
+  ChartNoAxesColumn,
   Cpu,
   LoaderCircle,
   Mic,
@@ -15,9 +17,10 @@ import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/stores/auth";
 import { usePreferences, updatePreferences, type Theme } from "@/stores/preferences";
 import { getSettings } from "@/apis/settings";
-import type { PersonalSettings } from "@/types/settings";
+
 import { Row, Group } from "./components/settings-fields";
 import { ServiceForm } from "./components/service-form";
+import { UsageSummary } from "./components/usage-summary";
 const errorMessage = (cause: unknown) =>
   cause instanceof Error ? cause.message : "操作失败，请重试。";
 
@@ -26,6 +29,7 @@ const sections = [
   { id: "appearance", zh: "外观", icon: Palette },
   { id: "model", zh: "模型服务", icon: Cpu },
   { id: "asr", zh: "会议转写", icon: Mic },
+  { id: "usage", zh: "用量统计", icon: ChartNoAxesColumn },
 ] as const;
 type SectionId = (typeof sections)[number]["id"];
 export function SettingsPage() {
@@ -42,13 +46,14 @@ export function SettingsPage() {
     setData(null);
     setLoadError("");
     if (user?.id)
-      void getSettings()
-        .then((value) => {
+      void (async () => {
+        try {
+          const value = await getSettings();
           if (alive) setData(value);
-        })
-        .catch((cause) => {
+        } catch (cause) {
           if (alive) setLoadError(errorMessage(cause));
-        });
+        }
+      })();
     return () => {
       alive = false;
     };
@@ -222,6 +227,12 @@ export function SettingsPage() {
               )}
             </div>
           ))}
+          {section(
+            "usage",
+            "用量统计",
+            "按能力查看当前账号的本机累计用量与估算费用。",
+            <UsageSummary />,
+          )}
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
-import { elapsed } from "@/apis/meetings";
 import type { Draft } from "./workspace-storage";
+import { elapsed } from "@/apis/meetings";
+
 export function confirmTemporary(draft: Draft): Draft {
   const text = draft.temporary.text.trim();
   if (!text) return draft;

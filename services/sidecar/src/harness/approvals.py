@@ -13,7 +13,7 @@ from ..providers.llm.schemas import ModelError
 from .tool_policy import needs_approval
 
 GATED_TOOLS = {name: {"allowed_decisions": ["approve", "reject"], "when": needs_approval}
-               for name in ("write_file", "edit_file", "execute")}
+               for name in ("write_file", "edit_file", "execute", "feishu_create_document")}
 LOCKS = WeakValueDictionary()
 log = logging.getLogger(__name__)
 

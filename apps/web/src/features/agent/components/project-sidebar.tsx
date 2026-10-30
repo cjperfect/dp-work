@@ -1,4 +1,5 @@
-import { agentPath } from "@/features/agent/constants/agents";
+import type { AgentProject, ChatThread } from "@/interfaces/agent";
+import { agentPath } from "@/constants/agents";
 import { useMemo, useState } from "react";
 import { ThreadListPrimitive, useAui, useAuiState } from "@assistant-ui/react";
 import { useNavigate } from "@tanstack/react-router";
@@ -7,14 +8,13 @@ import { ThreadListItem, ThreadListRoot } from "@/components/assistant-ui/elemen
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/components/ui/sidebar";
-import { deleteProject, loadProjects } from "@/stores/agent-projects";
+import { deleteProject, loadProjects } from "@/stores/agent/agent-projects";
 import { createThread, selectThreadById, useAgentStore } from "@/stores/agent";
 import { useAppStore } from "@/stores/app";
 import { useAuthStore } from "@/stores/auth";
 import { useProjects } from "../hooks/use-projects";
 import { useAgentCode } from "../hooks/use-agent-code";
-import type { AgentProject } from "@/apis/agent-projects";
-import type { ChatThread } from "@/types/agent";
+
 import { CreateProjectDialog } from "./create-project-dialog";
 
 export function ProjectSidebar() {

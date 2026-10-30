@@ -118,3 +118,28 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const response = await httpClient.request<T>({ ...config, url: path, requiresAuth: auth });
   return response.data;
 }
+
+/** 各方法共用拦截器；返回已解包的业务数据，而非 AxiosResponse。 */
+type MethodOptions = Omit<RequestOptions, "method" | "data">;
+
+export const get = <T = unknown>(path: string, options?: MethodOptions): Promise<T> =>
+  request<T>(path, { ...options, method: "GET" });
+export const post = <T = unknown>(
+  path: string,
+  data?: unknown,
+  options?: MethodOptions,
+): Promise<T> => request<T>(path, { ...options, method: "POST", data });
+export const put = <T = unknown>(
+  path: string,
+  data?: unknown,
+  options?: MethodOptions,
+): Promise<T> => request<T>(path, { ...options, method: "PUT", data });
+export const patch = <T = unknown>(
+  path: string,
+  data?: unknown,
+  options?: MethodOptions,
+): Promise<T> => request<T>(path, { ...options, method: "PATCH", data });
+const deleteRequest = <T = unknown>(path: string, options?: MethodOptions): Promise<T> =>
+  request<T>(path, { ...options, method: "DELETE" });
+
+export const http = { get, post, put, patch, delete: deleteRequest };

@@ -137,7 +137,7 @@ GitHub Actions 中显示为“桌面客户端打包与发布”，构建任务�
 | Secret              | `APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID` | Apple 公证                                                                             |
 | Secret              | `WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD`                     | Windows 代码签名证书 PFX（可用 Base64）及密码                                          |
 
-创建名为 `desktop-release` 的 GitHub Environment，可配置审批人保护草稿上传阶段。证书缺失时发布工作流明确失败，不悄悄生成未签名的正式更新。所有平台构建成功后才汇总产物，核验清单版本、文件大小和 SHA-512，并合并 Mac 双架构的 `latest-mac.yml`，防止两个构建覆盖同一更新清单。
+创建名为 `desktop-release` 的 GitHub Environment，可配置审批人保护草稿上传阶段。默认使用未签名测试模式，不要求证书；macOS 使用无需开发者证书的 ad-hoc 签名且不公证，Windows 不做证书签名。文件名带 `unsigned`，Release 为标记预发布的草稿，正式客户端不检测这类版本。手动运行工作流时勾选 `signed`，或将仓库 Variable `DESKTOP_SIGNED_RELEASE` 设为 `true`，可启用正式签名模式；此时缺失证书会明确失败。测试版和正式版使用不同版本及 Tag。所有平台构建成功后才汇总产物，核验清单版本、文件大小和 SHA-512，并合并 Mac 双架构的 `latest-mac.yml`，防止两个构建覆盖同一更新清单。
 
 发布权限使用 Actions 的 `GITHUB_TOKEN`（仅草稿 job 的 `contents: write`），不会写入客户端。工作流只创建/更新 **Draft Release**，不会自动公开；不会覆盖已有正式 Release。验收完成后，在 GitHub 手动发布草稿，客户端才会检测到更新。普通 `package` 和 `package:dir` 显式使用 `--publish never`，避免本机构建因 CI 环境或 Token 意外上传。
 

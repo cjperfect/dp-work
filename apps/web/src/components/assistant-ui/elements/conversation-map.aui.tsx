@@ -1,7 +1,8 @@
+import type { ThreadMessage } from "@assistant-ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuiState, useThreadViewport } from "@assistant-ui/react";
-import type { ThreadMessage } from "@assistant-ui/react";
+
 import { cn } from "@/lib/utils";
 import { ConversationMap, type ConversationMapEntry } from "./conversation-map";
 

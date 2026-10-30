@@ -216,7 +216,12 @@ export class DeviceBridge {
       )
         throw new Error("执行任务格式无效。");
       timer = setTimeout(() => controller.abort(), job.timeout_seconds * 1000);
-      const response = await this.executeLocal(job, controller.signal);
+      const identity = this.getIdentity();
+      if (!identity) throw new Error("本机账号已退出。");
+      const response = await this.executeLocal(
+        { ...job, params: { ...job.params, _usage_owner_id: identity.owner } },
+        controller.signal,
+      );
       await this.send(
         ws,
         {

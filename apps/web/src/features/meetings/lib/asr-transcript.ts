@@ -1,6 +1,5 @@
 import type { WsAsrTranscript } from "@dp-work/protocols/asr";
 import type { Draft } from "./workspace-storage";
-
 /** 按片段 ID 和版本合并转写，确认片段不被临时结果覆盖。 */
 export function applyAsrTranscript(draft: Draft, message: WsAsrTranscript): Draft {
   if (draft.meeting.id !== message.meetingId) return draft;

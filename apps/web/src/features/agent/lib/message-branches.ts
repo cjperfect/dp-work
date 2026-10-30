@@ -1,9 +1,10 @@
+import type { ChatMessage, MessageBranch } from "@/interfaces/agent";
 import {
   fromThreadMessageLike,
   type ThreadMessage,
   type ThreadAssistantMessagePart,
 } from "@assistant-ui/react";
-import type { ChatMessage, MessageBranch } from "@/types/agent";
+
 import { imagePreview } from "@/apis/chat-images";
 
 /** 将业务消息转换为 assistant-ui 的完整消息结构。 */

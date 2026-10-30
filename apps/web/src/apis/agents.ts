@@ -1,42 +1,30 @@
-import { request } from "@/lib/http";
-import { getAccessToken, useAuthStore } from "@/stores/auth";
+import type { LocalProject } from "@dp-work/protocols/desktop";
+import type {
+  ReasoningEvent,
+  SteeringEvent,
+  AgentModels,
+  AgentChatInput,
+  AgentRuntimeConfig,
+  ToolExecution,
+  FileChange,
+  AgentApproval,
+  ChatThread,
+  AgentProject,
+  ThreadDetail,
+} from "@/interfaces/agent";
 import type { AgentId } from "@/interfaces/app";
-export type ReasoningEvent = {
-  id: string;
-  text?: string;
-  started_at: number;
-  completed_at?: number;
-};
-import type { ChatThread, ChatMessage, ToolExecution, FileChange } from "@/types/agent";
+import { http } from "@/lib/http";
+import { getAccessToken, useAuthStore } from "@/stores/auth";
 
-export type SteeringEvent = {
-  id: string;
-  response_id: string;
-  previous_response_id: string;
-  previous_content: string;
-  previous_removed: boolean;
-  thread: ChatThread;
-  message: ChatMessage;
-  response: ChatMessage;
-};
+/** 向正在执行的 Agent 提交引导消息。 */
 export const steerAgentRun = (threadId: string, id: string, content: string) =>
-  request<{ id: string; status: "queued" | "applied" }>(`/api/agents/threads/${threadId}/steer`, {
-    method: "POST",
-    data: { id, content },
+  http.post<{ id: string; status: "queued" | "applied" }>(`/api/agents/threads/${threadId}/steer`, {
+    id,
+    content,
   });
 
-export type AgentModels = { configured: boolean; models: { id: string; name: string }[] };
-export const getAgentModels = () => request<AgentModels>("/api/agents/models");
-export type AgentChatInput = {
-  approval_request?: { id: string; decision: "approve" | "reject" };
-  response_id?: string;
-  expected_revision?: number;
-  agent_code: AgentId;
-  thread_id: string;
-  messages: { role: "user" | "assistant"; content: string }[];
-  model?: string;
-  knowledge_base_ids?: number[];
-};
+/** 获取当前账号可用的模型列表。 */
+export const getAgentModels = () => http.get<AgentModels>("/api/agents/models");
 
 /** 使用统一 Axios 客户端读取 SSE；缺少 done 或流中断均视为未完成。 */
 export async function streamAgentChat(
@@ -48,25 +36,31 @@ export async function streamAgentChat(
   onTool?: (trace: ToolExecution) => void,
   onFileChange?: (change: FileChange) => void,
   onReasoning?: (event: ReasoningEvent) => void,
-  onUsage?: (usage: import("@/types/agent").RunUsage) => void,
+  onUsage?: (usage: import("@/interfaces/agent").RunUsage) => void,
 ): Promise<string | null> {
   const owner = useAuthStore.getState().user?.id;
   const token = getAccessToken();
-  const stream = await request<ReadableStream<Uint8Array>>(
-    input.approval_request
-      ? `/api/agents/approvals/${input.approval_request.id}/decide`
-      : input.response_id
-        ? `/api/agents/threads/${input.thread_id}/chat`
-        : "/api/agents/chat",
-    {
-      method: "POST",
-      data: input.approval_request ? { decision: input.approval_request.decision } : input,
-      adapter: "fetch",
-      responseType: "stream",
-      signal,
-      timeout: 240000,
-    },
-  );
+  let url: string;
+  let data: AgentChatInput | { decision: "approve" | "reject" };
+
+  if (input.approval_request) {
+    // 提交审批决定，继续原任务。
+    url = `/api/agents/approvals/${input.approval_request.id}/decide`;
+    data = { decision: input.approval_request.decision };
+  } else {
+    // 普通聊天必须关联已保存的回复记录。
+    if (!input.response_id) throw new Error("回复记录缺失，请重新发送消息。");
+    url = `/api/agents/threads/${input.thread_id}/chat`;
+    data = input;
+  }
+
+  // 审批续接和普通聊天共用流式事件读取逻辑。
+  const stream = await http.post<ReadableStream<Uint8Array>>(url, data, {
+    adapter: "fetch",
+    responseType: "stream",
+    signal,
+    timeout: 240000,
+  });
   if (!stream || typeof stream.getReader !== "function")
     throw new Error("Agent 返回了无效的事件流。");
   const reader = stream.getReader();
@@ -74,6 +68,7 @@ export async function streamAgentChat(
   let buffer = "";
   let completed: string | null = null;
   let paused = false;
+  /** 解析并分发一条 SSE 事件。 */
   const consume = (frame: string) => {
     const data = frame
       .split("\n")
@@ -122,15 +117,13 @@ export async function streamAgentChat(
 /** 停止服务端运行并释放会话执行锁，再开始下一条消息。 */
 export async function stopAgentRun(threadId: string, responseId?: string, runId?: string) {
   if (!runId) {
-    const page = await request<{ item: { id: string; response_id: string }[] }>(
+    const page = await http.get<{ item: { id: string; response_id: string }[] }>(
       "/api/agents/runs",
-      {
-        params: { conversation_id: threadId, status: "running", page: 1, page_size: 20 },
-      },
+      { params: { conversation_id: threadId, status: "running", page: 1, page_size: 20 } },
     );
     runId = page?.item?.find((row) => row.response_id === responseId)?.id;
   }
-  if (runId) await request(`/api/agents/runs/${runId}/cancel`, { method: "POST" });
+  if (runId) await http.post(`/api/agents/runs/${runId}/cancel`);
 }
 
 /** 调用后端 LLM 生成会话标题，再由会话接口保存。 */
@@ -139,15 +132,51 @@ export function generateAgentTitle(input: {
   messages: { role: "user" | "assistant"; content: string }[];
   model?: string;
 }): Promise<{ title: string }> {
-  return request("/api/agents/title", { method: "POST", data: input, timeout: 45000 });
+  return http.post("/api/agents/title", input, { timeout: 45000 });
 }
 
-export type AgentRuntimeConfig = { agent_code: AgentId; prompt: string; prompt_file: string };
+/** 读取指定 Agent 的提示词配置。 */
 export const getAgentConfig = (code: AgentId, signal?: AbortSignal) =>
-  request<AgentRuntimeConfig>("/api/agents/config", { params: { agent_code: code }, signal });
+  http.get<AgentRuntimeConfig>("/api/agents/config", { params: { agent_code: code }, signal });
 
+/** 保存 Agent 提示词并校验旧版本。 */
 export const updateAgentConfig = (code: AgentId, prompt: string, expectedPrompt: string) =>
-  request<AgentRuntimeConfig>("/api/agents/config", {
-    method: "PUT",
-    data: { agent_code: code, prompt, expected_prompt: expectedPrompt },
+  http.put<AgentRuntimeConfig>("/api/agents/config", {
+    agent_code: code,
+    prompt,
+    expected_prompt: expectedPrompt,
   });
+
+/** 查询当前会话的工具审批记录。 */
+export const listAgentApprovals = (threadId: string) =>
+  http.get<AgentApproval[]>("/api/agents/approvals", { params: { conversation_id: threadId } });
+
+/** 从本机快照恢复一次文件修改，不上传文件正文。 */
+export const undoAgentFile = (threadId: string, changeId: string) =>
+  http.post<{ change: FileChange; thread: ChatThread }>(
+    `/api/agents/threads/${threadId}/files/${changeId}/undo`,
+  );
+
+const projectsPath = "/api/agents/projects";
+/** 获取当前账号的本机项目列表。 */
+export const listProjects = () => http.get<AgentProject[]>(projectsPath);
+/** 登记用户选择的本机项目目录。 */
+export const createProject = (project: LocalProject) =>
+  http.post<AgentProject>(projectsPath, {
+    id: project.id,
+    name: project.name,
+    path: project.path,
+    device_id: project.device_id,
+  });
+/** 修改本机项目名称。 */
+export const renameProject = (id: string, name: string) =>
+  http.patch<AgentProject>(`${projectsPath}/${id}`, { name });
+/** 移除项目记录，保留用户目录。 */
+export const removeProject = (id: string) => http.delete<null>(`${projectsPath}/${id}`);
+/** 调整会话关联的项目。 */
+export const setConversationProject = (
+  id: string,
+  project_id: string | null,
+  expected_revision: number,
+) =>
+  http.patch<ThreadDetail>(`/api/agents/threads/${id}/project`, { project_id, expected_revision });

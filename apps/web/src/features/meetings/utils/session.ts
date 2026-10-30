@@ -3,7 +3,7 @@
  *
  * 会议会话状态持久化到 sessionStorage，页面意外重挂载 / 刷新后完整恢复。
  */
-import { SESSION_KEY } from "@/features/meetings/constants/meeting";
+import { SESSION_KEY } from "@/constants/meeting";
 
 /** 会议会话状态：持久化到 sessionStorage，页面意外重挂载 / 刷新后完整恢复 */
 export type MeetingSession = {

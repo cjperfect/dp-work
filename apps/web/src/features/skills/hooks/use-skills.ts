@@ -1,8 +1,10 @@
-import { useEffect } from "react";
 import type { AgentId } from "@/interfaces/app";
+import type { InstalledSkill } from "@/interfaces/skills";
+import { useEffect } from "react";
+
 import { useAuthStore } from "@/stores/auth";
 import { loadSkills, useSkillsStore } from "@/stores/skills";
-import type { InstalledSkill } from "@/apis/skills";
+
 const empty: InstalledSkill[] = [];
 
 export function useSkills(code: AgentId) {

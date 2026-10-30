@@ -1,7 +1,7 @@
+import type { CatalogSkill, InstalledSkill } from "@/interfaces/skills";
 import { ExternalLink, Loader2, Package, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { CatalogSkill, InstalledSkill } from "@/apis/skills";
 
 type Props = {
   skill: CatalogSkill | InstalledSkill;

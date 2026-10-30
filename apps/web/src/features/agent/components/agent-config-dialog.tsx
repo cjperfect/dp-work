@@ -1,3 +1,4 @@
+import type { AgentRuntimeConfig, AgentConfig } from "@/interfaces/agent";
 import { useEffect, useState } from "react";
 import { Loader2, Settings2 } from "lucide-react";
 import { toast } from "sonner";
@@ -12,8 +13,7 @@ import {
   DialogFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getAgentConfig, updateAgentConfig, type AgentRuntimeConfig } from "@/apis/agents";
-import type { AgentConfig } from "@/types/agent";
+import { getAgentConfig, updateAgentConfig } from "@/apis/agents";
 
 /** 打开时读取当前设备的配置，不在聊天初始化时请求。 */
 export function AgentConfigDialog({ agent }: { agent: AgentConfig }) {
@@ -30,17 +30,18 @@ export function AgentConfigDialog({ agent }: { agent: AgentConfig }) {
     setConfig(null);
     setError(null);
     setSaveError(null);
-    void getAgentConfig(agent.code, controller.signal)
-      .then((result) => {
+    void (async () => {
+      try {
+        const result = await getAgentConfig(agent.code, controller.signal);
         if (!controller.signal.aborted) {
           setConfig(result);
           setDraft(result.prompt);
         }
-      })
-      .catch((cause: unknown) => {
+      } catch (cause: unknown) {
         if (!controller.signal.aborted)
           setError(cause instanceof Error ? cause.message : "配置读取失败");
-      });
+      }
+    })();
     return () => controller.abort();
   }, [agent.code, open, revision]);
   async function save() {

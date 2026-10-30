@@ -1,6 +1,6 @@
+import type { AuthUser, CredentialErrors } from "@/interfaces/auth";
 import { redirect } from "@tanstack/react-router";
 import { useAuthStore, safeRedirect } from "@/stores/auth";
-import type { AuthUser, CredentialErrors } from "@/types/auth";
 
 /** 登录和注册均只检查必填项，不限制长度。 */
 export function validateCredentials(username: string, password: string): CredentialErrors {

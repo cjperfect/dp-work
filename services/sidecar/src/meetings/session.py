@@ -1,6 +1,7 @@
 """单次会议转写会话。"""
 import asyncio
 import logging
+import time
 
 from starlette.websockets import WebSocketDisconnect
 from uuid import uuid4
@@ -10,7 +11,10 @@ from ..providers.asr.doubao import AsrProviderError, DoubaoRecognizer
 
 
 class AsrSession:
-    def __init__(self, meeting_id, send, provider=None, *, next_seq=0, offset_ms=0):
+    def __init__(self, meeting_id, send, provider=None, *, next_seq=0, offset_ms=0, owner_id=None):
+        self.owner_id = owner_id
+        self.audio_bytes = 0
+        self.last_usage_save = time.monotonic()
         self.provider = provider or DoubaoRecognizer()
         self.meeting_id = meeting_id
         self.session_id = str(uuid4())
@@ -88,6 +92,16 @@ class AsrSession:
 
     async def send_audio(self, audio):
         await self.provider.send_audio(audio)
+        self.audio_bytes += len(audio)
+        if time.monotonic() - self.last_usage_save >= 5:
+            await self.save_usage('partial')
+            self.last_usage_save = time.monotonic()
+
+    async def save_usage(self, status='reported'):
+        if self.owner_id and self.audio_bytes:
+            from ..usage.ledger import write
+            await asyncio.to_thread(write, 'asr:' + self.session_id, 'doubao-asr', status=status,
+                                    seconds=self.audio_bytes / 32000, owner=self.owner_id, category='asr', reference=self.meeting_id)
 
     async def close(self):
         """释放识别任务。"""
@@ -99,4 +113,7 @@ class AsrSession:
                 await self.task
             except asyncio.CancelledError:
                 pass
-        await self.provider.close()
+        try:
+            await self.provider.close()
+        finally:
+            await self.save_usage()

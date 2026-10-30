@@ -1,9 +1,9 @@
+import type { RecordProvider } from "../lib/record-provider";
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuthStore } from "@/stores/auth";
 import { useRecordCollaborators } from "../hooks/use-record-collaborators";
 import { collaboratorColor, collaboratorInitials } from "../lib/collaboration-cursor";
-import type { RecordProvider } from "../lib/record-provider";
 
 /** 展示此文档当前在线的协作者，包括自己。 */
 export function RecordCollaborators({

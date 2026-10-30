@@ -5,7 +5,7 @@ import {
   finishGenerations,
   trackGenerations,
   useMeetingGenerationStore,
-} from "@/stores/meeting-generation";
+} from "@/stores/meeting/meeting-generation";
 import { useGenerationEvents } from "../hooks/use-generation-events";
 
 /** 登录期间在全局显示生成结果，路由切换不中断订阅。 */

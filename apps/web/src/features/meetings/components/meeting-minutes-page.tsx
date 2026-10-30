@@ -23,7 +23,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { duration, elapsed, generateMinutes, STATUS_LABELS } from "@/apis/meetings";
-import { useWorkspace, cacheServerWorkspace, loadWorkspace } from "@/stores/meetings";
+import { useWorkspace, cacheServerWorkspace, loadWorkspace } from "@/stores/meeting";
 import { readDraft } from "../lib/workspace-storage";
 import { minutesContent, originalMeetingContent } from "../lib/minutes-content";
 import { canEditMinutes, generationStatus, showOriginalMeeting } from "../lib/minutes-state";

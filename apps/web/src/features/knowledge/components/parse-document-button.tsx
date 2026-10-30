@@ -1,7 +1,7 @@
+import type { KbFile } from "@/interfaces/knowledge";
 import { Loader2, ScanText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDocumentParsing } from "../hooks/use-document-parsing";
-import type { KbFile } from "../constants/knowledge-data";
 
 export function ParseDocumentButton({
   baseId,

@@ -1,11 +1,11 @@
+import type { RunUsage as Usage } from "@/interfaces/agent";
 import { useAuiState } from "@assistant-ui/react";
 import { Gauge } from "lucide-react";
 import { CostMeter } from "@/components/assistant-ui/elements/cost-meter";
 import { formatTokenCount } from "@/components/assistant-ui/utils/tokens";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { uniqueRunUsage, usageLines, formatCost } from "../lib/usage";
-import type { RunUsage as Usage } from "@/types/agent";
+import { uniqueRunUsage, usageLines, formatCost, sessionTokenTotals } from "../lib/usage";
 
 /** 使用 assistant-ui Cost meter 展示供应商返回的实际 Token 和可选费用估算。 */
 export function RunUsage() {
@@ -23,7 +23,8 @@ export function RunUsageView({ usage, runs }: { usage: Usage; runs: readonly Usa
   const known = usage.reported_calls > 0;
   const tokens = formatTokenCount(usage.total_tokens);
   const cost = formatCost(usage.estimated_cost, usage.currency);
-  const total = runs.reduce((sum, run) => sum + run.total_tokens, 0);
+  const session = sessionTokenTotals(runs);
+  const suffix = usage.complete ? "" : "+";
   return (
     <Popover>
       <PopoverTrigger
@@ -33,7 +34,7 @@ export function RunUsageView({ usage, runs }: { usage: Usage; runs: readonly Usa
       >
         <Gauge className="size-3" />
         {known
-          ? `${tokens} Token${usage.complete ? "" : "+"}`
+          ? `输入 ${formatTokenCount(usage.input_tokens)}${suffix} · 输出 ${formatTokenCount(usage.output_tokens)}${suffix}`
           : usage.in_flight_calls
             ? "统计中…"
             : "用量未返回"}
@@ -48,21 +49,49 @@ export function RunUsageView({ usage, runs }: { usage: Usage; runs: readonly Usa
           className="max-w-none rounded-lg border-0 p-0 [&>div:first-child>span:first-child]:text-lg"
           runCost={cost ?? (known ? `${tokens} Token` : "未报告")}
           sessionCost={
-            runs.some((run) => run.reported_calls > 0)
-              ? `${formatTokenCount(total)} Token${runs.some((run) => !run.complete) ? "+" : ""}`
+            session.known
+              ? `${formatTokenCount(session.total)} Token${session.complete ? "" : "+"}`
               : "用量未返回"
           }
           lines={usageLines(usage)}
         />
+        <div className="grid grid-cols-2 gap-3 rounded-lg border p-3 text-xs">
+          <div className="space-y-2">
+            <p className="font-medium">本轮回复</p>
+            <p className="flex justify-between gap-2 text-muted-foreground">
+              <span>输入 Token</span>
+              <span className="text-foreground tabular-nums">
+                {known ? `${usage.input_tokens.toLocaleString()}${suffix}` : "—"}
+              </span>
+            </p>
+            <p className="flex justify-between gap-2 text-muted-foreground">
+              <span>输出 Token</span>
+              <span className="text-foreground tabular-nums">
+                {known ? `${usage.output_tokens.toLocaleString()}${suffix}` : "—"}
+              </span>
+            </p>
+          </div>
+          <div className="space-y-2 border-l pl-3">
+            <p className="font-medium">会话累计</p>
+            <p className="flex justify-between gap-2 text-muted-foreground">
+              <span>输入 Token</span>
+              <span className="text-foreground tabular-nums">
+                {session.known
+                  ? `${session.input.toLocaleString()}${session.complete ? "" : "+"}`
+                  : "—"}
+              </span>
+            </p>
+            <p className="flex justify-between gap-2 text-muted-foreground">
+              <span>输出 Token</span>
+              <span className="text-foreground tabular-nums">
+                {session.known
+                  ? `${session.output.toLocaleString()}${session.complete ? "" : "+"}`
+                  : "—"}
+              </span>
+            </p>
+          </div>
+        </div>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <dt>输入 Token</dt>
-          <dd className="text-end tabular-nums">
-            {known ? usage.input_tokens.toLocaleString() : "—"}
-          </dd>
-          <dt>输出 Token</dt>
-          <dd className="text-end tabular-nums">
-            {known ? usage.output_tokens.toLocaleString() : "—"}
-          </dd>
           <dt>缓存命中（包含在输入内）</dt>
           <dd className="text-end tabular-nums">
             {known && usage.cached_input_reported
@@ -101,7 +130,7 @@ export function RunUsageView({ usage, runs }: { usage: Usage; runs: readonly Usa
           {cost
             ? "费用根据本机配置的模型单价估算，以服务商账单为准。"
             : "未配置单价或统计不完整，仅展示已报告 Token。"}
-          模型条形图按 Token 占比展示。
+          输入包含上下文和工具结果；本轮包含同一次执行中的多次模型调用，引导拆出的回复共享该轮统计。会话累计仅计算当前分支，按运行去重；“+”表示统计尚不完整。
         </p>
       </PopoverContent>
     </Popover>

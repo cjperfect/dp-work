@@ -1,8 +1,9 @@
+import type { KbFile } from "@/interfaces/knowledge";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { localAccountId } from "@/features/auth/lib/auth";
 import { loadKnowledgeDocumentsRequest } from "@/apis/knowledge";
-import type { KbFile } from "@/features/knowledge/constants/knowledge-data";
+
 import { subscribeDocumentParseEvents } from "../lib/parse-events";
 import { DOCUMENTS_CHANGED } from "../lib/document-events";
 

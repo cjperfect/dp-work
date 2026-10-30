@@ -1,7 +1,7 @@
+import type { ChatImage } from "@/interfaces/agent";
 import { SimpleImageAttachmentAdapter, type Attachment } from "@assistant-ui/react";
 import { toast } from "sonner";
 import { saveChatImage } from "@/apis/chat-images";
-import type { ChatImage } from "@/types/agent";
 
 class LocalImageAdapter extends SimpleImageAttachmentAdapter {
   accept = "image/png,image/jpeg,image/webp";

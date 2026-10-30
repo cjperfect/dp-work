@@ -96,3 +96,10 @@ test("local streaming preserves chunks emitted before IPC response head resolves
   assert.match(await new Response(stream).text(), /local/);
   assert.equal(listeners.size, 0);
 });
+
+test("usage summary and skill uploads use native transport", async () => {
+  assert.equal(isLocalBusiness("/api/usage"), true);
+  await request("/api/usage");
+  assert.equal(calls[0].path, "/api/usage");
+  assert.equal(isLocalBusiness("/api/skills/upload"), true);
+});

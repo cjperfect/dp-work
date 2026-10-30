@@ -258,3 +258,18 @@ test("memory CRUD is local and Main injects the verified account", () => {
   }
   assert.throws(() => routeLocal("/api/memories/anything", "DELETE", {}, {}, owner, device));
 });
+
+test("skill uploads and usage summaries stay local and use verified identity", () => {
+  const upload = routeLocal(
+    "/api/skills/upload",
+    "POST",
+    {},
+    { agent_code: "general", filename: "SKILL.md", content_base64: "fixture" },
+    owner,
+    device,
+  );
+  assert.equal(upload.method, "skills.upload");
+  const usage = routeLocal("/api/usage", "GET", {}, { owner_id: 99 }, owner, device);
+  assert.equal(usage.method, "usage.summary");
+  assert.equal(usage.params.owner_id, owner);
+});

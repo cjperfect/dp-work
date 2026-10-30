@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { ModelSelector } from "./model-selector.aui";
 import { useAppStore } from "@/stores/app";
 import { useAuthStore } from "@/stores/auth";
-import { loadAgentModels, useAgentModelStore } from "@/stores/agent-models";
+import { loadAgentModels, useAgentModelStore } from "@/stores/agent/agent-models";
 import { Button } from "@/components/ui/button";
 
 const EMPTY_MODELS: { id: string; name: string }[] = [];

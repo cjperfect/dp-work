@@ -9,6 +9,10 @@ on:
         description: "已存在的版本标签，例如 v0.1.0"
         required: true
         type: string
+      signed:
+        description: "正式签名打包（需配置证书及 Apple 公证）"
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -42,6 +46,7 @@ jobs:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
       DESKTOP_API_BASE_URL: ${{ vars.DESKTOP_API_BASE_URL || 'http://localhost:8000' }}
       MEMORY_AUTO_ENABLED: "0"
+      SIGNED_RELEASE: ${{ inputs.signed == true || vars.DESKTOP_SIGNED_RELEASE == 'true' }}
     steps:
       - name: 检出指定版本代码
         uses: actions/checkout@v4
@@ -86,6 +91,10 @@ jobs:
           console.log(`发布版本：${version}；API 地址：${url.origin}${url.pathname}`);
           if (local) console.log("当前为本机测试包，使用前需在同一台电脑启动 API 服务（端口需与配置一致）");
           NODE
+          if [ "$SIGNED_RELEASE" != true ]; then
+            echo '未签名测试模式：跳过开发者证书与公证配置检查'
+            exit 0
+          fi
           if [ "$TARGET_PLATFORM" != linux ]; then
             test "$HAS_CERTIFICATE" = true || { echo '请配置对应平台的签名证书 Secret'; exit 1; }
             test "$HAS_PASSWORD" = true || { echo '请配置对应平台的证书密码 Secret'; exit 1; }
@@ -112,17 +121,27 @@ jobs:
         run: pnpm --filter @dp-work/desktop build:sidecar
       - name: 检查 Sidecar 独立程序
         run: pnpm --filter @dp-work/desktop smoke:sidecar
-      - name: 构建签名安装包与更新清单
+      - name: 构建安装包与更新清单
         env:
           TARGET_PLATFORM: ${{ matrix.platform }}
           TARGET_ARCH: ${{ matrix.arch }}
-          CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MAC_CSC_LINK || matrix.platform == 'win' && secrets.WIN_CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MAC_CSC_KEY_PASSWORD || matrix.platform == 'win' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ (inputs.signed == true || vars.DESKTOP_SIGNED_RELEASE == 'true') && (matrix.platform == 'mac' && secrets.MAC_CSC_LINK || matrix.platform == 'win' && secrets.WIN_CSC_LINK || '') || '' }}
+          CSC_KEY_PASSWORD: ${{ (inputs.signed == true || vars.DESKTOP_SIGNED_RELEASE == 'true') && (matrix.platform == 'mac' && secrets.MAC_CSC_KEY_PASSWORD || matrix.platform == 'win' && secrets.WIN_CSC_KEY_PASSWORD || '') || '' }}
+          APPLE_ID: ${{ (inputs.signed == true || vars.DESKTOP_SIGNED_RELEASE == 'true') && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ (inputs.signed == true || vars.DESKTOP_SIGNED_RELEASE == 'true') && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ (inputs.signed == true || vars.DESKTOP_SIGNED_RELEASE == 'true') && secrets.APPLE_TEAM_ID || '' }}
         run: |
-          if [ "$TARGET_PLATFORM" = mac ]; then
+          if [ "$SIGNED_RELEASE" != true ]; then
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            artifact='DP-Work-${version}-unsigned-${os}-${arch}.${ext}'
+            if [ "$TARGET_PLATFORM" = mac ]; then
+              pnpm --filter @dp-work/desktop exec electron-builder --mac "--$TARGET_ARCH" --publish never -c.forceCodeSigning=false -c.mac.identity=- -c.mac.notarize=false "-c.artifactName=$artifact"
+            elif [ "$TARGET_PLATFORM" = win ]; then
+              pnpm --filter @dp-work/desktop exec electron-builder --win "--$TARGET_ARCH" --publish never -c.forceCodeSigning=false "-c.artifactName=$artifact"
+            else
+              pnpm --filter @dp-work/desktop exec electron-builder --linux "--$TARGET_ARCH" --publish never "-c.artifactName=$artifact"
+            fi
+          elif [ "$TARGET_PLATFORM" = mac ]; then
             pnpm --filter @dp-work/desktop exec electron-builder --mac "--$TARGET_ARCH" --publish never -c.forceCodeSigning=true -c.mac.notarize=true
           elif [ "$TARGET_PLATFORM" = win ]; then
             pnpm --filter @dp-work/desktop exec electron-builder --win "--$TARGET_ARCH" --publish never -c.forceCodeSigning=true
@@ -152,6 +171,7 @@ jobs:
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
       GH_REPO: ${{ github.repository }}
+      SIGNED_RELEASE: ${{ inputs.signed == true || vars.DESKTOP_SIGNED_RELEASE == 'true' }}
     steps:
       - name: 检出指定版本代码
         uses: actions/checkout@v4
@@ -177,9 +197,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$RELEASE_TAG" --json isDraft > release-state.json 2>/dev/null; then
-            node -e 'if (!JSON.parse(require("fs").readFileSync("release-state.json")).isDraft) throw Error("Cannot modify an already published release");'
+          prerelease=false
+          title="DP Work $RELEASE_TAG"
+          notes='各平台签名安装包及更新清单。请完成实机安装、升级与沙箱验收后发布。'
+          if [ "$SIGNED_RELEASE" != true ]; then
+            prerelease=true
+            title="$title · 未签名测试版"
+            notes='未签名测试安装包，未经开发者证书签名与 Apple 公证；macOS 使用无需证书的 ad-hoc 签名。系统可能提示开发者未验证。默认连接本机 API，使用前需启动对应后端。本版本为预发布，不作为正式客户端自动更新版本。'
+          fi
+          export EXPECTED_PRERELEASE="$prerelease"
+          if gh release view "$RELEASE_TAG" --json isDraft,isPrerelease > release-state.json 2>/dev/null; then
+            node -e 'const r=JSON.parse(require("fs").readFileSync("release-state.json"));if(!r.isDraft)throw Error("Cannot modify an already published release");if(r.isPrerelease!==(process.env.EXPECTED_PRERELEASE==="true"))throw Error("草稿发布模式不同，请为测试版与正式版使用不同 Tag");'
           else
-            gh release create "$RELEASE_TAG" --verify-tag --draft --title "DP Work $RELEASE_TAG" --notes 'Native installers and update metadata. Complete installation, upgrade and sandbox acceptance before publishing.'
+            gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease="$prerelease" --title "$title" --notes "$notes"
           fi
           gh release upload "$RELEASE_TAG" release-assets/* --clobber

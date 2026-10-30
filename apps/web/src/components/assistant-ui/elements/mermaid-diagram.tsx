@@ -1,5 +1,5 @@
-import { useEffect, useId, useState, type FC } from "react";
 import type { SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
+import { useEffect, useId, useState, type FC } from "react";
 
 /**
  * Mermaid 图表（对应 assistant-ui mermaid-diagram 元素）：

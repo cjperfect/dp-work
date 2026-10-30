@@ -1,5 +1,5 @@
-import { create } from "zustand";
 import type { DesktopUpdateState } from "@dp-work/protocols/desktop";
+import { create } from "zustand";
 
 export const useDesktopUpdates = create<{
   open: boolean;
@@ -22,19 +22,20 @@ export function connectDesktopUpdates() {
   if (!bridge?.getUpdateState || !bridge.onUpdateState) return () => {};
   let alive = true,
     revision = 0;
+  const getUpdateState = bridge.getUpdateState;
   const dispose = bridge.onUpdateState((update) => {
     revision++;
     if (alive) receiveUpdate(update);
   });
-  void bridge
-    .getUpdateState()
-    .then((update) => {
+  void (async () => {
+    try {
+      const update = await getUpdateState();
       if (alive && revision === 0) receiveUpdate(update);
-    })
-    .catch(() => {
+    } catch {
       if (alive && revision === 0)
         useDesktopUpdates.setState({ error: "无法读取更新状态，请稍后重试。" });
-    });
+    }
+  })();
   return () => {
     alive = false;
     dispose();

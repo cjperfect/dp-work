@@ -1,5 +1,4 @@
-import type { KbFile } from "../constants/knowledge-data";
-
+import type { KbFile } from "@/interfaces/knowledge";
 type LegacyBase = { id: string; files?: KbFile[] };
 const storageKey = (accountId: string) => `dp-work:mock:v1:knowledge:${accountId}`;
 

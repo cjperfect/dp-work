@@ -1,3 +1,5 @@
+import type { AgentId } from "@/interfaces/app";
+import type { AgentConfig } from "@/interfaces/agent";
 import { useEffect, useState } from "react";
 import { BookOpen, Bot, Boxes, Palette, Package, Plug, Settings2 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
@@ -12,13 +14,12 @@ import { useKnowledgeBases } from "@/features/knowledge/hooks/use-knowledge-base
 import { useSkills } from "@/features/skills/hooks/use-skills";
 import { useConnectors } from "@/stores/connectors";
 import { useAuthStore } from "@/stores/auth";
-import type { AgentId } from "@/interfaces/app";
-import type { AgentConfig } from "@/types/agent";
+
 import { ensureAgentChat, saveAgent, useAgentStore } from "@/stores/agent";
 import { useAgentCode } from "@/features/agent/hooks/use-agent-code";
-import { agentPath } from "./constants/agents";
-export { AGENTS } from "./constants/agents";
-export type { AgentMeta } from "./constants/agents";
+import { agentPath } from "@/constants/agents";
+export { AGENTS } from "@/constants/agents";
+export type { AgentMeta } from "@/interfaces/agent";
 function AgentWelcome() {
   const code = useAgentCode();
   const agent = useAgentStore((state) => state.agents.find((row) => row.code === code));
@@ -41,11 +42,15 @@ const components = {
 };
 export function AgentPage({ agentId }: { agentId: AgentId }) {
   const owner = useAuthStore((state) => state.user?.id);
-  const state = useAgentStore();
-  const agent =
-    state.owner === owner ? state.agents.find((row) => row.code === agentId) : undefined;
-  const added = agentId === "general" || state.partnerCodes.includes(agentId);
-  const selected = state.selected[agentId];
+  const ownerMatched = useAgentStore((s) => s.owner === owner);
+  const agents = useAgentStore((s) => s.agents);
+  const partnerCodes = useAgentStore((s) => s.partnerCodes);
+  const selectedMap = useAgentStore((s) => s.selected);
+  const loading = useAgentStore((s) => s.loading);
+  const storeError = useAgentStore((s) => s.error);
+  const agent = ownerMatched ? agents.find((row) => row.code === agentId) : undefined;
+  const added = agentId === "general" || partnerCodes.includes(agentId);
+  const selected = selectedMap[agentId];
   const [error, setError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const needsChat = selected === null;
@@ -82,7 +87,7 @@ export function AgentPage({ agentId }: { agentId: AgentId }) {
         </Link>
       </div>
     );
-  if (state.agents.length && !state.loading && !added)
+  if (agents.length && !loading && !added)
     return (
       <div className="grid h-full place-content-center gap-4 p-6 text-center">
         <h1 className="text-lg font-semibold">添加{agent?.name ?? "部门伙伴"}</h1>
@@ -92,16 +97,16 @@ export function AgentPage({ agentId }: { agentId: AgentId }) {
         </Link>
       </div>
     );
-  if (!agent || error || state.error)
+  if (!agent || error || storeError)
     return (
       <div className="grid h-full place-content-center gap-4 p-6 text-center">
         <p
-          role={error || state.error ? "alert" : "status"}
+          role={error || storeError ? "alert" : "status"}
           className="text-sm text-muted-foreground"
         >
-          {error ?? state.error ?? "正在恢复 Agent 工作空间…"}
+          {error ?? storeError ?? "正在恢复 Agent 工作空间…"}
         </p>
-        {(error || state.error) && (
+        {(error || storeError) && (
           <Button disabled={reloading} onClick={() => void reloadChat()}>
             {reloading ? "正在重新加载…" : "重新加载"}
           </Button>

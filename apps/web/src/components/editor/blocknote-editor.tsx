@@ -1,3 +1,4 @@
+import type { BlockNoteEditor as Editor, PartialBlock } from "@blocknote/core";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 
@@ -6,7 +7,6 @@ import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { useResolvedTheme } from "@/hooks/use-resolved-theme";
 import { zh } from "@blocknote/core/locales";
-import type { BlockNoteEditor as Editor, PartialBlock } from "@blocknote/core";
 
 export interface BlockNoteEditorProps {
   /** 初始文档块（会议纪要等场景从持久化恢复）；与 markdown 二选一，markdown 优先 */

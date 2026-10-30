@@ -1,7 +1,9 @@
+import type { RecordDocument } from "@/interfaces/meeting";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { useAuthStore } from "@/stores/auth";
-import { resolveRecordShare, type RecordDocument } from "@/apis/meeting-records";
+import { resolveRecordShare } from "@/apis/meeting-records";
+
 import { RecordWorkspace } from "./record-workspace";
 import { buttonVariants } from "@/components/ui/button";
 
@@ -13,16 +15,17 @@ export function SharedRecordPage() {
   useEffect(() => {
     if (!userId) return;
     let alive = true;
-    void resolveRecordShare(token)
-      .then((value) => {
+    void (async () => {
+      try {
+        const value = await resolveRecordShare(token);
         if (alive) {
           setDocument(value);
           setError("");
         }
-      })
-      .catch((cause: Error) => {
-        if (alive) setError(cause.message);
-      });
+      } catch (cause) {
+        if (alive) setError(cause instanceof Error ? cause.message : "");
+      }
+    })();
     return () => {
       alive = false;
     };

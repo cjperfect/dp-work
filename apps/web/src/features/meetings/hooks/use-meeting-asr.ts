@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import type { WsAsrTranscript } from "@dp-work/protocols/asr";
+import { useCallback, useEffect, useRef, useState } from "react";
+
 import { getMeeting, elapsed } from "@/apis/meetings";
 import { useAuthStore } from "@/stores/auth";
 import { getSidecarAsrConfig, createAsrSession } from "@/apis/sidecar";
-import { SIDECAR_WS } from "@/features/meetings/constants/meeting";
+import { SIDECAR_WS } from "@/constants/meeting";
 import { AsrClient, type AsrStatus } from "../lib/asr-client";
 import { PcmRecorder } from "../lib/pcm-recorder";
 

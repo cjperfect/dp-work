@@ -78,3 +78,6 @@ API_INTERNAL_URL = os.environ.get("API_INTERNAL_URL", "http://127.0.0.1:8000").r
 # 长期记忆语义检索的最低余弦相似度及单轮超时（秒）。
 MEMORY_MIN_SIMILARITY = max(-1.0, min(1.0, float(os.environ.get("MEMORY_MIN_SIMILARITY", "0.25"))))
 MEMORY_RETRIEVAL_TIMEOUT_SECONDS = max(1, float(os.environ.get("MEMORY_RETRIEVAL_TIMEOUT_SECONDS", "10")))
+
+# ASR 每小时音频估算单价（与 AGENT_COST_CURRENCY 同币种）；留空不估算费用。
+ASR_PRICE_PER_HOUR = os.environ.get("ASR_PRICE_PER_HOUR", "").strip()

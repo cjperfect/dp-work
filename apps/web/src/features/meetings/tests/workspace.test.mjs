@@ -11,7 +11,7 @@ import {
   removeDraft,
   listSavedMeetings,
 } from "../lib/workspace-storage.ts";
-import { persist, syncNow, loadWorkspace, useMeetingCache } from "../../../stores/meetings.ts";
+import { persist, syncNow, loadWorkspace, useMeetingCache } from "../../../stores/meeting/index.ts";
 import { updateTranscriptText } from "../lib/recording.ts";
 import { meetingApiFixture } from "./api-fixture.mjs";
 import { mockHttpRequest } from "../../../lib/testing/mock-http.mjs";

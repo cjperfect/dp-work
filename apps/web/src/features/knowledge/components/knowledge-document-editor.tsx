@@ -1,3 +1,4 @@
+import type { EditorDocumentInput, KbFile, KnowledgeBase } from "@/interfaces/knowledge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { LazyBlockNoteEditor as Editor } from "@/components/editor/lazy-blocknote-editor";
@@ -9,9 +10,8 @@ import { localAccountId } from "@/features/auth/lib/auth";
 import { useKnowledgeDocuments } from "@/features/knowledge/hooks/use-knowledge-documents";
 import { useKnowledgeBases } from "@/features/knowledge/hooks/use-knowledge-bases";
 import { saveKnowledgeDocument } from "@/stores/knowledge";
-import type { EditorDocumentInput } from "@/types/knowledge";
+
 import { ParseDocumentButton } from "./parse-document-button";
-import type { KbFile, KnowledgeBase } from "../constants/knowledge-data";
 
 function savedDate(value: string | null): Date | null {
   if (!value) return null;

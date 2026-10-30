@@ -1,3 +1,4 @@
+import type { TextMessagePartProps } from "@assistant-ui/react";
 import "@assistant-ui/react-markdown/styles/dot.css";
 
 import {
@@ -9,7 +10,7 @@ import {
 } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
 import { type FC, memo, useMemo, useRef } from "react";
-import type { TextMessagePartProps } from "@assistant-ui/react";
+
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";

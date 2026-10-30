@@ -3,6 +3,8 @@ import asyncio
 import hashlib
 import json
 import math
+from uuid import uuid4
+from ...usage.ledger import write, raw_usage
 from weakref import WeakKeyDictionary
 from urllib.parse import urlsplit
 import httpx
@@ -54,6 +56,8 @@ class ArkEmbeddings(Embeddings):
                 async with limiter():
                     for attempt in range(3):
                         try:
+                            call_id = str(uuid4())
+                            await asyncio.to_thread(write, call_id, config.EMBEDDING_MODEL, status='unreported', category='embedding')
                             response = await client.post(config.EMBEDDING_BASE_URL + "/embeddings/multimodal",
                                 headers={"Authorization": "Bearer " + config.EMBEDDING_API_KEY},
                                 json={"model": config.EMBEDDING_MODEL, "input": [{"type": "text", "text": text}],
@@ -64,7 +68,11 @@ class ArkEmbeddings(Embeddings):
                                 continue
                             if response.status_code != 200:
                                 raise EmbeddingError(f"方舟向量化请求失败（HTTP {response.status_code}），请检查密钥和模型权限。")
-                            return validate_vector(response.json().get("data", {}).get("embedding"))
+                            data = response.json()
+                            usage = raw_usage(data)
+                            await asyncio.to_thread(write, call_id, config.EMBEDDING_MODEL, usage,
+                                                    status='reported' if usage is not None else 'unreported', category='embedding')
+                            return validate_vector(data.get("data", {}).get("embedding"))
                         except (httpx.TimeoutException, httpx.NetworkError) as cause:
                             if attempt == 2:
                                 raise EmbeddingError("向量服务连接超时或中断，请重试。") from cause

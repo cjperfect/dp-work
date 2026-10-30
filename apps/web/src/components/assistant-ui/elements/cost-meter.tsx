@@ -1,5 +1,6 @@
-// Adapted from assistant-ui Cost meter (MIT): https://www.assistant-ui.com/elements/cost-meter
 import type { ComponentProps } from "react";
+// Adapted from assistant-ui Cost meter (MIT): https://www.assistant-ui.com/elements/cost-meter
+
 import { cn } from "cn";
 import { mono, paper } from "./surfaces";
 import { announced, pct } from "../utils/range";

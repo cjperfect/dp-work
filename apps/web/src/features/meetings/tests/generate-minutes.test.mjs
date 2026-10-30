@@ -8,7 +8,7 @@ import {
   cacheServerWorkspace,
   loadWorkspace,
   syncNow,
-} from "../../../stores/meetings.ts";
+} from "../../../stores/meeting/index.ts";
 import { readDraft } from "../lib/workspace-storage.ts";
 import { meetingCategory } from "../lib/minutes-state.ts";
 import { meetingApiFixture } from "./api-fixture.mjs";

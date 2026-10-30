@@ -1,13 +1,13 @@
+import type { AgentId } from "@/interfaces/app";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowUpRight, Bot, Boxes, Check, Palette, Plus, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { AGENTS, agentPath } from "@/features/agent/constants/agents";
+import { AGENTS, agentPath } from "@/constants/agents";
 import { addPartner, removePartner, loadAgents, useAgentStore } from "@/stores/agent";
 import { useAuthStore } from "@/stores/auth";
-import type { AgentId } from "@/interfaces/app";
 
 export function PartnersPage() {
   const owner = useAuthStore((state) => state.user?.id);

@@ -1,12 +1,11 @@
+import type { AuthMode, AuthUser } from "@/interfaces/auth";
 import { create } from "zustand";
 import { onUnauthorized } from "@/lib/http";
 import { getEncryptionKey, submitCredentials } from "@/apis/auth";
 import { getStoredToken, TOKEN_KEY } from "@/lib/token-storage";
 import { encryptPassword } from "@/features/auth/lib/password-encryption";
-import type { AuthMode } from "@/types/auth";
 
-import type { AuthUser } from "@/types/auth";
-export type { AuthUser } from "@/types/auth";
+export type { AuthUser } from "@/interfaces/auth";
 const USER_KEY = "dp-work.auth.user";
 // 防止退出后，仍在进行的登录重新写入旧身份。
 let sessionRevision = 0;

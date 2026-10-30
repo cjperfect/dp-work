@@ -1,5 +1,5 @@
-import { siAnthropic, siGooglegemini } from "simple-icons";
 import type { FC, SVGProps } from "react";
+import { siAnthropic, siGooglegemini } from "simple-icons";
 
 /** OpenAI 官方 Logo path（simple-icons 曾收录的开源数据，品牌色随上下文） */
 const OPENAI_PATH =

@@ -1,8 +1,10 @@
+import type { FeishuStatus, Connector } from "@/interfaces/connectors";
 import { useEffect } from "react";
 import { create } from "zustand";
 import { useAuthStore } from "@/stores/auth";
-import { getFeishuStatus, type FeishuStatus } from "@/apis/connectors";
-import { CONNECTORS, type Connector } from "@/features/connectors/constants/connectors";
+import { getFeishuStatus } from "@/apis/connectors";
+
+import { CONNECTORS } from "@/constants/connectors";
 
 const EMPTY: Connector[] = [];
 export const useConnectorStore = create<{

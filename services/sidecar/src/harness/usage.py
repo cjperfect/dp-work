@@ -127,6 +127,10 @@ class UsageLedger(AsyncCallbackHandler):
                 'token_limit': self.token_limit or None, 'cost_limit': str(self.cost_limit) if self.cost_limit else None}
 
     async def save(self):
+        from ..usage.ledger import write
+        for call in self.calls.values():
+            await asyncio.to_thread(write, 'lc:' + call['id'], call['model'], call,
+                                    status=call['status'], category='agent', reference=self.run_id)
         self.version += 1
         task = asyncio.create_task(asyncio.to_thread(write_usage, self.run_id, self.snapshot()))
         try:

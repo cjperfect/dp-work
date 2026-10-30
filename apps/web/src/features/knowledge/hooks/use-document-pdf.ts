@@ -1,8 +1,8 @@
+import type { KbFile } from "@/interfaces/knowledge";
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { localAccountId } from "@/features/auth/lib/auth";
 import { downloadKnowledgeDocumentRequest } from "@/apis/knowledge";
-import type { KbFile } from "../constants/knowledge-data";
 
 /** 通过带认证的请求读取 PDF，退出页面后回收 Blob URL。 */
 export function useDocumentPdf(baseId: string, file?: KbFile) {
@@ -19,20 +19,21 @@ export function useDocumentPdf(baseId: string, file?: KbFile) {
     if (!serverPdf || !accountId || !id) return;
     let alive = true;
     let url: string | null = null;
-    downloadKnowledgeDocumentRequest(accountId, baseId, id)
-      .then((blob) => {
+    void (async () => {
+      try {
+        const blob = await downloadKnowledgeDocumentRequest(accountId, baseId, id);
         if (!alive) return;
         url = URL.createObjectURL(blob);
         setState({ key, url, error: null });
-      })
-      .catch((cause) => {
+      } catch (cause) {
         if (alive)
           setState({
             key,
             url: null,
             error: cause instanceof Error ? cause.message : "读取 PDF 失败，请重试。",
           });
-      });
+      }
+    })();
     return () => {
       alive = false;
       if (url) URL.revokeObjectURL(url);

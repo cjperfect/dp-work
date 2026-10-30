@@ -1,14 +1,7 @@
-import type { ReactNode } from "react";
+import type { ModelMeta } from "@/interfaces/models";
 import { OpenAILogo } from "@/components/assistant-ui/elements/model-icons";
 
 /** 可用模型列表（UI 骨架：接入 Python Sidecar / 模型服务时替换为实际可用模型） */
-export type ModelMeta = {
-  id: string;
-  label: string;
-  description: string;
-  /** 品牌图标（model-picker 展示用） */
-  icon: ReactNode;
-};
 
 export const MODELS: ModelMeta[] = [
   {

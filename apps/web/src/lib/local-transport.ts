@@ -8,7 +8,7 @@ export class LocalTransportError extends Error {}
 /** 会议、知识库及账号走远程，其余业务只能在桌面本机执行。 */
 export function isLocalBusiness(path: string): boolean {
   return (
-    /^\/api\/(agents|skills|connectors|memories)(?:\/|$)/.test(path) ||
+    /^\/api\/(agents|skills|connectors|memories|usage)(?:\/|$)/.test(path) ||
     /^\/api\/settings(?:\/|$)/.test(path)
   );
 }

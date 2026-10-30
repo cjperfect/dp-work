@@ -1,6 +1,7 @@
+import type { Meeting, Workspace } from "@/interfaces/meeting";
 import { deleteMeeting, getMeeting, listMeetings, saveMeeting } from "@/apis/meetings";
 import { migrateLegacyMeetings } from "./legacy-meetings";
-import type { Meeting, Workspace } from "@/apis/meetings";
+
 export type Draft = Workspace & {
   accountId: number;
   version: number;
@@ -65,29 +66,37 @@ export async function listDrafts(accountId: number) {
 /** 同一会议串行写入，成功后才清除待保存标记。 */
 export function saveDraft(draft: Draft): Promise<Draft> {
   const cacheKey = key(draft.accountId, draft.meeting.id);
-  const operation = (queues.get(cacheKey) ?? Promise.resolve())
-    .catch(() => {})
-    .then(async () => {
-      const head = heads.get(cacheKey);
-      if (head && draft.version < head.version) {
-        const saved = await readDraft(draft.accountId, draft.meeting.id);
-        if (!saved) throw new Error("会议已删除。");
-        return saved;
-      }
-      const server = await saveMeeting(
-        draft.accountId,
-        draft,
-        head?.revision ?? draft.meeting.revision,
-      );
-      heads.set(cacheKey, { revision: server.meeting.revision, version: draft.version });
-      return { ...localDraft(server), version: draft.version, temporary: draft.temporary };
-    });
+  const previous = queues.get(cacheKey) ?? Promise.resolve();
+  const operation: Promise<Draft> = (async () => {
+    try {
+      await previous;
+    } catch {
+      // 上一次保存失败，继续本次
+    }
+    const head = heads.get(cacheKey);
+    if (head && draft.version < head.version) {
+      const saved = await readDraft(draft.accountId, draft.meeting.id);
+      if (!saved) throw new Error("会议已删除。");
+      return saved;
+    }
+    const server = await saveMeeting(
+      draft.accountId,
+      draft,
+      head?.revision ?? draft.meeting.revision,
+    );
+    heads.set(cacheKey, { revision: server.meeting.revision, version: draft.version });
+    return { ...localDraft(server), version: draft.version, temporary: draft.temporary };
+  })();
   queues.set(cacheKey, operation);
-  void operation
-    .finally(() => {
+  void (async () => {
+    try {
+      await operation;
+    } catch {
+      // 错误已由调用方处理
+    } finally {
       if (queues.get(cacheKey) === operation) queues.delete(cacheKey);
-    })
-    .catch(() => {});
+    }
+  })();
   return operation;
 }
 export async function removeDraft(accountId: number, id: string) {

@@ -55,7 +55,7 @@ def test_bot_identity_does_not_count_as_user_authorization(monkeypatch):
     assert data["account"] is None
 
 
-def test_login_requests_only_identity_scopes_and_verifies_after_completion(monkeypatch):
+def test_login_requests_docs_drive_scopes_and_verifies_after_completion(monkeypatch):
     (cli.profile(1) / "config.json").write_text("{}")
     run = AsyncMock(side_effect=[
         {"verification_url": "https://accounts.feishu.cn/auth?code=fixture", "device_code": "private-code", "expires_in": 300},
@@ -70,7 +70,7 @@ def test_login_requests_only_identity_scopes_and_verifies_after_completion(monke
         assert service._jobs[1].state == "completed"
         assert service._jobs[1].url is None
     asyncio.run(case())
-    assert run.await_args_list[0].args == (1, "auth", "login", "--scope", cli.LOGIN_SCOPE, "--no-wait", "--json")
+    assert run.await_args_list[0].args == (1, "auth", "login", "--scope", cli.LOGIN_SCOPE, "--domain", "docs,drive", "--no-wait", "--json")
     assert "docs" not in cli.LOGIN_SCOPE and "im:" not in cli.LOGIN_SCOPE
     assert "--verify" in run.await_args_list[-1].args
 

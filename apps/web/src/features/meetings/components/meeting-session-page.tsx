@@ -14,7 +14,7 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { duration, elapsed, generateMinutes } from "@/apis/meetings";
-import { useWorkspace, cacheServerWorkspace } from "@/stores/meetings";
+import { useWorkspace, cacheServerWorkspace } from "@/stores/meeting";
 import { readDraft } from "../lib/workspace-storage";
 import { control } from "../lib/recording";
 import { useMeetingAsr } from "../hooks/use-meeting-asr";

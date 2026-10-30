@@ -8,8 +8,9 @@ export function AgentBootstrap() {
       resetAgents();
       return;
     }
-    void loadAgents()
-      .then(async () => {
+    void (async () => {
+      try {
+        await loadAgents();
         if (useAuthStore.getState().user?.id !== owner) return;
         const { agents: catalog, partnerCodes } = useAgentStore.getState();
         const agents = catalog.filter(
@@ -21,8 +22,10 @@ export function AgentBootstrap() {
             await loadThreads(agent.code);
           }),
         );
-      })
-      .catch(() => {});
+      } catch {
+        // 引导加载失败静默处理，后续用户操作会重试
+      }
+    })();
   }, [owner]);
   return null;
 }

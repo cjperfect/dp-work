@@ -1,3 +1,4 @@
+import type { RecordProvider } from "../lib/record-provider";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import "./record-editor.css";
@@ -8,7 +9,6 @@ import { withCollaboration } from "@blocknote/core/yjs";
 import { zh } from "@blocknote/core/locales";
 import type * as Y from "yjs";
 import { collaboratorColor, renderCollaborationCursor } from "../lib/collaboration-cursor";
-import type { RecordProvider } from "../lib/record-provider";
 
 export function RecordEditor({
   doc,

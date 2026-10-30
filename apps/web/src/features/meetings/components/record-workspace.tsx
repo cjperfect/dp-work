@@ -1,3 +1,4 @@
+import type { RecordDocument, RecordVersion } from "@/interfaces/meeting";
 import { lazy, Suspense, useEffect, useRef, useState, type MutableRefObject } from "react";
 import * as Y from "yjs";
 import { Copy, History, Share2, Save } from "lucide-react";
@@ -19,9 +20,8 @@ import {
   getRecordVersion,
   checkpointRecord,
   restoreRecord,
-  type RecordDocument,
-  type RecordVersion,
 } from "@/apis/meeting-records";
+
 import { useAuthStore } from "@/stores/auth";
 import { RecordCollaborators } from "./record-collaborators";
 import { decodeState, RecordProvider, type RecordStatus } from "../lib/record-provider";
@@ -51,16 +51,17 @@ export function RecordWorkspace({
   const ownerId = useAuthStore((state) => state.user?.id);
   useEffect(() => {
     let alive = true;
-    void getRecord(meetingId, shareToken)
-      .then((value) => {
+    void (async () => {
+      try {
+        const value = await getRecord(meetingId, shareToken);
         if (alive) {
           setDocument(value);
           setError("");
         }
-      })
-      .catch((cause: Error) => {
-        if (alive) setError(cause.message);
-      });
+      } catch (cause) {
+        if (alive) setError(cause instanceof Error ? cause.message : "");
+      }
+    })();
     return () => {
       alive = false;
     };
@@ -199,10 +200,14 @@ function RecordSession({
                       size="icon"
                       variant="outline"
                       onClick={() =>
-                        void navigator.clipboard
-                          .writeText(link)
-                          .then(() => toast.success("链接已复制"))
-                          .catch(() => setShareError("请手动复制链接"))
+                        void (async () => {
+                          try {
+                            await navigator.clipboard.writeText(link);
+                            toast.success("链接已复制");
+                          } catch {
+                            setShareError("请手动复制链接");
+                          }
+                        })()
                       }
                     >
                       <Copy className="size-4" />
@@ -292,13 +297,14 @@ function VersionHistory({
     if (!open) return;
     let alive = true;
     const sequence = requestSequence.current;
-    void listRecordVersions(id, shareToken)
-      .then((rows) => {
+    void (async () => {
+      try {
+        const rows = await listRecordVersions(id, shareToken);
         if (alive) setVersions(rows);
-      })
-      .catch((cause: Error) => {
-        if (alive) setError(cause.message);
-      });
+      } catch (cause) {
+        if (alive) setError(cause instanceof Error ? cause.message : "");
+      }
+    })();
     return () => {
       alive = false;
       sequence.value++;

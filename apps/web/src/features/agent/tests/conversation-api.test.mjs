@@ -1,19 +1,15 @@
+import { saveComposerDraft as setDraftText } from "../../../stores/agent/agent-message-queue.ts";
+import { useAgentMessageQueue } from "../../../stores/agent/agent-message-queue.ts";
 import { ensureTestChat as ensureAgentChat } from "./conversation-fixture.mjs";
 import assert from "node:assert/strict";
 import { beforeEach, afterEach, test } from "node:test";
 import { httpClient } from "../../../lib/http.ts";
 import { useAuthStore } from "../../../stores/auth.ts";
-import {
-  useAgentStore,
-  resetAgents,
-  setDraftText,
-  flushDraft,
-  removeThread,
-  sendMessage,
-  createThread,
-  addPartner,
-  changeThreadProject,
-} from "../../../stores/agent.ts";
+import { useAgentStore, resetAgents } from "../../../stores/agent/state.ts";
+import { removeThread, createThread } from "../../../stores/agent/agent-threads.ts";
+import { sendMessage } from "../../../stores/agent/agent-send.ts";
+import { addPartner } from "../../../stores/agent/agent-config.ts";
+import { changeThreadProject } from "../../../stores/agent/agent-files.ts";
 import { conversationFixture } from "./conversation-fixture.mjs";
 
 let interceptor, originalStorage, backend, values, fail, calls;
@@ -65,7 +61,8 @@ test("project conversations keep their directory and stay in global history afte
   assert.equal(backend.details.get(projectThread).thread.project_id, project);
   setDraftText(projectThread, "项目草稿");
   await changeThreadProject(projectThread, null);
-  assert.equal(backend.details.get(projectThread).thread.draft, "项目草稿");
+  assert.equal(useAgentMessageQueue.getState().drafts[projectThread], "项目草稿");
+  assert.equal(backend.details.get(projectThread).thread.draft, "");
   assert.equal(backend.details.get(projectThread).thread.project_id, null);
   await changeThreadProject(projectThread, project);
   await sendMessage("general", projectThread, "项目对话");
@@ -102,17 +99,15 @@ test("messages use API persistence and never get written to localStorage", async
   assert.ok(!useAgentStore.getState().details[id]);
 });
 
-test("failed draft saves remain unsaved and can retry", async () => {
+test("composer drafts remain local and do not overwrite stored conversation content", async () => {
   await ensureAgentChat("general");
   const id = useAgentStore.getState().selected.general;
-  setDraftText(id, "未保存草稿");
-  fail = (request) => request.url.endsWith("/draft");
-  await assert.rejects(flushDraft("general", id));
-  assert.equal(useAgentStore.getState().drafts[id].savedVersion, 0);
+  setDraftText(id, "本机草稿");
+  assert.equal(useAgentMessageQueue.getState().drafts[id], "本机草稿");
   assert.equal(backend.details.get(id).thread.draft, "");
-  fail = () => false;
-  await flushDraft("general", id);
-  assert.equal(backend.details.get(id).thread.draft, "未保存草稿");
+  setDraftText(id, "继续编辑的草稿");
+  assert.equal(useAgentMessageQueue.getState().drafts[id], "继续编辑的草稿");
+  assert.equal(backend.details.get(id).thread.draft, "");
 });
 
 test("legacy migration keeps the source on failure and removes it only after success", async () => {

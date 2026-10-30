@@ -1,6 +1,7 @@
+import type { Meeting } from "@/interfaces/meeting";
 import { useEffect, useRef } from "react";
 import { useAuthStore } from "@/stores/auth";
-import type { Meeting } from "@/apis/meetings";
+
 import { subscribeGenerationEvents } from "../lib/generation-events";
 
 /** 仅生成期间订阅状态变化，不定时请求会议列表。 */

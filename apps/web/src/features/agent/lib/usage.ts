@@ -1,6 +1,5 @@
-import type { RunUsage } from "@/types/agent";
+import type { RunUsage } from "@/interfaces/agent";
 import type { CostLine } from "@/components/assistant-ui/elements/cost-meter";
-
 /** Steering 会把同一个运行分成多条回复，当前分支按 run_id 去重。 */
 export function uniqueRunUsage(usages: readonly (RunUsage | undefined)[]): RunUsage[] {
   const runs = new Map<string, RunUsage>();
@@ -41,4 +40,16 @@ export function usageLines(usage: RunUsage): CostLine[] {
     cost: value.priced ? formatCost(String(value.cost), usage.currency)! : "费用未知",
     share: total ? (value.input + value.output) / total : 0,
   }));
+}
+
+/** 当前会话分支按运行去重，分别累计输入和输出；缓存、思考不重复相加。 */
+export function sessionTokenTotals(usages: readonly (RunUsage | undefined)[]) {
+  const runs = uniqueRunUsage(usages);
+  return {
+    input: runs.reduce((sum, run) => sum + run.input_tokens, 0),
+    output: runs.reduce((sum, run) => sum + run.output_tokens, 0),
+    total: runs.reduce((sum, run) => sum + run.total_tokens, 0),
+    known: runs.some((run) => run.reported_calls > 0),
+    complete: runs.length > 0 && runs.every((run) => run.complete),
+  };
 }

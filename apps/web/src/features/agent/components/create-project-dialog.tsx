@@ -1,11 +1,12 @@
+import type { LocalProject } from "@dp-work/protocols/desktop";
+import type { AgentProject } from "@/interfaces/agent";
 import { useState } from "react";
 import { Folder, FolderPlus, Loader2, X } from "lucide-react";
-import type { LocalProject } from "@dp-work/protocols/desktop";
-import type { AgentProject } from "@/apis/agent-projects";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { selectLocalProject, saveLocalProject } from "@/stores/agent-projects";
+import { selectLocalProject, saveLocalProject } from "@/stores/agent/agent-projects";
 import { useAuthStore } from "@/stores/auth";
 
 /** 创建项目：名称与本机目录在确认后一起保存。 */

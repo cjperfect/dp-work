@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { debounce } from "es-toolkit/function";
+import type { CatalogSkill, InstalledSkill } from "@/interfaces/skills";
+import type { AgentId } from "@/interfaces/app";
+import { useRef, useState } from "react";
 import { ExternalLink, Package, RefreshCw, Search } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,24 +13,17 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAgentStore } from "@/stores/agent";
-import { loadSkills } from "@/stores/skills";
-import { getAccessToken } from "@/stores/auth";
 import { useAppStore } from "@/stores/app";
 import { useAgentCode } from "@/features/agent/hooks/use-agent-code";
 import { useSkills } from "./hooks/use-skills";
 import { SkillCard } from "./components/skill-card";
 import { SkillDetailDialog } from "./components/skill-detail-dialog";
-import {
-  searchSkills,
-  getSkillDescriptions,
-  installSkill,
-  uninstallSkill,
-  type CatalogSkill,
-  type InstalledSkill,
-} from "@/apis/skills";
-import type { AgentId } from "@/interfaces/app";
+
+import { useSkillMarket } from "./hooks/use-skill-market";
+import { useSkillActions } from "./hooks/use-skill-actions";
 
 export function SkillsPage() {
+  const uploadInput = useRef<HTMLInputElement>(null);
   const initial = useAgentCode();
   const [code, setCode] = useState<AgentId>(initial);
   const allAgents = useAgentStore((state) => state.agents);
@@ -42,92 +35,16 @@ export function SkillsPage() {
   const setAgentId = useAppStore((state) => state.setAgentId);
   const { skills, loading, error, reload } = useSkills(code);
   const [tab, setTab] = useState("installed");
-  const [query, setQuery] = useState("");
-  const [search, setSearch] = useState("");
-  const [descriptions, setDescriptions] = useState<Record<string, string>>({});
-  const [catalog, setCatalog] = useState<CatalogSkill[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [operationError, setOperationError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
   const [detail, setDetail] = useState<InstalledSkill | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
-  const updateSearch = useMemo(() => debounce((value: string) => setSearch(value), 400), []);
-  useEffect(() => () => updateSearch.cancel(), [updateSearch]);
-  useEffect(() => {
-    if (tab !== "market") return;
-    const controller = new AbortController();
-    setSearching(true);
-    setSearchError(null);
-    searchSkills(search, controller.signal)
-      .then(({ items }) => {
-        if (controller.signal.aborted) return;
-        setCatalog(items);
-        setSearching(false);
-        const ids = items.filter((item) => !item.description).map((item) => item.id);
-        if (ids.length)
-          void getSkillDescriptions(ids, controller.signal)
-            .then(({ items: summaries }) => {
-              if (!controller.signal.aborted)
-                setDescriptions((previous) => ({ ...previous, ...summaries }));
-            })
-            .catch(() => {
-              if (!controller.signal.aborted)
-                setDescriptions((previous) => ({
-                  ...previous,
-                  ...Object.fromEntries(ids.map((id) => [id, ""])),
-                }));
-            });
-      })
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted)
-          setSearchError(cause instanceof Error ? cause.message : "技能搜索失败。");
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setSearching(false);
-      });
-    return () => controller.abort();
-  }, [search, tab]);
-
-  async function install(value: string) {
-    if (busy || !agent) return;
-    const token = getAccessToken();
-    setBusy(value);
-    setOperationError(null);
-    try {
-      await installSkill(code, value);
-      if (token !== getAccessToken()) return;
-      const refreshed = await loadSkills(code, true);
-      if (token !== getAccessToken()) return;
-      if (refreshed) toast.success(`已安装到${agent.name}，下次对话自动加载`);
-      else toast.warning("技能已安装，但列表刷新失败，请点击刷新重试。");
-    } catch (cause) {
-      if (token === getAccessToken())
-        setOperationError(cause instanceof Error ? cause.message : "安装失败，请重试。");
-    } finally {
-      setBusy(null);
-    }
-  }
-  async function uninstall(skill: InstalledSkill) {
-    if (busy) return;
-    const token = getAccessToken();
-    setBusy(skill.id);
-    setOperationError(null);
-    try {
-      await uninstallSkill(code, skill.id);
-      if (token !== getAccessToken()) return;
-      const refreshed = await loadSkills(code, true);
-      if (token !== getAccessToken()) return;
-      setConfirm(null);
-      if (refreshed) toast.success("技能已卸载");
-      else toast.warning("技能已卸载，但列表刷新失败，请点击刷新重试。");
-    } catch (cause) {
-      if (token === getAccessToken())
-        setOperationError(cause instanceof Error ? cause.message : "卸载失败，请重试。");
-    } finally {
-      setBusy(null);
-    }
-  }
+  const { query, setQuery, updateSearch, descriptions, catalog, searching, searchError } =
+    useSkillMarket(tab === "market");
+  const { busy, operationError, clearError, upload, install, uninstall } = useSkillActions(
+    code,
+    agent?.name,
+    () => setTab("installed"),
+    () => setConfirm(null),
+  );
   const installedIds = new Set(skills.map((skill) => skill.id));
   function card(skill: CatalogSkill | InstalledSkill, installed: boolean) {
     const description =
@@ -174,6 +91,26 @@ export function SkillsPage() {
         </a>
       </header>
       <div className="mt-7 flex flex-wrap items-center gap-3 text-sm">
+        <input
+          ref={uploadInput}
+          type="file"
+          accept=".md,.zip"
+          className="hidden"
+          aria-label="上传技能文件"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) void upload(file);
+          }}
+        />
+        <Button
+          variant="outline"
+          disabled={!!busy || !agent}
+          onClick={() => uploadInput.current?.click()}
+        >
+          上传技能
+        </Button>
+        <span className="text-xs text-muted-foreground">支持 SKILL.md / ZIP，最大 8 MB</span>
         <span>配置目标</span>
         <Select
           value={code}
@@ -182,7 +119,7 @@ export function SkillsPage() {
             if (value) {
               setCode(value as AgentId);
               setAgentId(value as AgentId);
-              setOperationError(null);
+              clearError();
               setConfirm(null);
             }
           }}

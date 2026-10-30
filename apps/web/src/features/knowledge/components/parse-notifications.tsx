@@ -5,7 +5,7 @@ import {
   consumeDocumentParseEvents,
   consumeDocumentVectorEvents,
   consumeDocumentSearchEvents,
-} from "@/stores/document-parsing";
+} from "@/stores/knowledge/document-parsing";
 import { subscribeDocumentParseEvents } from "../lib/parse-events";
 
 /** 页面切换后仍接收解析结果，自动关闭提示。 */

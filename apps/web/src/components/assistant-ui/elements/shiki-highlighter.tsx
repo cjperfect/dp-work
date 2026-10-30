@@ -1,6 +1,6 @@
+import type { SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
 import { useEffect, useState, type FC } from "react";
 import { createHighlighter, type Highlighter } from "shiki";
-import type { SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
 
 let highlighterPromise: Promise<Highlighter> | null = null;
 

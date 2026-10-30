@@ -1,3 +1,4 @@
+import type { FileChange } from "@/interfaces/agent";
 import { useAuiState } from "@assistant-ui/react";
 import { useState } from "react";
 import { Undo2 } from "lucide-react";
@@ -8,7 +9,6 @@ import { useAgentStore, undoFileChange } from "@/stores/agent";
 import { FileTree } from "@/components/assistant-ui/elements/file-tree";
 import { CodeDiff } from "@/components/assistant-ui/elements/code-diff";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
-import type { FileChange } from "@/types/agent";
 
 /** 展示这条回复实际完成的文件修改，按文件查看每次操作。 */
 export function FileChanges() {

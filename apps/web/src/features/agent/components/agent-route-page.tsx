@@ -1,7 +1,7 @@
+import type { AgentId } from "@/interfaces/app";
 import { useEffect } from "react";
 import { AgentPage } from "@/features/agent";
 import { useAppStore } from "@/stores/app";
-import type { AgentId } from "@/interfaces/app";
 
 /** 保持路由选中的 Agent 与线程归属状态一致。 */
 function AgentRoutePage({ agentId }: { agentId: AgentId }) {

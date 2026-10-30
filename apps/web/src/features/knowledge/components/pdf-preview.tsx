@@ -20,17 +20,18 @@ export function PdfPreview({ url }: { url: string }) {
     setState("loading");
     setDoc(null);
     const loadingTask = getDocument({ url });
-    loadingTask.promise
-      .then((d) => {
+    void (async () => {
+      try {
+        const d = await loadingTask.promise;
         if (cancelled) return;
         setDoc(d);
         setState("ready");
-      })
-      .catch((e) => {
+      } catch (e) {
         if (cancelled) return;
         console.error("[PdfPreview] load error:", e);
         setState("error");
-      });
+      }
+    })();
     return () => {
       cancelled = true;
       void loadingTask.destroy();

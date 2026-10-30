@@ -1,8 +1,8 @@
+import type { KbFile } from "@/interfaces/knowledge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LazyBlockNoteEditor as Editor } from "@/components/editor/lazy-blocknote-editor";
 import { saveKnowledgeDocument } from "@/stores/knowledge";
 import { Button } from "@/components/ui/button";
-import type { KbFile } from "../constants/knowledge-data";
 
 /**
  * 知识库查看页「源文档」tab 的可编辑编辑器。

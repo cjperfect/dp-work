@@ -1,9 +1,10 @@
+import type { ChatThread } from "@/interfaces/agent";
 import {
   enqueueFollowUp,
   saveComposerDraft,
   waitingForApproval,
   useAgentMessageQueue,
-} from "@/stores/agent-message-queue";
+} from "@/stores/agent/agent-message-queue";
 import { useEffect, useMemo, useRef, type PropsWithChildren } from "react";
 import {
   AssistantRuntimeProvider,
@@ -36,15 +37,14 @@ import {
   editMessage,
   regenerateMessage,
   sendMessage,
-  setDraftText,
   useAgentStore,
 } from "@/stores/agent";
 import { readRuntimeBranches, toRuntimeMessage } from "@/features/agent/lib/message-branches";
-import type { ChatThread } from "@/types/agent";
+
 import { imageAttachmentAdapter, messageImages } from "../lib/image-attachments";
 
 /**
- * 会话历史 adapter：列表与 CRUD 保存到 API / PG，store 只缓存当前页面。
+ * 会话历史 adapter：通过本机 API 适配器调用 Sidecar 持久化，Store 缓存当前页面。
  * 保持模块级稳定引用（assistant-ui 要求 adapter 跨渲染稳定），方法内用
  * getState() 读取最新状态，reload 时才重新 list()。
  */
@@ -67,7 +67,7 @@ const threadListAdapter: RemoteThreadListAdapter = {
     return { threads };
   },
   async initialize() {
-    // 由 API 幂等创建会话并返回业务 ID
+    // 由本机会话服务幂等创建草稿会话并返回业务 ID
     const code = useAppStore.getState().agentId;
     const id = await createThread(code);
     useAppStore.getState().bindThreadAgent(id, code);
@@ -110,19 +110,19 @@ function useThreadRuntimeHook() {
   const aui = useAui();
   const remoteId = useAuiState((s) => s.threadListItem.remoteId);
   const detail = useAgentStore((state) => (remoteId ? state.details[remoteId] : undefined));
-  const draft = useAgentStore((state) => (remoteId ? state.drafts[remoteId] : undefined));
+  const sending = useAgentStore((state) => (remoteId ? state.sending[remoteId] : false));
   useEffect(() => {
     if (
       remoteId &&
       detail?.thread.title_source === "pending" &&
-      !draft?.sending &&
+      !sending &&
       detail.messages.some(
         (row) => row.role === "assistant" && row.status === "complete" && row.content.trim(),
       )
     ) {
       void generateThreadTitle(remoteId);
     }
-  }, [remoteId, detail?.thread.title_source, detail?.messages, draft?.sending]);
+  }, [remoteId, detail?.thread.title_source, detail?.messages, sending]);
   useEffect(() => {
     if (remoteId && !useAgentStore.getState().details[remoteId])
       void selectThreadById(remoteId).catch((error) =>
@@ -174,7 +174,7 @@ function useThreadRuntimeHook() {
     // 回复与审批期间仍允许编写下一条消息，提交由会话队列串行调度。
     isLoading: !!remoteId && !detail,
     isDisabled: false,
-    isRunning: !!draft?.sending,
+    isRunning: !!sending,
     onCancel: async () => {
       if (remoteId) cancelMessage(remoteId);
     },
@@ -224,12 +224,11 @@ function useThreadRuntimeHook() {
           .map((part) => part.text)
           .join("\n") || (images.length ? "请查看这张图片。" : "");
       if (
-        useAgentStore.getState().drafts[id]?.sending ||
+        useAgentStore.getState().sending[id] ||
         waitingForApproval(id) ||
         useAgentMessageQueue.getState().items[id]?.length
       ) {
         enqueueFollowUp(id, text, images);
-        setDraftText(id, "");
         saveComposerDraft(id, "");
       } else {
         saveComposerDraft(id, "");
@@ -278,15 +277,17 @@ function RestoreThreadSelection() {
     const key = `${owner}:${code}`;
     if (loading || !owner || !selected || restored.current === key) return;
     let alive = true;
-    void auiRef.current.threads
-      .getLoadThreadsPromise()
-      .then(() => {
+    void (async () => {
+      try {
+        await auiRef.current.threads.getLoadThreadsPromise();
         if (alive) {
           restored.current = key;
           auiRef.current.threads.switchToThread(selected);
         }
-      })
-      .catch(() => {});
+      } catch {
+        // 恢复会话失败静默处理
+      }
+    })();
     return () => {
       alive = false;
     };

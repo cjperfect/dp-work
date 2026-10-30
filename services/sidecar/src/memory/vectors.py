@@ -96,6 +96,8 @@ async def backfill(owner, root=None):
         missing = [row for row in rows if row['id'] not in found][:16]
         if missing:
             async with asyncio.timeout(config.MEMORY_RETRIEVAL_TIMEOUT_SECONDS):
-                await index_rows(owner, missing, root)
+                from ..usage.ledger import scope
+                with scope(owner, 'embedding'):
+                    await index_rows(owner, missing, root)
     except (EmbeddingError, httpx.HTTPError, TimeoutError, ValueError, OSError, sqlite3.DatabaseError, repo.MemoryError):
         log.warning('Memory vector indexing deferred')

@@ -1,5 +1,5 @@
-import { create } from "zustand";
 import type { AppStore } from "@/interfaces/app";
+import { create } from "zustand";
 
 export const useAppStore = create<AppStore>((set) => ({
   view: "agent",

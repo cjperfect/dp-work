@@ -1,5 +1,5 @@
+import type { AuthMode, PasswordEncryptionKey } from "@/interfaces/auth";
 import { CompactEncrypt, importJWK } from "jose";
-import type { AuthMode, PasswordEncryptionKey } from "@/types/auth";
 
 export async function encryptPassword(
   key: PasswordEncryptionKey,

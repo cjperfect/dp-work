@@ -1,3 +1,4 @@
+import type { Meeting } from "@/interfaces/meeting";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearch } from "@tanstack/react-router";
 import { Clock3, FileText, Plus, Search, Trash2 } from "lucide-react";
@@ -5,14 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { trackGenerations, forgetGeneration } from "@/stores/meeting-generation";
+import { trackGenerations, forgetGeneration } from "@/stores/meeting/meeting-generation";
 import { useAuthStore } from "@/stores/auth";
 import { useGenerationEvents } from "../hooks/use-generation-events";
 import { MeetingCreateDialog } from "./meeting-create-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { meetingCategory, generationStatus } from "../lib/minutes-state";
-import { STATUS_LABELS, type Meeting } from "@/apis/meetings";
-import { useMeetingCache } from "@/stores/meetings";
+import { STATUS_LABELS } from "@/apis/meetings";
+
+import { useMeetingCache } from "@/stores/meeting";
 import { listSavedMeetings, removeDraft } from "../lib/workspace-storage";
 
 type Category = "pending" | "archived";
@@ -40,19 +42,19 @@ export function MeetingsPage() {
     if (!accountId) return;
     setLoading(true);
     setError(null);
-    void listSavedMeetings(accountId)
-      .then((rows) => {
+    void (async () => {
+      try {
+        const rows = await listSavedMeetings(accountId);
         if (alive) {
           trackGenerations(rows);
           setMeetings(rows);
         }
-      })
-      .catch((cause) => {
+      } catch (cause) {
         if (alive) setError(cause instanceof Error ? cause.message : "无法加载会议");
-      })
-      .finally(() => {
+      } finally {
         if (alive) setLoading(false);
-      });
+      }
+    })();
     return () => {
       alive = false;
     };

@@ -1,5 +1,4 @@
-import type { Workspace } from "@/apis/meetings";
-
+import type { Workspace } from "@/interfaces/meeting";
 /** 已有纪要优先；尚无纪要时展示确认后的会议转写。 */
 export function minutesContent(workspace: Workspace): string {
   if (workspace.minutes) return workspace.minutes.content;

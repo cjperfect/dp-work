@@ -13,7 +13,7 @@ import {
   loadKnowledgeBases,
   resetKnowledgeBases,
   useKnowledgeStore,
-} from "../../../stores/knowledge.ts";
+} from "../../../stores/knowledge/index.ts";
 
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");

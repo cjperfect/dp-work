@@ -1,4 +1,4 @@
-import { agentPath } from "@/features/agent/constants/agents";
+import { agentPath } from "@/constants/agents";
 import { useNavigate } from "@tanstack/react-router";
 import { selectThreadById, useAgentStore } from "@/stores/agent";
 

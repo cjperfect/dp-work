@@ -1,3 +1,5 @@
+import { saveComposerDraft as setDraftText } from "../../../stores/agent/agent-message-queue.ts";
+import { useAgentMessageQueue } from "../../../stores/agent/agent-message-queue.ts";
 import { ensureTestChat as ensureAgentChat } from "./conversation-fixture.mjs";
 import { conversationFixture } from "./conversation-fixture.mjs";
 import assert from "node:assert/strict";
@@ -9,13 +11,11 @@ import {
   getThreadAgentCode,
   selectThreadById,
   loadThreads,
-  resetAgents,
   selectThread,
-  sendMessage,
-  setDraftText,
-  useAgentStore,
   ensureAgentChat as initializeAgent,
-} from "../../../stores/agent.ts";
+} from "../../../stores/agent/agent-threads.ts";
+import { resetAgents, useAgentStore } from "../../../stores/agent/state.ts";
+import { sendMessage } from "../../../stores/agent/agent-send.ts";
 
 let streamInterceptor, created;
 beforeEach(() => {
@@ -121,7 +121,7 @@ test("switching conversations and Agents preserves drafts and isolates their lis
   await ensureAgentChat("general");
   const state = useAgentStore.getState();
   assert.equal(state.selected.general, first);
-  assert.equal(state.drafts[first].text, "保留这段草稿");
+  assert.equal(useAgentMessageQueue.getState().drafts[first], "保留这段草稿");
   assert.equal(state.lists.general.length, 2);
   assert.equal(state.lists.product.length, 1);
   await assert.rejects(selectThread("product", first), /会话不存在/);
@@ -139,7 +139,7 @@ test("a history item selects its own Agent without a previously selected convers
   assert.equal(useAgentStore.getState().selected.product, productId);
   assert.equal(await selectThreadById(generalId), "general");
   assert.equal(useAgentStore.getState().selected.general, generalId);
-  assert.equal(useAgentStore.getState().drafts[generalId].text, "通用会话草稿");
+  assert.equal(useAgentMessageQueue.getState().drafts[generalId], "通用会话草稿");
   await assert.rejects(selectThreadById("missing"), /会话不存在/);
   useAuthStore.setState({ user: { id: 999, username: "another" } });
   assert.equal(getThreadAgentCode(generalId), undefined);

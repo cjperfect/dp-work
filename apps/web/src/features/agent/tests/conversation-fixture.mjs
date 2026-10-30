@@ -1,9 +1,9 @@
 import {
   ensureAgentChat as initializeAgent,
   createThread,
-  addPartner,
-  useAgentStore,
-} from "../../../stores/agent.ts";
+} from "../../../stores/agent/agent-threads.ts";
+import { addPartner } from "../../../stores/agent/agent-config.ts";
+import { useAgentStore } from "../../../stores/agent/state.ts";
 
 /** 已有测试显式准备一个草稿会话，页面初始化本身不创建记录。 */
 export async function ensureTestChat(code, force = false) {

@@ -1,4 +1,4 @@
-import type { Meeting } from "@/apis/meetings";
+import type { Meeting } from "@/interfaces/meeting";
 import { getAccessToken, useAuthStore } from "@/stores/auth";
 
 type Listener = (meetings: Meeting[], snapshot: boolean) => void;

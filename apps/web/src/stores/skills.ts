@@ -1,7 +1,10 @@
-import { create } from "zustand";
 import type { AgentId } from "@/interfaces/app";
+import type { InstalledSkill } from "@/interfaces/skills";
+import { create } from "zustand";
+
 import { useAgentStore } from "@/stores/agent";
-import { listSkills, type InstalledSkill } from "@/apis/skills";
+import { listSkills } from "@/apis/skills";
+
 import { useAuthStore, getAccessToken } from "@/stores/auth";
 
 type Entry = {
@@ -55,13 +58,14 @@ export function loadSkills(code: AgentId, force = false): Promise<boolean> {
   const existing = pending.get(key);
   if (existing)
     return force
-      ? existing.then(() =>
-          generation === version &&
-          useAuthStore.getState().user?.id === owner &&
-          getAccessToken() === token
+      ? (async () => {
+          await existing;
+          return generation === version &&
+            useAuthStore.getState().user?.id === owner &&
+            getAccessToken() === token
             ? loadSkills(code, true)
-            : false,
-        )
+            : false;
+        })()
       : existing;
   const entry = useSkillsStore.getState().entries[code] ?? emptyEntry;
   if (!force && entry.loaded && Date.now() - entry.checkedAt < CACHE_MS)
@@ -73,8 +77,9 @@ export function loadSkills(code: AgentId, force = false): Promise<boolean> {
     useAuthStore.getState().user?.id === owner &&
     getAccessToken() === token &&
     generation === version;
-  const operation = listSkills(code)
-    .then(({ items }) => {
+  const operation: Promise<boolean> = (async () => {
+    try {
+      const { items } = await listSkills(code);
       if (owned() && useAgentStore.getState().owner === owner) {
         useAgentStore.setState((state) => ({
           agents: state.agents.map((agent) =>
@@ -94,8 +99,7 @@ export function loadSkills(code: AgentId, force = false): Promise<boolean> {
           },
         }));
       return owned();
-    })
-    .catch((cause: unknown) => {
+    } catch (cause: unknown) {
       if (owned())
         useSkillsStore.setState((state) => ({
           entries: {
@@ -109,10 +113,10 @@ export function loadSkills(code: AgentId, force = false): Promise<boolean> {
           },
         }));
       return false;
-    })
-    .finally(() => {
-      if (pending.get(key) === operation) pending.delete(key);
-    });
+    }
+  })().finally(() => {
+    if (pending.get(key) === operation) pending.delete(key);
+  });
   pending.set(key, operation);
   return operation;
 }

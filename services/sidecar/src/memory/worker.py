@@ -112,6 +112,11 @@ class MemoryWorker:
             return jobs.commit(owner, job, state, extracted, decisions, known, self.storage.root)
 
     async def process(self, job):
+        from ..usage.ledger import scope
+        with scope(job['owner'], 'memory', job['thread_id']):
+            await self._process(job)
+
+    async def _process(self, job):
         owner, root = job['owner'], self.storage.root
         try:
             snapshot = job['snapshot']

@@ -1,6 +1,7 @@
+import type { Draft } from "./workspace-storage";
 import { useAuthStore } from "@/stores/auth";
 import { importMeeting } from "@/apis/meetings";
-import type { Draft } from "./workspace-storage";
+
 let connection: Promise<IDBDatabase> | null = null;
 function db() {
   if (!connection)

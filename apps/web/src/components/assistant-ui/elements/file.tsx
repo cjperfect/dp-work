@@ -1,3 +1,4 @@
+import type { FileMessagePartComponent } from "@assistant-ui/react";
 import { memo, type FC } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import {
@@ -9,7 +10,7 @@ import {
   BracesIcon,
   DownloadIcon,
 } from "lucide-react";
-import type { FileMessagePartComponent } from "@assistant-ui/react";
+
 import { cn } from "@/lib/utils";
 import { AudioPlayer, VideoPlayer } from "./media-player";
 

@@ -1,3 +1,5 @@
+import type { ImageMessagePart, ImageMessagePartComponent } from "@assistant-ui/react";
+import { loadImageBlob } from "@/apis/image-assets";
 import { memo, useState, useEffect, useCallback, useRef, type PropsWithChildren } from "react";
 import { createPortal } from "react-dom";
 import { cva, type VariantProps } from "class-variance-authority";
@@ -11,7 +13,7 @@ import {
   ShieldAlertIcon,
   XIcon,
 } from "lucide-react";
-import type { ImageMessagePart, ImageMessagePartComponent } from "@assistant-ui/react";
+
 import { cn } from "@/lib/utils";
 import { hostOf, safeHref } from "../utils/href";
 
@@ -126,7 +128,7 @@ const copyImagePart = async (part: Pick<ImageMessagePart, "image">): Promise<voi
   }
   const blob = /^data:/i.test(part.image)
     ? dataUriToBlob(part.image)
-    : await fetch(part.image).then((r) => r.blob());
+    : await loadImageBlob(part.image);
   if (!blob) return;
   const mime = mimeFromImage(part.image) ?? blob.type ?? "image/png";
   await navigator.clipboard.write([new ClipboardItem({ [mime]: blob })]);

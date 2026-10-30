@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { exportMarkdown } from "@/apis/meetings";
-import { publish } from "@/stores/meetings";
+import { publish } from "@/stores/meeting";
 import { isPending, replaceFromServer, type Draft } from "../lib/workspace-storage";
 
 export function SaveStatus({

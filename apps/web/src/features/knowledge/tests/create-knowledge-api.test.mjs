@@ -14,7 +14,7 @@ import {
   deleteKnowledgeBase,
   resetKnowledgeBases,
   useKnowledgeStore,
-} from "../../../stores/knowledge.ts";
+} from "../../../stores/knowledge/index.ts";
 
 const originals = Object.fromEntries(
   ["window", "localStorage"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),

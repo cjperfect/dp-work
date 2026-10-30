@@ -8,7 +8,7 @@ import {
   saveKnowledgeDocument,
   renameKnowledgeDocument,
   deleteKnowledgeDocument,
-} from "../../../stores/knowledge.ts";
+} from "../../../stores/knowledge/index.ts";
 import {
   uploadKnowledgeDocumentRequest,
   downloadKnowledgeDocumentRequest,

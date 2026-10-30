@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { beforeEach, afterEach, test } from "node:test";
 import { httpClient } from "../../../lib/http.ts";
 import { useAuthStore } from "../../../stores/auth.ts";
-import { resetAgents, undoFileChange, useAgentStore } from "../../../stores/agent.ts";
+import { resetAgents, useAgentStore } from "../../../stores/agent/state.ts";
+import { undoFileChange } from "../../../stores/agent/agent-files.ts";
 
 let interceptor, handler, originalStorage;
 const change = {

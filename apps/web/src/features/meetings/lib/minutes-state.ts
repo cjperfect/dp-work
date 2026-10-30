@@ -1,5 +1,4 @@
-import type { Meeting } from "@/apis/meetings";
-
+import type { Meeting } from "@/interfaces/meeting";
 export type GenerationStatus = "idle" | "generating" | "ready" | "failed";
 export function generationStatus(meeting: Meeting): GenerationStatus {
   if (meeting.generation_status) return meeting.generation_status;

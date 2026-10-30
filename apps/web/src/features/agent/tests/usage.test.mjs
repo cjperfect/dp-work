@@ -60,3 +60,29 @@ test("cost meter totals exclude cache/reasoning subsets and don't claim missing 
   assert.equal(formatCost("-1", "CNY"), null);
   assert.match(formatCost("0", "CNY"), /CNY 0\.0000/);
 });
+
+test("session input and output are accumulated separately without counting a run twice", async () => {
+  const { sessionTokenTotals } = await import("../lib/usage.ts");
+  const result = sessionTokenTotals([
+    usage("one", 120),
+    usage("one", 240),
+    undefined,
+    usage("two", 120),
+  ]);
+  assert.deepEqual(result, { input: 320, output: 40, total: 360, known: true, complete: true });
+});
+
+test("empty and incomplete session totals do not claim complete zero usage", async () => {
+  const { sessionTokenTotals } = await import("../lib/usage.ts");
+  assert.deepEqual(sessionTokenTotals([]), {
+    input: 0,
+    output: 0,
+    total: 0,
+    known: false,
+    complete: false,
+  });
+  const partial = { ...usage("partial", 120), complete: false, unreported_calls: 1 };
+  assert.equal(sessionTokenTotals([partial]).complete, false);
+  assert.equal(sessionTokenTotals([partial]).input, 100);
+  assert.equal(sessionTokenTotals([partial]).output, 20);
+});

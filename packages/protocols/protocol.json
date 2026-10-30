@@ -2,6 +2,7 @@
   "jsonrpc": "2.0",
   "revision": 4,
   "methods": {
+    "usage.summary": "查询本机账号能力用量",
     "memory.list": "查询本机长期记忆",
     "memory.create": "保存精选关键信息",
     "memory.update": "修改本机长期记忆",
@@ -23,6 +24,7 @@
     "asr.sessions": "创建 ASR 票据",
     "skills.search": "搜索 skills.sh 技能",
     "skills.list": "查询已安装技能",
+    "skills.upload": "上传本机技能",
     "skills.install": "安装技能",
     "skills.uninstall": "卸载技能",
     "skills.descriptions": "批量读取技能简介",

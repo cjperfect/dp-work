@@ -1,3 +1,9 @@
+import type {
+  ServiceConfig,
+  ServiceInput,
+  ServiceKind,
+  ConnectionResult,
+} from "@/interfaces/settings";
 import { useState } from "react";
 import { Check, CircleCheck, CircleAlert, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -5,9 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useAuthStore } from "@/stores/auth";
-import { loadAgentModels } from "@/stores/agent-models";
+import { loadAgentModels } from "@/stores/agent/agent-models";
 import { saveService, testService } from "@/apis/settings";
-import type { ServiceConfig, ServiceInput, ServiceKind, ConnectionResult } from "@/types/settings";
+
 import { Row, Group, Choice } from "./settings-fields";
 
 const providers = [

@@ -126,7 +126,9 @@ export function routeLocal(
     return { method: "skills.list", params: { agent_code: query.agent_code } };
   if (path === "/api/skills/search" && verb === "GET")
     return { method: "skills.search", params: { query: query.q || "" } };
-  const skill = path.match(/^\/api\/skills\/(install|uninstall|descriptions)$/);
+  if (path === "/api/usage" && verb === "GET")
+    return { method: "usage.summary", params: { owner_id: owner } };
+  const skill = path.match(/^\/api\/skills\/(install|uninstall|descriptions|upload)$/);
   if (skill && verb === "POST") return { method: `skills.${skill[1]}`, params: body };
   const feishu = path.match(
     /^\/api\/connectors\/feishu(?:\/(verify|disconnect|authorization)(?:\/(configure|login))?)?$/,

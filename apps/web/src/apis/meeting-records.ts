@@ -1,47 +1,35 @@
-import type { Workspace } from "./meetings";
-import { request } from "@/lib/http";
+import type { RecordDocument, RecordVersion, Workspace } from "@/interfaces/meeting";
+import { http } from "@/lib/http";
 
-export type RecordDocument = {
-  meeting_id: string;
-  title: string;
-  owner: boolean;
-  editable: boolean;
-  content: string;
-  state: string;
-  epoch: string;
-  revision: number;
-  saved_revision?: number;
-  saved_at?: string;
-  updated_at: string;
-};
-export type RecordVersion = {
-  id: string;
-  revision: number;
-  label: string;
-  author: string;
-  created_at: string;
-};
+/** 构造会议纪要协作接口地址。 */
 const path = (id: string) => `/api/meetings/${encodeURIComponent(id)}/record`;
+/** 读取会议纪要协作文档。 */
 export const getRecord = (id: string, share?: string) =>
-  request<RecordDocument>(path(id), { params: { share_token: share } });
+  http.get<RecordDocument>(path(id), { params: { share_token: share } });
+/** 通过分享令牌读取协作文档。 */
 export const resolveRecordShare = (token: string) =>
-  request<RecordDocument>(`/api/meetings/shared/records/${encodeURIComponent(token)}`);
-export const shareRecord = (id: string) =>
-  request<{ token: string }>(`${path(id)}/share`, { method: "POST" });
+  http.get<RecordDocument>(`/api/meetings/shared/records/${encodeURIComponent(token)}`);
+/** 获取会议纪要的分享链接令牌。 */
+export const shareRecord = (id: string) => http.post<{ token: string }>(`${path(id)}/share`);
+/** 查询会议纪要的历史版本。 */
 export const listRecordVersions = (id: string, share?: string) =>
-  request<RecordVersion[]>(`${path(id)}/versions`, { params: { share_token: share } });
+  http.get<RecordVersion[]>(`${path(id)}/versions`, { params: { share_token: share } });
+/** 读取指定历史版本的内容。 */
 export const getRecordVersion = (id: string, version: string, share?: string) =>
-  request<{ state: string }>(`${path(id)}/versions/${version}`, { params: { share_token: share } });
+  http.get<{ state: string }>(`${path(id)}/versions/${version}`, {
+    params: { share_token: share },
+  });
+/** 创建会议纪要版本快照。 */
 export const checkpointRecord = (id: string, label: string) =>
-  request(`${path(id)}/versions`, { method: "POST", data: { label } });
+  http.post(`${path(id)}/versions`, { label });
+/** 将会议纪要恢复到指定版本。 */
 export const restoreRecord = (id: string, version: string, revision: number) =>
-  request<RecordDocument>(`${path(id)}/versions/${version}/restore`, {
-    method: "POST",
-    data: { expected_revision: revision },
+  http.post<RecordDocument>(`${path(id)}/versions/${version}/restore`, {
+    expected_revision: revision,
   });
 
+/** 将会议纪要归档到指定知识库。 */
 export const archiveMinutes = (id: string, baseId: number) =>
-  request<Workspace>(`/api/meetings/${encodeURIComponent(id)}/minutes/archive`, {
-    method: "POST",
-    data: { knowledge_base_id: baseId },
+  http.post<Workspace>(`/api/meetings/${encodeURIComponent(id)}/minutes/archive`, {
+    knowledge_base_id: baseId,
   });

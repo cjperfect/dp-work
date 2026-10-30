@@ -80,8 +80,10 @@ async def semantic_recall(owner, agent_code, project_id, query, budget=5000, roo
     try:
         if not query.strip():
             return pack(candidates, budget)
-        async with asyncio.timeout(config.MEMORY_RETRIEVAL_TIMEOUT_SECONDS):
-            ranked_rows = await ranked(owner, candidates, query, root, embeddings)
+        from ..usage.ledger import scope
+        with scope(owner, 'embedding'):
+            async with asyncio.timeout(config.MEMORY_RETRIEVAL_TIMEOUT_SECONDS):
+                ranked_rows = await ranked(owner, candidates, query, root, embeddings)
         # 向量请求期间可能发生修改、删除、停用或范围变更，不注入旧快照。
         latest = unique(await asyncio.to_thread(repo.relevant, owner, agent_code, project_id, root))
         valid = {(row['id'], row['revision']): row for row in latest}

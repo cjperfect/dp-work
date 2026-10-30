@@ -1,17 +1,12 @@
-import { useAgentApprovalStore } from "../../../stores/agent-approvals.ts";
+import { saveComposerDraft as setDraftText } from "../../../stores/agent/agent-message-queue.ts";
+import { useAgentApprovalStore } from "../../../stores/agent/agent-approvals.ts";
 import { ensureTestChat as ensureAgentChat } from "./conversation-fixture.mjs";
 import assert from "node:assert/strict";
 import { beforeEach, afterEach, test } from "node:test";
 import { httpClient } from "../../../lib/http.ts";
 import { useAuthStore } from "../../../stores/auth.ts";
-import {
-  cancelMessage,
-  resumeApprovedRun,
-  resetAgents,
-  sendMessage,
-  setDraftText,
-  useAgentStore,
-} from "../../../stores/agent.ts";
+import { cancelMessage, resumeApprovedRun, sendMessage } from "../../../stores/agent/agent-send.ts";
+import { resetAgents, useAgentStore } from "../../../stores/agent/state.ts";
 import {
   enqueueFollowUp,
   guideQueuedMessage,
@@ -21,7 +16,7 @@ import {
   continueMessageQueue,
   waitingForApproval,
   removeQueuedMessage,
-} from "../../../stores/agent-message-queue.ts";
+} from "../../../stores/agent/agent-message-queue.ts";
 import { conversationFixture } from "./conversation-fixture.mjs";
 
 let storage, interceptor, values, controls, sent, backend, cancelHandler, guides;
@@ -119,7 +114,7 @@ test("messages drain in order without erasing text typed during generation", asy
   enqueueFollowUp(id, "第二条");
   enqueueFollowUp(id, "第三条");
   setDraftText(id, "尚未提交的草稿");
-  assert.equal(useAgentStore.getState().drafts[id].text, "尚未提交的草稿");
+  assert.equal(useAgentMessageQueue.getState().drafts[id], "尚未提交的草稿");
   complete(0);
   await task;
   await until(() => controls.length === 2);
@@ -127,10 +122,10 @@ test("messages drain in order without erasing text typed during generation", asy
   complete(1);
   await until(() => controls.length === 3);
   complete(2);
-  await until(() => !useAgentStore.getState().drafts[id].sending);
+  await until(() => !useAgentStore.getState().sending[id]);
   assert.deepEqual(sent, ["第一条", "第二条", "第三条"]);
-  assert.equal(useAgentStore.getState().drafts[id].text, "尚未提交的草稿");
-  assert.equal(backend.details.get(id).thread.draft, "尚未提交的草稿");
+  assert.equal(useAgentMessageQueue.getState().drafts[id], "尚未提交的草稿");
+  assert.equal(backend.details.get(id).thread.draft, "");
 });
 
 test("guidance stays in the same stream and is removed only after it takes effect", async () => {
@@ -180,7 +175,7 @@ test("guidance stays in the same stream and is removed only after it takes effec
   await until(() => controls.length === 2);
   assert.deepEqual(sent, ["第一条", "继续等候"]);
   complete(1);
-  await until(() => !useAgentStore.getState().drafts[id].sending);
+  await until(() => !useAgentStore.getState().sending[id]);
   const saved = backend.details.get(id).messages;
   assert.equal(saved.filter((row) => row.id === guidance).length, 1);
   assert.equal(saved.find((row) => row.id === guidance + "-reply").content, "已按补充要求完成");
@@ -197,14 +192,14 @@ test("stop still waits for API cancellation and leaves follow-up messages paused
   cancelMessage(id);
   await until(() => !!release);
   assert.equal(controls.length, 1);
-  assert.equal(useAgentStore.getState().drafts[id].sending, true);
+  assert.equal(useAgentStore.getState().sending[id], true);
   release(null);
   await task;
   assert.equal(useAgentMessageQueue.getState().paused[id], true);
   continueMessageQueue(id);
   await until(() => controls.length === 2);
   complete(1);
-  await until(() => !useAgentStore.getState().drafts[id].sending);
+  await until(() => !useAgentStore.getState().sending[id]);
 });
 
 test("a restored queue stays paused and is isolated from another account", async () => {
@@ -237,7 +232,7 @@ test("failure pauses the queue and keeps unsent messages for retry", async () =>
   continueMessageQueue(id);
   await until(() => controls.length === 3);
   complete(2);
-  await until(() => !useAgentStore.getState().drafts[id].sending);
+  await until(() => !useAgentStore.getState().sending[id]);
 });
 
 for (const decision of ["approve", "reject"]) {
@@ -277,7 +272,7 @@ for (const decision of ["approve", "reject"]) {
       ),
     );
     await until(() => !waitingForApproval(id));
-    assert.equal(useAgentStore.getState().drafts[id].sending, true);
+    assert.equal(useAgentStore.getState().sending[id], true);
     assert.equal(
       useAgentApprovalStore.getState().entries[id].items[0].status,
       decision === "approve" ? "approved" : "rejected",

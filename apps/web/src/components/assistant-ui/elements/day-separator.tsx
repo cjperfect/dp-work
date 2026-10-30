@@ -1,5 +1,4 @@
 import type { FC } from "react";
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function isDifferentDay(prev?: Date | null, current?: Date | null): boolean {

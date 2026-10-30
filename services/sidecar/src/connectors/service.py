@@ -81,7 +81,7 @@ async def _authorize(owner_id: int, job: Authorization) -> None:
             await cli.configure(owner_id, on_url)
             job.message = "应用配置完成，请继续点击授权登录。"
         else:
-            data = await cli.run(owner_id, "auth", "login", "--scope", cli.LOGIN_SCOPE, "--no-wait", "--json")
+            data = await cli.run(owner_id, "auth", "login", "--scope", cli.LOGIN_SCOPE, "--domain", "docs,drive", "--no-wait", "--json")
             url, code = data.get("verification_url"), data.get("device_code")
             if not isinstance(url, str) or not isinstance(code, str) or not code:
                 raise ConnectorError(ConnectorCode.INTERNAL_ERROR, "飞书未返回有效授权信息。", 502)

@@ -29,3 +29,9 @@ RPC：`skills.search`、`skills.list`、`skills.descriptions`、`skills.install`
 卡片简介优先读取已安装 SKILL.md 的 description；市场简介通过 `skills.descriptions` 批量读取公开页面元数据，缓存到 `.dp-work/cache/skills-descriptions`（成功 24 小时，缺失 2 分钟）。页面最多展示三行，详情弹窗展示未折叠的简介。
 
 安装、卸载和列表读取的文件操作通过线程执行，不阻塞 Sidecar 事件循环。取消请求会等待文件线程收尾后再释放 Agent 锁；损坏安装记录单项跳过并记录日志。前端保留 30 秒缓存，进入页面或重新聚焦时检查是否过期；设备通道重连成功会使缓存失效并刷新正在展示的列表，没有定时轮询。安装或卸载成功但列表刷新失败会单独提示。
+
+## 上传部门技能
+
+技能配置页支持向当前 Agent 上传单个 `SKILL.md` 或技能 ZIP（最大 8 MB）。SKILL.md 必须包含合法的 frontmatter `name`、`description`；ZIP 必须只包含一份 SKILL.md，可携带其目录内的脚本及参考附件，解压后最多 8 MB / 300 个文件。拒绝越界路径、软链接和同名覆盖，不执行上传脚本；卸载后可上传新版本。
+
+上传走 Web → Electron IPC → `skills.upload` → Sidecar，不经过云端 API，不需要自动生成 SOP。来源为空表示本机上传；列表、卸载及 Deep Agents 按需加载复用现有流程。

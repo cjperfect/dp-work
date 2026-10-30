@@ -27,21 +27,22 @@ export const useCopyToClipboard = ({ copiedDuration = 3000 }: UseCopyToClipboard
     }
 
     const scopeGeneration = scopeGenerationRef.current;
-    navigator.clipboard.writeText(value).then(
-      () => {
-        if (scopeGeneration !== scopeGenerationRef.current) return;
-
-        if (copiedTimerRef.current !== undefined) {
-          clearTimeout(copiedTimerRef.current);
-        }
-        setIsCopied(true);
-        copiedTimerRef.current = setTimeout(() => {
-          copiedTimerRef.current = undefined;
-          setIsCopied(false);
-        }, copiedDuration);
-      },
-      () => {},
-    );
+    void (async () => {
+      try {
+        await navigator.clipboard.writeText(value);
+      } catch {
+        return;
+      }
+      if (scopeGeneration !== scopeGenerationRef.current) return;
+      if (copiedTimerRef.current !== undefined) {
+        clearTimeout(copiedTimerRef.current);
+      }
+      setIsCopied(true);
+      copiedTimerRef.current = setTimeout(() => {
+        copiedTimerRef.current = undefined;
+        setIsCopied(false);
+      }, copiedDuration);
+    })();
   };
 
   return { isCopied, copyToClipboard };

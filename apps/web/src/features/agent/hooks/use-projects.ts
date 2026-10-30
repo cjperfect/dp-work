@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { loadProjects, useAgentProjectStore } from "@/stores/agent-projects";
+import { loadProjects, useAgentProjectStore } from "@/stores/agent/agent-projects";
 import { useAuthStore } from "@/stores/auth";
 export function useProjects() {
   const owner = useAuthStore((s) => s.user?.id);

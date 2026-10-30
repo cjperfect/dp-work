@@ -1,3 +1,5 @@
+import { saveComposerDraft as setDraftText } from "../../../stores/agent/agent-message-queue.ts";
+import { useAgentMessageQueue } from "../../../stores/agent/agent-message-queue.ts";
 import { ensureTestChat as ensureAgentChat } from "./conversation-fixture.mjs";
 import { conversationFixture } from "./conversation-fixture.mjs";
 import assert from "node:assert/strict";
@@ -10,14 +12,10 @@ import {
   sendMessage,
   editMessage,
   regenerateMessage,
-  setDraftText,
-  selectMessageBranch,
-  collectMessageBranches,
-  generateThreadTitle,
-  renameThread,
-  useAgentStore,
-  resetAgents,
-} from "../../../stores/agent.ts";
+} from "../../../stores/agent/agent-send.ts";
+import { selectMessageBranch, collectMessageBranches } from "../../../stores/agent/agent-files.ts";
+import { generateThreadTitle, renameThread } from "../../../stores/agent/agent-threads.ts";
+import { useAgentStore, resetAgents } from "../../../stores/agent/state.ts";
 
 let interceptor;
 let handler;
@@ -25,6 +23,7 @@ let originalStorage;
 const input = {
   agent_code: "general",
   thread_id: "one",
+  response_id: "one-reply",
   messages: [{ role: "user", content: "你好" }],
 };
 const event = (value) => `data: ${JSON.stringify(value)}\n\n`;
@@ -57,7 +56,10 @@ beforeEach(() => {
   const backend = conversationFixture();
   interceptor = httpClient.interceptors.request.use((config) => {
     config.adapter = async (request) => ({
-      data: await backend.handle(request, handler),
+      data:
+        request.url === "/api/agents/threads/one/chat"
+          ? await handler(request)
+          : await backend.handle(request, handler),
       status: 200,
       statusText: "OK",
       config: request,
@@ -122,7 +124,7 @@ test("chat store forwards real history and keeps streamed replies without mock t
   assert.equal(messages.length, 4);
   assert.equal(messages.at(-1).content, "回复");
   assert.equal(messages.at(-1).status, "complete");
-  assert.equal(useAgentStore.getState().drafts[id].sending, false);
+  assert.equal(useAgentStore.getState().sending[id], false);
 });
 test("failed runs can retry without duplicating the user message", async () => {
   await ensureAgentChat("general");
@@ -149,8 +151,7 @@ test("stopping generation preserves partial text and clears the running state", 
   });
   try {
     await sendMessage("general", id, "停止测试");
-    assert.equal(useAgentStore.getState().drafts[id].sending, false);
-    assert.equal(useAgentStore.getState().drafts[id].error, null);
+    assert.equal(useAgentStore.getState().sending[id], false);
     assert.equal(useAgentStore.getState().details[id].messages.at(-1).status, "cancelled");
     assert.equal(useAgentStore.getState().details[id].messages.at(-1).content, "partial");
     const stoppedId = useAgentStore.getState().details[id].messages.at(-1).id;
@@ -444,7 +445,7 @@ test("regeneration preserves the user node, old response branch and composer dra
     requests[0].messages.map((row) => row.content),
     ["第一问"],
   );
-  assert.equal(useAgentStore.getState().drafts[id].text, "正在输入的内容");
+  assert.equal(useAgentMessageQueue.getState().drafts[id], "正在输入的内容");
   const branches = collectMessageBranches(detail.messages, detail.message_branches);
   assert.ok(branches.some((entry) => entry.message.id === original[1].id));
   await assert.rejects(regenerateMessage("general", id, "missing"), /原消息不存在/);
@@ -501,4 +502,39 @@ test("reported usage SSE stays separate from assistant reply text", async () => 
   );
   assert.equal(text, "回答");
   assert.deepEqual(values, [usage]);
+});
+
+test("ordinary chat requires a response record and never falls back to a direct endpoint", async () => {
+  let called = false;
+  handler = async (config) => {
+    called = true;
+    assert.equal(config.url, "/api/agents/threads/one/chat");
+    return response(event({ type: "done", content: "回复" }));
+  };
+  await assert.rejects(
+    streamAgentChat({ ...input, response_id: undefined }, () => {}, new AbortController().signal),
+    /回复记录缺失/,
+  );
+  assert.equal(called, false);
+  assert.equal(await streamAgentChat(input, () => {}, new AbortController().signal), "回复");
+});
+
+test("approval continuation keeps its own endpoint without requiring a response record", async () => {
+  handler = async (config) => {
+    assert.equal(config.url, "/api/agents/approvals/approval-one/decide");
+    assert.deepEqual(JSON.parse(config.data), { decision: "approve" });
+    return response(event({ type: "done", content: "继续执行" }));
+  };
+  assert.equal(
+    await streamAgentChat(
+      {
+        ...input,
+        response_id: undefined,
+        approval_request: { id: "approval-one", decision: "approve" },
+      },
+      () => {},
+      new AbortController().signal,
+    ),
+    "继续执行",
+  );
 });

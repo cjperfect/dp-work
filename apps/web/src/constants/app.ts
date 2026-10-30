@@ -1,5 +1,4 @@
 import type { AgentId, ViewKey } from "@/interfaces/app";
-
 export const VIEW_TITLES: Record<ViewKey, string> = {
   chat: "会话",
   meetings: "开始会议",

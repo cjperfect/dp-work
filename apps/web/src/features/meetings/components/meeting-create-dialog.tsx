@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuthStore } from "@/stores/auth";
 import { createMeeting } from "@/apis/meetings";
-import { cacheCreated } from "@/stores/meetings";
+import { cacheCreated } from "@/stores/meeting";
 function localTime() {
   const date = new Date();
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);

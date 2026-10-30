@@ -75,14 +75,16 @@ async def asr_websocket(websocket: WebSocket):
                     await error("MEETING_BUSY", "该会议已有转写连接。", request, True)
                     continue
                 override = None
+                owner_id = None
                 if request.ticket:
                     entry = websocket.app.state.asr_tickets.pop(request.ticket, None)
                     if not entry or entry[0] < time.monotonic() or entry[1] != request.meetingId:
                         await error("INVALID_TICKET", "转写连接凭证已失效，请重试。", request)
                         continue
+                    owner_id = entry[2]
                     override = entry[3].asr() if entry[3] else None
                 provider = DoubaoRecognizer(override) if override else DoubaoRecognizer()
-                session = AsrSession(request.meetingId, send, provider, next_seq=request.nextSeq, offset_ms=request.offsetMs)
+                session = AsrSession(request.meetingId, send, provider, next_seq=request.nextSeq, offset_ms=request.offsetMs, owner_id=owner_id)
                 active[request.meetingId] = session
                 await session.prepare()
                 await send(dict(type="asr.ready", requestId=request.requestId,

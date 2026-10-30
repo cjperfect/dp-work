@@ -1,18 +1,18 @@
+import type { AgentApproval } from "@/interfaces/agent";
 import { useEffect, useRef, useState } from "react";
 import { useAuiState } from "@assistant-ui/react";
 import { ApprovalCard } from "@/components/assistant-ui/elements/approval-card";
 import { Button } from "@/components/ui/button";
-import { loadApprovals, useAgentApprovalStore } from "@/stores/agent-approvals";
+import { loadApprovals, useAgentApprovalStore } from "@/stores/agent/agent-approvals";
 import { resumeApprovedRun, useAgentStore } from "@/stores/agent";
 import { useAuthStore } from "@/stores/auth";
-import type { AgentApproval } from "@/apis/agent-approvals";
 
 /** 从本机恢复待执行审批，提交期间锁定按钮，失败保留重试入口。 */
 export function AgentApprovals() {
   const id = useAuiState((s) => s.threadListItem.remoteId);
   const owner = useAuthStore((s) => s.user?.id);
   const entry = useAgentApprovalStore((s) => (id ? s.entries[id] : undefined));
-  const sending = useAgentStore((s) => (id ? s.drafts[id]?.sending : false));
+  const sending = useAgentStore((s) => (id ? s.sending[id] : false));
   const identity = useRef("");
   identity.current = `${owner}:${id}`;
   const [busy, setBusy] = useState<string | null>(null);

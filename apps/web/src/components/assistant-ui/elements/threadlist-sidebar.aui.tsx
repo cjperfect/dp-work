@@ -1,3 +1,5 @@
+import type { AgentConfig } from "@/interfaces/agent";
+import type { AgentId } from "@/interfaces/app";
 import { Link, useLocation } from "@tanstack/react-router";
 import type * as React from "react";
 import { BookOpen, Bot, Boxes, Package, Plug, Video, UsersRound, Palette } from "lucide-react";
@@ -23,8 +25,7 @@ import {
 import { useAgentStore } from "@/stores/agent";
 import { useAgentCode } from "@/features/agent/hooks/use-agent-code";
 import { useConnectors } from "@/stores/connectors";
-import type { AgentConfig } from "@/types/agent";
-import type { AgentId } from "@/interfaces/app";
+
 import { useAuthStore } from "@/stores/auth";
 import { UserMenu } from "@/features/auth/components/user-menu";
 

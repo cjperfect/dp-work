@@ -2,9 +2,11 @@
 import asyncio
 from urllib.parse import urlparse
 import httpx
+from ...usage.ledger import tracked, record_response
 from .schemas import ModelError, ModelSettings
 
 
+@tracked
 async def complete(messages: list[dict], settings: ModelSettings, transport=None) -> tuple[str, str]:
     """调用方舟并校验完整的文本结果，不回传上游原始错误。"""
     if not settings.api_key or not settings.model or not settings.base_url:
@@ -30,6 +32,7 @@ async def complete(messages: list[dict], settings: ModelSettings, transport=None
         raise ModelError("MODEL_REQUEST_FAILED", "方舟模型请求失败，请检查模型 ID 和服务配置。")
     try:
         body = response.json()
+        await record_response(body, body.get("model") or settings.model)
         choice = body["choices"][0]
         if choice.get("finish_reason") != "stop":
             raise ModelError("MODEL_INCOMPLETE", "模型未返回完整纪要，请调整输出长度或稍后重试。")

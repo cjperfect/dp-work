@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react";
 import type { BlockNoteEditorProps } from "./blocknote-editor";
+import { lazy, Suspense } from "react";
 
 const Editor = lazy(() =>
   import("./blocknote-editor").then((module) => ({ default: module.BlockNoteEditor })),

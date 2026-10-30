@@ -1,7 +1,15 @@
 "use client";
 
 import { Fragment, type ComponentProps, type ReactElement, type ReactNode } from "react";
-import { ChevronDownIcon, FileIcon, FolderIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  FileIcon,
+  FileCode2Icon,
+  FileJsonIcon,
+  FileTextIcon,
+  FileImageIcon,
+  FolderIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { mono, paper } from "./surfaces";
 import { take } from "../utils/range";
@@ -13,6 +21,34 @@ export interface FileTreeNode {
   kind: "folder" | "file";
   additions?: number;
   deletions?: number;
+}
+
+/** 用图标形状和颜色区分目录及常见文件类型。 */
+function FileTypeIcon({ path }: { path: string }) {
+  const extension = path.split(/[\\/]/).at(-1)?.split(".").at(-1)?.toLowerCase();
+  let Icon = FileIcon;
+  let color = "text-slate-500 dark:text-slate-400";
+  if (["js", "jsx", "mjs", "cjs"].includes(extension ?? "")) {
+    Icon = FileCode2Icon;
+    color = "text-amber-600 dark:text-amber-400";
+  } else if (["ts", "tsx"].includes(extension ?? "")) {
+    Icon = FileCode2Icon;
+    color = "text-blue-600 dark:text-blue-400";
+  } else if (["py", "go", "rs", "java", "sh"].includes(extension ?? "")) {
+    Icon = FileCode2Icon;
+    color = "text-emerald-600 dark:text-emerald-400";
+  } else if (["json", "yaml", "yml", "toml"].includes(extension ?? "")) {
+    Icon = FileJsonIcon;
+    color = "text-orange-600 dark:text-orange-400";
+  } else if (["png", "jpg", "jpeg", "gif", "webp", "svg", "ico"].includes(extension ?? "")) {
+    Icon = FileImageIcon;
+    color = "text-violet-600 dark:text-violet-400";
+  } else if (["md", "mdx", "txt", "docx", "pdf"].includes(extension ?? "")) {
+    Icon = FileTextIcon;
+    color =
+      extension === "pdf" ? "text-red-600 dark:text-red-400" : "text-sky-600 dark:text-sky-400";
+  }
+  return <Icon aria-hidden="true" className={cn("size-3.5 shrink-0", color)} />;
 }
 
 export function FileTree({
@@ -66,13 +102,16 @@ export function FileTree({
               {node.kind === "folder" ? (
                 <>
                   <ChevronDownIcon className="text-muted-foreground size-3 shrink-0" />
-                  <FolderIcon className="text-muted-foreground size-3.5 shrink-0" />
+                  <FolderIcon
+                    aria-hidden="true"
+                    className="size-3.5 shrink-0 fill-amber-100 text-amber-600 dark:fill-amber-400/15 dark:text-amber-400"
+                  />
                   <span className="text-foreground/60 min-w-0 flex-1 truncate">{node.name}</span>
                 </>
               ) : (
                 <>
                   <span className="ms-3 flex min-w-0 flex-1 items-center gap-2">
-                    <FileIcon className="text-muted-foreground size-3.5 shrink-0" />
+                    <FileTypeIcon path={node.path} />
                     <span className="text-foreground/85 truncate">{node.name}</span>
                   </span>
                   <span className={cn(mono, "shrink-0 tabular-nums")}>

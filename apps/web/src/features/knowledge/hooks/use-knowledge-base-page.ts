@@ -1,7 +1,8 @@
+import type { KnowledgeBasePage } from "@/interfaces/knowledge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { localAccountId } from "@/features/auth/lib/auth";
-import { listKnowledgeBasesRequest, type KnowledgeBasePage } from "@/apis/knowledge";
+import { listKnowledgeBasesRequest } from "@/apis/knowledge";
 
 /** 同参数在途请求去重：effect、focus 等触发源并发时只发一次网络请求。 */
 const inflight = new Map<string, Promise<KnowledgeBasePage>>();

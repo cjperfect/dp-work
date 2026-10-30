@@ -1,5 +1,4 @@
 import type { SidecarToClient, WsAsrTranscript } from "@dp-work/protocols/asr";
-
 export type AsrStatus = "idle" | "connecting" | "live" | "stopping" | "stopped" | "error";
 
 type Pending = {
@@ -130,27 +129,27 @@ export class AsrClient {
         );
       };
       socket.onmessage = (event) => {
-        this.messages = this.messages
-          .then(async () => {
-            if (this.socket !== socket) return;
-            if (typeof event.data !== "string") throw new Error("转写服务返回了非 JSON 消息。");
-            await this.receive(parseMessage(event.data));
-          })
-          .catch((cause) => {
-            if (this.socket === socket)
-              this.fail(cause instanceof Error ? cause : new Error("转写消息处理失败。"));
-          });
+        this.messages = (async () => {
+          await this.messages;
+          if (this.socket !== socket) return;
+          if (typeof event.data !== "string") throw new Error("转写服务返回了非 JSON 消息。");
+          await this.receive(parseMessage(event.data));
+        })().catch((cause) => {
+          if (this.socket === socket)
+            this.fail(cause instanceof Error ? cause : new Error("转写消息处理失败。"));
+        });
       };
       socket.onerror = () => {
         if (this.socket === socket)
           this.fail(new Error("无法连接转写服务，请确认 Sidecar 已启动。"));
       };
       socket.onclose = () => {
-        void this.messages.then(() => {
+        void (async () => {
+          await this.messages;
           if (this.socket !== socket) return;
           this.socket = null;
           if (this.status !== "stopped") this.fail(new Error("转写连接已断开，请重新开始转写。"));
-        });
+        })();
       };
     } catch (cause) {
       this.fail(cause instanceof Error ? cause : new Error("无法建立转写连接。"));

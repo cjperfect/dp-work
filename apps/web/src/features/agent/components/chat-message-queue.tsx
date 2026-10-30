@@ -3,8 +3,8 @@ import { useState } from "react";
 import { useAui, useAuiState } from "@assistant-ui/react";
 import { ArrowUpToLine, ListEnd, X, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAgentStore, setDraftText } from "@/stores/agent";
-import { useAgentApprovalStore } from "@/stores/agent-approvals";
+import { useAgentStore } from "@/stores/agent";
+import { useAgentApprovalStore } from "@/stores/agent/agent-approvals";
 import {
   useAgentMessageQueue,
   enqueueFollowUp,
@@ -12,7 +12,7 @@ import {
   guideQueuedMessage,
   continueMessageQueue,
   saveComposerDraft,
-} from "@/stores/agent-message-queue";
+} from "@/stores/agent/agent-message-queue";
 
 const EMPTY: never[] = [];
 export function ChatMessageQueue() {
@@ -20,7 +20,7 @@ export function ChatMessageQueue() {
   const rows = useAgentMessageQueue((s) => (id ? (s.items[id] ?? EMPTY) : EMPTY));
   const paused = useAgentMessageQueue((s) => (id ? s.paused[id] : false));
   const error = useAgentMessageQueue((s) => (id ? s.errors[id] : null));
-  const sending = useAgentStore((s) => (id ? s.drafts[id]?.sending : false));
+  const sending = useAgentStore((s) => (id ? s.sending[id] : false));
   const waiting = useAgentApprovalStore((s) =>
     id ? s.entries[id]?.items.some((row) => row.actionable) : false,
   );
@@ -108,7 +108,7 @@ export function ChatQueueActions() {
   const id = useAuiState((s) => s.threadListItem.remoteId);
   const text = useAuiState((s) => s.composer.text);
   const hasImages = useAuiState((s) => s.composer.attachments.length > 0);
-  const sending = useAgentStore((s) => (id ? s.drafts[id]?.sending : false));
+  const sending = useAgentStore((s) => (id ? s.sending[id] : false));
   const waiting = useAgentApprovalStore((s) =>
     id ? s.entries[id]?.items.some((row) => row.actionable) : false,
   );
@@ -124,7 +124,6 @@ export function ChatQueueActions() {
       const messageId = enqueueFollowUp(id, text || "请查看这张图片。", images);
       await aui.composer.clearAttachments();
       aui.composer.setText("");
-      setDraftText(id, "");
       saveComposerDraft(id, "");
       if (guide) await guideQueuedMessage(id, messageId);
     } catch (cause) {

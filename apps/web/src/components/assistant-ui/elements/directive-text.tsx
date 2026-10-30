@@ -1,7 +1,7 @@
+import type { FC } from "react";
 import { useAuiState } from "@assistant-ui/react";
 import { CommandIcon } from "lucide-react";
 import { cn } from "cn";
-import type { FC } from "react";
 
 /**
  * 指令文本（对应 assistant-ui directive-text 元素，0.15 无内置实现）：

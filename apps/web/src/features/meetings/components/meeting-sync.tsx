@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useAuthStore } from "@/stores/auth";
-import { syncNow, useMeetingCache } from "@/stores/meetings";
+import { syncNow, useMeetingCache } from "@/stores/meeting";
 export function MeetingSync() {
   const accountId = useAuthStore((state) => state.user?.id);
   useEffect(() => {

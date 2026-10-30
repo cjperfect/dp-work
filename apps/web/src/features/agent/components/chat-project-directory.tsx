@@ -10,8 +10,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { changeThreadProject, useAgentStore } from "@/stores/agent";
-import { useAgentApprovalStore } from "@/stores/agent-approvals";
-import { addLocalProject } from "@/stores/agent-projects";
+import { useAgentApprovalStore } from "@/stores/agent/agent-approvals";
+import { addLocalProject } from "@/stores/agent/agent-projects";
 import { useProjects } from "../hooks/use-projects";
 
 /** 当前会话的项目目录，选取本地目录必须经过 Electron 原生选择器。 */
@@ -19,7 +19,7 @@ export function ChatProjectDirectory() {
   const aui = useAui();
   const id = useAuiState((s) => s.threadListItem.remoteId);
   const detail = useAgentStore((s) => (id ? s.details[id] : undefined));
-  const sending = useAgentStore((s) => (id ? s.drafts[id]?.sending : false));
+  const sending = useAgentStore((s) => (id ? s.sending[id] : false));
   const waiting = useAgentApprovalStore((s) =>
     id ? s.entries[id]?.items.some((row) => row.actionable) : false,
   );

@@ -1,3 +1,4 @@
+import type { InstalledSkill } from "@/interfaces/skills";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,7 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { InstalledSkill } from "@/apis/skills";
 
 type Props = {
   skill: InstalledSkill | null;

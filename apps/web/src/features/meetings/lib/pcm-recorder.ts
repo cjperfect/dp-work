@@ -24,21 +24,18 @@ export class PcmRecorder {
     const context = new AudioContext({ sampleRate: 16000, latencyHint: "interactive" });
     this.context = context;
     try {
-      await Promise.all([
-        navigator.mediaDevices
-          .getUserMedia({
-            audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
-            video: false,
-          })
-          .then((stream) => {
-            if (generation !== this.generation) {
-              stream.getTracks().forEach((track) => track.stop());
-              throw new Error("录音已取消。");
-            }
-            this.stream = stream;
-          }),
-        context.resume(),
-      ]);
+      const acquireMic = async () => {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+          video: false,
+        });
+        if (generation !== this.generation) {
+          stream.getTracks().forEach((track) => track.stop());
+          throw new Error("录音已取消。");
+        }
+        this.stream = stream;
+      };
+      await Promise.all([acquireMic(), context.resume()]);
       if (generation !== this.generation) throw new Error("录音已取消。");
       if (!context.audioWorklet) throw new Error("当前环境不支持实时音频处理。");
       await context.audioWorklet.addModule("/audio/pcm-worklet.js");

@@ -1,3 +1,4 @@
+import type { KbFile } from "@/interfaces/knowledge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { LazyBlockNoteEditor as Editor } from "@/components/editor/lazy-blocknote-editor";
@@ -5,7 +6,6 @@ import { saveParsedDocumentRequest } from "@/apis/knowledge";
 import { localAccountId } from "@/features/auth/lib/auth";
 import { useAuthStore } from "@/stores/auth";
 import { DOCUMENTS_CHANGED } from "../hooks/use-document-parsing";
-import type { KbFile } from "../constants/knowledge-data";
 
 /** 解析结果单独编辑，1 秒防抖与 5 秒定时兜底保存。 */
 export function ParsedDocumentEditor({

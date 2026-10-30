@@ -1,9 +1,9 @@
+import type { KbFile } from "@/interfaces/knowledge";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { parseKnowledgeDocumentRequest, vectorizeKnowledgeDocumentRequest } from "@/apis/knowledge";
 import { localAccountId } from "@/features/auth/lib/auth";
 import { useAuthStore } from "@/stores/auth";
-import type { KbFile } from "../constants/knowledge-data";
 
 import { DOCUMENTS_CHANGED } from "../lib/document-events";
 export { DOCUMENTS_CHANGED } from "../lib/document-events";

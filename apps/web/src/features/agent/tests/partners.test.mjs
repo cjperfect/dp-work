@@ -7,11 +7,10 @@ import {
   addPartner,
   removePartner,
   isAgentAdded,
-  createThread,
-  resetAgents,
-  useAgentStore,
-} from "../../../stores/agent.ts";
-import { agentPath } from "../constants/agents.ts";
+} from "../../../stores/agent/agent-config.ts";
+import { createThread } from "../../../stores/agent/agent-threads.ts";
+import { resetAgents, useAgentStore } from "../../../stores/agent/state.ts";
+import { agentPath } from "@/constants/agents";
 let storage, windowDescriptor, interceptor, values, creates, rows;
 beforeEach(() => {
   storage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");

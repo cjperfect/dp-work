@@ -1,3 +1,4 @@
+import type { AuthMode, CredentialErrors } from "@/interfaces/auth";
 import { useRef, useState, type FormEvent } from "react";
 import { Link, useRouter, useSearch } from "@tanstack/react-router";
 import {
@@ -21,7 +22,6 @@ import {
 } from "@/components/ui/select";
 import { authenticate, safeRedirect } from "@/stores/auth";
 import { validateCredentials } from "@/features/auth/lib/auth";
-import type { AuthMode, CredentialErrors } from "@/types/auth";
 
 const DEPARTMENTS = ["全员", "产品部", "研发部", "设计部", "市场部", "运营部", "财务部", "人事部"];
 
@@ -68,9 +68,10 @@ function AuthPage({ mode }: { mode: AuthMode }) {
       const pending = router.navigate({ href: destination, replace: true });
       let navigated = false;
       await Promise.race([
-        pending.then(() => {
+        (async () => {
+          await pending;
           navigated = true;
-        }),
+        })(),
         new Promise<void>((resolve) => setTimeout(resolve, 2000)),
       ]).catch(() => {});
       if (!navigated) window.location.assign(destination);

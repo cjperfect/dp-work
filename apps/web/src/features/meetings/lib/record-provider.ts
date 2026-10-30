@@ -1,3 +1,4 @@
+import type { RecordDocument } from "@/interfaces/meeting";
 import * as Y from "yjs";
 import {
   Awareness,
@@ -5,7 +6,7 @@ import {
   encodeAwarenessUpdate,
   removeAwarenessStates,
 } from "y-protocols/awareness";
-import type { RecordDocument } from "@/apis/meeting-records";
+
 import { getAccessToken, useAuthStore } from "@/stores/auth";
 
 export const decodeState = (state: string) =>
