@@ -81,6 +81,8 @@ def build_agent(model, agent_code: str, tools: list[BaseTool] | None = None, che
     tools = tools or []
     from ..tools.workspace import agent_backend
     from ..skills.service import skill_directory
+    from ..harness.recovery import RecoveryMiddleware
+    from ..harness.compaction import compaction_middleware
     from ..harness.steering import SteeringMiddleware
     from ..harness.loop_guard import LoopGuardMiddleware
     from deepagents.graph import GENERAL_PURPOSE_SUBAGENT
@@ -89,15 +91,16 @@ def build_agent(model, agent_code: str, tools: list[BaseTool] | None = None, che
     if project_id:
         from ..tools.projects import project_workspace
         working_directory = project_workspace(project_id, workspace_owner_id)
+    backend = agent_backend(agent_code, project_id, workspace_owner_id, run_id)
     return create_deep_agent(
         model=model,
         tools=tools,
         checkpointer=checkpointer,
-        middleware=[LoopGuardMiddleware(config.AGENT_REPEAT_LIMIT, config.AGENT_TOOL_ERROR_LIMIT), *([SteeringMiddleware(run_id)] if run_id else [])],
+        middleware=[*([RecoveryMiddleware(run_id)] if run_id else []), compaction_middleware(model, backend), LoopGuardMiddleware(config.AGENT_REPEAT_LIMIT, config.AGENT_TOOL_ERROR_LIMIT), *([SteeringMiddleware(run_id)] if run_id else [])],
         # 复用固定版本框架的默认提示词和工具，子任务也使用相同循环保护。
         subagents=[{**GENERAL_PURPOSE_SUBAGENT, 'middleware': [LoopGuardMiddleware(config.AGENT_REPEAT_LIMIT, config.AGENT_TOOL_ERROR_LIMIT)]}],
         interrupt_on=GATED_TOOLS if checkpointer else None,
-        backend=agent_backend(agent_code, project_id, workspace_owner_id, run_id),
+        backend=backend,
         skills=["/__agent_skills__/" if project_id else "/skills/"],
         system_prompt=system_prompt(agent_code, {item.name for item in tools}, working_directory),
         name=f"{agent_code}-agent",
@@ -130,8 +133,27 @@ async def agent_events(body: AgentRequest, model, tools=None, checkpointer=None,
     if getattr(body, "approval_resume", None):
         from ..harness.approvals import resume_input
         graph_input = await resume_input(graph, run_config, body.approval_resume)
-    content = ""
-    final = None
+    restored = ''
+    restored_final = None
+    if getattr(body, 'checkpoint_resume', False):
+        snapshot = await graph.aget_state(run_config)
+        if not snapshot.values or not snapshot.values.get('messages'):
+            raise ModelError('RECOVERY_MISSING', '执行检查点不存在，无法恢复原任务，请发送新消息继续。')
+        run_config['recursion_limit'] = max(1, run_config['recursion_limit'] - max(0, (snapshot.metadata or {}).get('step', 0)))
+        for message in snapshot.values['messages']:
+            if isinstance(message, HumanMessage):
+                restored = ''
+            elif isinstance(message, AIMessage):
+                restored += text_content(message.content)
+        last_saved = snapshot.values['messages'][-1]
+        restored_final = last_saved if isinstance(last_saved, AIMessage) else None
+        yield {'type':'restore', 'content':restored}
+        if snapshot.interrupts:
+            yield {'type':'approval', 'run_id':run_id, 'interrupts':[{'id':item.id, 'value':item.value} for item in snapshot.interrupts]}
+            return
+        graph_input = None
+    content = restored
+    final = restored_final if getattr(body, 'checkpoint_resume', False) else None
     pending_interrupts = []
     active_reasoning = None
     usage_version = -1
@@ -139,7 +161,7 @@ async def agent_events(body: AgentRequest, model, tools=None, checkpointer=None,
         if usage is not None and usage.version != usage_version:
             usage_version = usage.version
             yield {'type': 'usage', 'usage': usage.snapshot()}
-        if mode == "custom" and event.get('type') == 'file_change':
+        if mode == "custom" and event.get('type') in ('file_change', 'compaction'):
             yield event
         if mode == "custom" and event.get('type') == 'steering':
             if active_reasoning:
@@ -166,6 +188,7 @@ async def agent_events(body: AgentRequest, model, tools=None, checkpointer=None,
         if mode == "messages":
             chunk, metadata = event
             if (metadata.get("langgraph_node") == "model"
+                    and metadata.get("lc_source") != "summarization"
                     and metadata.get("lc_agent_name", f"{body.agent_code}-agent") == f"{body.agent_code}-agent"):
                 text = text_content(chunk.content)
                 thought = reasoning_text(chunk)
@@ -218,13 +241,16 @@ async def run_agent(body: AgentRequest, settings):
                         from ..knowledge.rag.tool import knowledge_tool
                         tools.append(knowledge_tool(body.retrieval_token, async_client))
                     from ..harness.approvals import checkpoint
+                    from ..harness.recovery import prepare
                     run_id = getattr(body, "run_id", None) or str(uuid4())
                     # 本地临时调用同样使用独立运行 ID。
                     body = body.model_copy(update={"run_id": run_id})
                     from ..harness.steering import active_run
                     async with checkpoint(run_id) as state:
+                        if getattr(body, 'workspace_owner_id', None) is not None:
+                            await asyncio.to_thread(prepare, body, settings, tools)
                         from ..harness.usage import UsageLedger
-                        usage = await asyncio.to_thread(UsageLedger, run_id, settings.model)
+                        usage = await asyncio.to_thread(UsageLedger, run_id, settings.model, getattr(body, 'workspace_owner_id', None))
                         with active_run(run_id, getattr(body, 'workspace_owner_id', None), body.thread_id):
                             async for event in agent_events(body, model, tools, state.saver, usage):
                                 if event.get("type") == "approval": state.pending = True

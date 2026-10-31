@@ -166,6 +166,31 @@ export function applyFileChange(
   });
 }
 
+/** 更新当前回复的对话优化状态。 */
+export function applyCompaction(
+  id: string,
+  responseId: string,
+  event: import("@/interfaces/agent").CompactionEvent,
+) {
+  useAgentStore.setState((state) => {
+    const detail = state.details[id];
+    if (!detail) return state;
+    return {
+      details: {
+        ...state.details,
+        [id]: {
+          ...detail,
+          messages: detail.messages.map((row) =>
+            row.id === responseId
+              ? { ...row, context: { ...row.context, compaction: event } }
+              : row,
+          ),
+        },
+      },
+    };
+  });
+}
+
 export function applyReasoning(
   id: string,
   responseId: string,

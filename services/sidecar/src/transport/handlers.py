@@ -30,6 +30,7 @@ class AgentInput(AgentRequest):
     execution_context: str = Field(default='', max_length=18000, repr=False)
     project_id: str | None = Field(default=None, pattern=r"^[a-fA-F0-9-]{36}$")
     workspace_owner_id: int | None = Field(default=None, gt=0)
+    checkpoint_resume: bool = False
     approval_resume: dict[str, dict] | None = None
     run_id: str | None = Field(default=None, pattern=r"^[a-fA-F0-9-]{36}$")
     retrieval_token: str | None = Field(default=None, repr=False, max_length=4096)
@@ -459,8 +460,8 @@ async def session_operation(action, params, state):
     from ..sessions.storage import SessionError
     params = SessionInput.model_validate(params).model_dump(mode="json", exclude_none=True)
     try:
-        if action in ("chat", "approval.decide"):
-            return await service.open_chat(params, state, resume=action.endswith("decide"))
+        if action in ("chat", "approval.decide", "resume"):
+            return await service.open_chat(params, state, resume="checkpoint" if action == "resume" else action.endswith("decide"))
         return await service.operation(action, params, state)
     except SessionError as cause:
         raise OperationError(cause.status, str(cause)) from cause
@@ -531,3 +532,21 @@ async def usage_summary(params, state):
 
 
 HANDLERS['usage.summary'] = usage_summary
+
+
+async def usage_settings(action, params, state):
+    """读写已验证账号的本机单价和任务预算。"""
+    from ..usage import settings
+    body = LocalSettingsInput.model_validate(params)
+    try:
+        if action == 'read':
+            return await asyncio.to_thread(settings.read, body.owner_id)
+        return await asyncio.to_thread(settings.save, body.owner_id, body.body)
+    except ValueError as cause:
+        raise OperationError(400, str(cause)) from cause
+
+
+HANDLERS.update({
+    'usage.settings.read': partial(usage_settings, 'read'),
+    'usage.settings.save': partial(usage_settings, 'save'),
+})

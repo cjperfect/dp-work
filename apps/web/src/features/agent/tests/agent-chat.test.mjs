@@ -20,6 +20,7 @@ import { useAgentStore, resetAgents } from "../../../stores/agent/state.ts";
 let interceptor;
 let handler;
 let originalStorage;
+let backend;
 const input = {
   agent_code: "general",
   thread_id: "one",
@@ -53,7 +54,7 @@ beforeEach(() => {
       event({ type: "delta", text: "真实链路的测试回答" }) +
         event({ type: "done", content: "真实链路的测试回答" }),
     );
-  const backend = conversationFixture();
+  backend = conversationFixture();
   interceptor = httpClient.interceptors.request.use((config) => {
     config.adapter = async (request) => ({
       data:
@@ -537,4 +538,168 @@ test("approval continuation keeps its own endpoint without requiring a response 
     ),
     "继续执行",
   );
+});
+
+test("compaction progress is delivered separately and updates only its reply", async () => {
+  const { applyCompaction } = await import("../../../stores/agent/agent-files.ts");
+  useAgentStore.setState({
+    details: {
+      one: {
+        messages: [
+          { id: "one-reply", context: {}, status: "streaming" },
+          { id: "old-reply", context: {}, status: "complete" },
+        ],
+      },
+      other: { messages: [{ id: "other-reply", context: {}, status: "streaming" }] },
+    },
+  });
+  handler = async () =>
+    response(
+      event({ type: "compaction", id: "compact-one", status: "running" }) +
+        event({ type: "compaction", id: "compact-one", status: "complete" }) +
+        event({ type: "delta", text: "正式回答" }) +
+        event({ type: "done", content: "正式回答" }),
+    );
+  const progress = [],
+    text = [];
+  const result = await streamAgentChat(
+    input,
+    (delta) => text.push(delta),
+    new AbortController().signal,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    (value) => {
+      progress.push(value.status);
+      applyCompaction("one", "one-reply", value);
+      assert.equal(
+        useAgentStore.getState().details.one.messages[0].context.compaction.status,
+        value.status,
+      );
+    },
+  );
+  assert.deepEqual(progress, ["running", "complete"]);
+  assert.deepEqual(text, ["正式回答"]);
+  assert.equal(result, "正式回答");
+  assert.equal(useAgentStore.getState().details.one.messages[1].context.compaction, undefined);
+  assert.equal(useAgentStore.getState().details.other.messages[0].context.compaction, undefined);
+});
+
+test("checkpoint resume replaces partial output and keeps original messages and run", async () => {
+  await ensureAgentChat("general");
+  const id = useAgentStore.getState().selected.general;
+  await sendMessage("general", id, "保存文件后继续说明");
+  const detail = useAgentStore.getState().details[id];
+  const replyId = detail.messages.at(-1).id;
+  const remote = backend.details.get(id).messages.at(-1);
+  remote.status = "cancelled";
+  remote.context.recovery = { run_id: "original-run" };
+  const seen = [];
+  handler = async (request) => {
+    seen.push({ url: request.url, body: JSON.parse(request.data) });
+    return response(
+      event({ type: "start", run_id: "original-run" }) +
+        event({ type: "restore", content: "文件已保存。" }) +
+        event({ type: "delta", text: "继续完成。" }) +
+        event({ type: "done", content: "文件已保存。继续完成。" }),
+    );
+  };
+  const contents = [];
+  const unsubscribe = useAgentStore.subscribe((state) =>
+    contents.push(state.details[id]?.messages.at(-1)?.content),
+  );
+  try {
+    await sendMessage("general", id, "接着执行");
+  } finally {
+    unsubscribe();
+  }
+  assert.equal(seen[0].url, `/api/agents/threads/${id}/resume`);
+  assert.equal(seen[0].body.run_id, "original-run");
+  const saved = useAgentStore.getState().details[id];
+  assert.equal(saved.messages.length, 2);
+  assert.equal(saved.messages.at(-1).id, replyId);
+  assert.equal(saved.messages.at(-1).content, "文件已保存。继续完成。");
+  assert.ok(contents.includes("文件已保存。"));
+  assert.ok(contents.includes("文件已保存。继续完成。"));
+  assert.equal(useAgentStore.getState().sending[id], false);
+});
+
+test("continue checks authoritative unfinished task before resuming without creating new messages", async () => {
+  await ensureAgentChat("general");
+  const id = useAgentStore.getState().selected.general;
+  await sendMessage("general", id, "执行原任务");
+  const remote = backend.details.get(id);
+  const reply = remote.messages.at(-1);
+  reply.status = "cancelled";
+  reply.context.recovery = { run_id: "unfinished-run" };
+  const seen = [];
+  handler = async (request) => {
+    seen.push({ url: request.url, body: JSON.parse(request.data) });
+    return response(
+      event({ type: "start", run_id: "unfinished-run" }) +
+        event({ type: "restore", content: "" }) +
+        event({ type: "done", content: "原任务继续完成" }),
+    );
+  };
+  // 页面仍然缓存 complete；必须先查询本机服务才能发现未完成任务。
+  assert.equal(useAgentStore.getState().details[id].messages.at(-1).status, "complete");
+  await sendMessage("general", id, "接着执行");
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].url, `/api/agents/threads/${id}/resume`);
+  assert.equal(seen[0].body.run_id, "unfinished-run");
+  assert.equal(seen[0].body.instruction, "接着执行");
+  assert.equal(useAgentStore.getState().details[id].messages.length, 2);
+  assert.equal(useAgentStore.getState().sending[id], false);
+});
+
+test("continue with no unfinished task uses normal chat and ignores stale local recovery", async () => {
+  await ensureAgentChat("general");
+  const id = useAgentStore.getState().selected.general;
+  await sendMessage("general", id, "已经完成的任务");
+  useAgentStore.setState((state) => ({
+    details: {
+      ...state.details,
+      [id]: {
+        ...state.details[id],
+        messages: state.details[id].messages.map((row) =>
+          row.role === "assistant"
+            ? {
+                ...row,
+                status: "cancelled",
+                context: { ...row.context, recovery: { run_id: "stale" } },
+              }
+            : row,
+        ),
+      },
+    },
+  }));
+  const requests = [];
+  handler = async (request) => {
+    requests.push(request.url);
+    return response(event({ type: "done", content: "普通新一轮" }));
+  };
+  await sendMessage("general", id, "接着执行");
+  assert.deepEqual(requests, [`/api/agents/threads/${id}/chat`]);
+  assert.equal(useAgentStore.getState().details[id].messages.length, 4);
+});
+
+test("unsafe resume failure never falls back to a new task", async () => {
+  await ensureAgentChat("general");
+  const id = useAgentStore.getState().selected.general;
+  await sendMessage("general", id, "执行任务");
+  const reply = backend.details.get(id).messages.at(-1);
+  reply.status = "cancelled";
+  reply.context.recovery = { run_id: "uncertain-run" };
+  const requests = [];
+  handler = async (request) => {
+    requests.push(request.url);
+    return response(event({ type: "error", message: "工具结果未确认，已阻止重复执行" }));
+  };
+  await assert.rejects(sendMessage("general", id, "继续运行"), /工具结果未确认/);
+  assert.deepEqual(requests, [`/api/agents/threads/${id}/resume`]);
+  assert.equal(useAgentStore.getState().details[id].messages.length, 2);
+  assert.equal(useAgentStore.getState().sending[id], false);
 });

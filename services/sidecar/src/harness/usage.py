@@ -82,25 +82,21 @@ class UsageLedger(AsyncCallbackHandler):
     # 使用框架的异步 gather，预算异常也会等待其他回调完成，避免遗留未 await 协程。
     run_inline = False
 
-    def __init__(self, run_id, model):
+    def __init__(self, run_id, model, owner=None):
         self.run_id, self.model = run_id, model
         self.lock = asyncio.Lock()
         self.version = 0
         try:
-            self.prices = json.loads(config.AGENT_MODEL_PRICES)
-            if not isinstance(self.prices, dict):
-                raise ValueError('单价配置格式错误')
-            for price in self.prices.values():
-                amount(price['input'])
-                amount(price['output'])
-                if 'cached_input' in price:
-                    amount(price['cached_input'])
-            self.cost_limit = amount(config.AGENT_RUN_COST_LIMIT)
-            self.token_limit = config.AGENT_RUN_TOKEN_LIMIT
-            self.currency = config.AGENT_COST_CURRENCY
-            if not re.fullmatch(r'[A-Z]{3}', self.currency):
-                raise ValueError('币种格式错误')
+            from ..usage.settings import UsageSettings, effective
+            from ..usage.ledger import context
             saved = read_usage(run_id)
+            # 审批恢复沿用原任务的单价和预算，后续设置修改仅影响新任务。
+            self.policy = saved.get('pricing') if saved else None
+            self.policy = UsageSettings.model_validate(self.policy or effective(owner if owner is not None else context.get()[0])).model_dump(mode='json', exclude_none=True)
+            self.prices = self.policy['model_prices']
+            self.cost_limit = amount(self.policy['cost_limit'])
+            self.token_limit = self.policy['token_limit']
+            self.currency = self.policy['currency']
             self.calls = {call['id']: call for call in saved['calls']} if saved else {}
             for call in self.calls.values():
                 if call['status'] == 'running':
@@ -132,7 +128,7 @@ class UsageLedger(AsyncCallbackHandler):
             await asyncio.to_thread(write, 'lc:' + call['id'], call['model'], call,
                                     status=call['status'], category='agent', reference=self.run_id)
         self.version += 1
-        task = asyncio.create_task(asyncio.to_thread(write_usage, self.run_id, self.snapshot()))
+        task = asyncio.create_task(asyncio.to_thread(write_usage, self.run_id, {**self.snapshot(), 'pricing': self.policy}))
         try:
             await asyncio.shield(task)
         except asyncio.CancelledError:

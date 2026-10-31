@@ -32,3 +32,5 @@ Agent 专属逻辑集中在 `agent.py`：
 图片输入：复用 assistant-ui 的 SimpleImageAttachmentAdapter 和附件组件，支持粘贴、预览及移除 PNG/JPEG/WebP（每条最多 3 张，每张最多 1 MB）。图片经 Electron 本机 RPC 写入 `.dp-work/data/users/<owner>/attachments/<sha256>`，消息和排队记录仅保存引用。执行时由 Sidecar 读取并构造 HumanMessage 的 image_url 内容，实际图片会发送给配置的模型服务，须选择支持视觉输入的模型。图片历史通过本机接口恢复预览；不存在的附件不阻止文字历史展示。当前图片消息可排队，暂不支持 Steering。
 
 思考展示：providers/llm/chat.py 保留模型公开返回的 reasoning_content 及标准 reasoning 文本/摘要。供应商加密字段仅在当前工具循环中原样回传，不解密、不展示。reasoning / reasoning_end 与正文 delta 分开发送，由 sessions 按秒保存为本机消息 context.reasoning，并用 execution_order 保留思考和工具调用的发生顺序。前端复用 assistant-ui Reasoning、ToolGroup、ToolFallback，可展开思考文本、工具参数和结果；没有返回思考的模型不生成虚构思考面板。默认不强制开启供应商 thinking 参数。
+
+对话压缩：沿用 Deep Agents 的自动摘要阈值与历史保存策略；CompactionMiddleware 在实际生成摘要时发送 compaction 状态事件。前端在当前会话输入框上方显示“正在优化对话，请稍候，可能需要几分钟”，完成、失败或停止后收起。摘要内容不混入聊天正文。

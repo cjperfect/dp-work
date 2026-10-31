@@ -41,6 +41,11 @@ SIDECAR_INTERNAL_TOKEN = os.environ.get("SIDECAR_INTERNAL_TOKEN", "").strip()
 
 # ---- PDF 文档解析 ----
 PDF_PARSE_TIMEOUT = float(os.environ.get("PDF_PARSE_TIMEOUT", "90"))
+# 百度 OCR 仅由 PDF 解析进程读取，凭证不发送到前端。
+BAIDU_OCR_API_KEY = os.environ.get("BAIDU_OCR_API_KEY", "").strip()
+BAIDU_OCR_SECRET_KEY = os.environ.get("BAIDU_OCR_SECRET_KEY", "").strip()
+BAIDU_OCR_TIMEOUT_SECONDS = max(1, float(os.environ.get("BAIDU_OCR_TIMEOUT_SECONDS", "20")))
+BAIDU_OCR_MAX_PAGES = max(1, min(200, int(os.environ.get("BAIDU_OCR_MAX_PAGES", "20"))))
 
 # ---- Agent 执行限制 ----
 AGENT_MAX_STEPS = int(os.environ.get("AGENT_MAX_STEPS", "12"))

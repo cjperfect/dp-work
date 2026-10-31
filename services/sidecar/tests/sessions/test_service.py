@@ -42,6 +42,9 @@ def test_complete_is_local_history_and_tool_events_persist(monkeypatch, tmp_path
     async def fake_chat(params, state):
         async def events():
             yield {'type':'start', 'model':'test'}
+            yield {'type':'compaction', 'id':'compact1', 'status':'running'}
+            assert store.get(7, 'thread1')['nodes']['a1']['context']['compaction']['status'] == 'running'
+            yield {'type':'compaction', 'id':'compact1', 'status':'complete'}
             yield {'type':'reasoning', 'id':'thought1', 'text':'先检查'}
             yield {'type':'reasoning', 'id':'thought1', 'text':'文件'}
             yield {'type':'reasoning_end', 'id':'thought1'}
@@ -61,6 +64,7 @@ def test_complete_is_local_history_and_tool_events_persist(monkeypatch, tmp_path
         assert events[-1]['type'] == 'done'
         result = await service.operation('get', {'owner_id':7,'thread_id':'thread1'})
         assert result['messages'][-1]['content'] == '已完成'
+        assert result['messages'][-1]['context']['compaction'] == {'id':'compact1', 'status':'complete'}
         thought = result['messages'][-1]['context']['reasoning'][0]
         assert thought['text'] == '先检查文件' and thought['completed_at'] >= thought['started_at']
         assert result['messages'][-1]['context']['execution_order'] == ['reasoning:thought1','tool:call1']

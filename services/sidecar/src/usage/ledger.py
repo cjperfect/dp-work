@@ -46,7 +46,7 @@ def database(owner):
     return db
 
 
-def estimate(model, category, data):
+def estimate(model, category, data, policy=None):
     """按记录时单价快照估算，后续改价不改写旧记录。"""
     if data.get('status') != 'reported':
         return None
@@ -56,7 +56,9 @@ def estimate(model, category, data):
             raise ValueError('单价无效')
         return number
     try:
-        rates = json.loads(config.AGENT_MODEL_PRICES).get(model)
+        from .settings import effective
+        policy = policy or effective()
+        rates = policy['model_prices'].get(model)
         if rates and 'input_tokens' in data and 'output_tokens' in data:
             cached = data.get('cached_input_tokens', 0)
             return str((price(rates['input']) * (data['input_tokens'] - cached) +
@@ -64,8 +66,8 @@ def estimate(model, category, data):
                         price(rates['output']) * data['output_tokens']) / 1000000)
         if rates and category == 'embedding' and 'total_tokens' in data:
             return str(price(rates['input']) * data['total_tokens'] / 1000000)
-        if category == 'asr' and config.ASR_PRICE_PER_HOUR:
-            return str(price(config.ASR_PRICE_PER_HOUR) * price(data.get('audio_seconds', 0)) / 3600)
+        if category == 'asr' and policy.get('asr_price_per_hour') is not None:
+            return str(price(policy['asr_price_per_hour']) * price(data.get('audio_seconds', 0)) / 3600)
     except (ValueError, TypeError, KeyError, ArithmeticError, AttributeError):
         pass
     return None
@@ -81,11 +83,24 @@ def write(identifier, model, usage=None, *, status='reported', seconds=None, own
     value.update(status=status)
     if seconds is not None:
         value['audio_seconds'] = seconds
-    value['currency'] = value.get('currency', config.AGENT_COST_CURRENCY)
-    if 'estimated_cost' not in value:
-        value['estimated_cost'] = estimate(model, category, value)
     try:
         with closing(database(owner)) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            if 'estimated_cost' not in value:
+                from .settings import effective
+                previous = db.execute('SELECT payload FROM usage_events WHERE id=?', (identifier,)).fetchone()
+                policy = json.loads(previous[0]).get('pricing') if previous else None
+                if policy is None:
+                    selected = effective(owner)
+                    # 每次调用固定使用开始记录时的价格，ASR 累计快照也不因中途改价重算。
+                    policy = {'currency':selected['currency'],
+                        'model_prices':{model:selected['model_prices'][model]} if model in selected['model_prices'] else {},
+                        'asr_price_per_hour':selected.get('asr_price_per_hour')}
+                value['pricing'] = policy
+                value['currency'] = policy['currency']
+                value['estimated_cost'] = estimate(model, category, value, policy)
+            else:
+                value.setdefault('currency', config.AGENT_COST_CURRENCY)
             db.execute('''INSERT INTO usage_events VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
                 payload=excluded.payload, model=CASE WHEN excluded.model='' THEN usage_events.model ELSE excluded.model END''', (identifier, category, model, reference,
                 datetime.now(timezone.utc).isoformat(), json.dumps(value)))

@@ -1,0 +1,74 @@
+[
+  {
+    "id": "rag-battery",
+    "inputs": {
+      "suite": "rag",
+      "scenario": "battery",
+      "question": "知识库中演示产品 N6mini 的电池容量是多少？请附资料引用。",
+      "retrieval": {
+        "sources": [
+          {
+            "citation": "资料1",
+            "document_id": "demo-spec",
+            "title": "虚构产品演示参数",
+            "content": "以下是评测专用的虚构产品参数：N6mini 的电池容量为 5200mAh。资料未提供重量。",
+            "url": "/eval/demo-spec"
+          }
+        ]
+      }
+    },
+    "reference": {
+      "terminal": "done",
+      "required_tools": ["search_knowledge"],
+      "allowed_tools": ["search_knowledge"],
+      "contains_all": ["5200"],
+      "citation": "资料1",
+      "reference_answer": "5200mAh，并引用资料1。参数为虚构评测数据。"
+    }
+  },
+  {
+    "id": "rag-missing-fact",
+    "inputs": {
+      "suite": "rag",
+      "scenario": "missing",
+      "question": "知识库里的演示产品 N6mini 重量是多少克？",
+      "retrieval": {
+        "sources": [
+          {
+            "citation": "资料1",
+            "document_id": "demo-spec",
+            "title": "虚构产品演示参数",
+            "content": "N6mini 电池容量为5200mAh。文档没有提供重量。"
+          }
+        ]
+      }
+    },
+    "reference": {
+      "terminal": "done",
+      "required_tools": ["search_knowledge"],
+      "allowed_tools": ["search_knowledge"],
+      "abstain": true,
+      "forbidden_regex": "\\d+(?:\\.\\d+)?\\s*(?:克|kg|千克|g\\b)",
+      "reference_answer": "资料未提供重量，无法确认，不编造重量。"
+    }
+  },
+  {
+    "id": "rag-index-not-ready",
+    "inputs": {
+      "suite": "rag",
+      "scenario": "index",
+      "question": "查知识库，告诉我演示产品的价格。",
+      "retrieval": {
+        "sources": [],
+        "message": "关联文档尚未完成向量化，当前无法检索。"
+      }
+    },
+    "reference": {
+      "terminal": "done",
+      "required_tools": ["search_knowledge"],
+      "allowed_tools": ["search_knowledge"],
+      "contains_all": ["向量化"],
+      "reference_answer": "明确提示尚未向量化，不能断言文档中没有价格。"
+    }
+  }
+]

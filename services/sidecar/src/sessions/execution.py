@@ -26,5 +26,8 @@ def finish_tools(reply):
     for call in reply.get('context', {}).get('tool_calls', []):
         if call['status'] == 'running':
             call.update(status='cancelled', ended_at=round(time.time() * 1000))
+    compaction = reply.get('context', {}).get('compaction')
+    if compaction and compaction.get('status') == 'running':
+        compaction['status'] = 'cancelled'
     for thought in reply.get('context', {}).get('reasoning', []):
         thought.setdefault('completed_at', round(time.time() * 1000))

@@ -25,27 +25,29 @@ class ApprovalCheckpoint:
 
 
 def remove_checkpoint(file):
-    """已结束运行不保留重复历史，仅待审批运行持久化检查点。"""
-    for suffix in ('', '-wal', '-shm'):
+    """正常完成或删除会话后清理执行检查点及附属凭据。"""
+    for suffix in ('', '-wal', '-shm', '.tools.sqlite3', '.tools.sqlite3-wal', '.tools.sqlite3-shm', '.recovery.json', '.usage.json'):
         try:
-            file.with_name(file.name + suffix).unlink(missing_ok=True)
+            target = file.with_name(file.name + suffix) if suffix in ('', '-wal', '-shm') else file.with_name(file.stem + suffix)
+            target.unlink(missing_ok=True)
         except OSError:
             log.warning('无法清理 Agent 检查点 %s', file.name)
 
 
 @asynccontextmanager
 async def checkpoint(run_id):
-    """按运行隔离检查点，进程重启后仍可恢复未执行的审批。"""
+    """按运行隔离检查点；中断及审批暂停保留，正常完成后清理。"""
     root = config.WORKSPACE_DIR.parent / "data" / "agent-checkpoints"
     await asyncio.to_thread(root.mkdir, parents=True, exist_ok=True, mode=0o700)
+    await asyncio.to_thread(root.chmod, 0o700)
     lock = LOCKS.setdefault(run_id, asyncio.Lock())
     async with lock:
         file = root / f"{run_id}.sqlite3"
         state = None
-        existed = await asyncio.to_thread(file.exists)
         try:
             async with AsyncSqliteSaver.from_conn_string(str(file)) as saver:
-                state = ApprovalCheckpoint(saver, pending=existed)
+                await asyncio.to_thread(file.chmod, 0o600)
+                state = ApprovalCheckpoint(saver, pending=True)
                 yield state
         finally:
             if state is not None and not state.pending:

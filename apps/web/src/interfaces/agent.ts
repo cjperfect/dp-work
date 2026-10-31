@@ -33,6 +33,10 @@ export type RunUsage = {
   token_limit: number | null;
   cost_limit: string | null;
 };
+export type CompactionEvent = {
+  id: string;
+  status: "running" | "complete" | "failed" | "cancelled";
+};
 export type ReasoningSegment = {
   id: string;
   text: string;
@@ -95,10 +99,12 @@ export type ChatMessage = {
   content: string;
   created_at: string;
   context: {
+    recovery?: { run_id: string };
     memory_sources?: import("@/interfaces/memory").MemorySource[];
     execution_run_id?: string;
     usage?: RunUsage;
     reasoning?: ReasoningSegment[];
+    compaction?: CompactionEvent;
     execution_order?: string[];
     images?: ChatImage[];
     file_changes?: FileChange[];
@@ -140,6 +146,7 @@ export type SteeringEvent = {
 export type AgentModels = { configured: boolean; models: { id: string; name: string }[] };
 
 export type AgentChatInput = {
+  resume_request?: { run_id: string; expected_revision: number; instruction?: string };
   approval_request?: { id: string; decision: "approve" | "reject" };
   response_id?: string;
   expected_revision?: number;
@@ -179,4 +186,12 @@ export type AgentMeta = {
   department: string;
   description: string;
   skills: string[];
+};
+
+export type ResumableRun = {
+  conversation_id: string;
+  response_id: string;
+  run_id: string;
+  checkpoint: true;
+  instruction?: string;
 };

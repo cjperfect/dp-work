@@ -13,6 +13,25 @@ import path from "node:path";
 const owner = 7,
   device = randomUUID();
 test("local routes inject owner/device and never route remote business or arbitrary RPC", () => {
+  const pricing = routeLocal("/api/settings/usage", "PUT", {}, { enabled: true }, owner, device);
+  assert.equal(pricing.method, "usage.settings.save");
+  assert.equal(pricing.params.owner_id, owner);
+  assert.deepEqual(pricing.params.body, { enabled: true });
+  assert.equal(
+    routeLocal("/api/settings/usage", "GET", {}, {}, owner, device).method,
+    "usage.settings.read",
+  );
+  const resume = routeLocal(
+    "/api/agents/threads/thread1/resume",
+    "POST",
+    {},
+    { run_id: "original", expected_revision: 1 },
+    owner,
+    device,
+  );
+  assert.equal(resume.method, "sessions.resume");
+  assert.equal(resume.params.owner_id, owner);
+  assert.equal(resume.needsRetrieval, true);
   const list = routeLocal("/api/agents/threads", "GET", {}, { owner_id: 99 }, owner, device);
   assert.equal(list.method, "sessions.list");
   assert.equal(list.params.owner_id, owner);
@@ -272,4 +291,45 @@ test("skill uploads and usage summaries stay local and use verified identity", (
   const usage = routeLocal("/api/usage", "GET", {}, { owner_id: 99 }, owner, device);
   assert.equal(usage.method, "usage.summary");
   assert.equal(usage.params.owner_id, owner);
+});
+
+test("checkpoint resume refreshes only the original run's retrieval scope", async () => {
+  const original = globalThis.fetch;
+  const requests: unknown[] = [];
+  globalThis.fetch = async (_url, input) => {
+    requests.push(JSON.parse(String(input?.body)));
+    return Response.json({ code: 0, data: { capability: "fresh-scoped-token" } });
+  };
+  try {
+    const calls: SidecarJob[] = [];
+    const gateway = new LocalGateway(
+      async (job) => {
+        calls.push(job);
+        if (job.method === "sessions.resume.lookup")
+          return Response.json({ thread: { id: "thread1" }, knowledge_base_ids: [1, 2] });
+        return new Response('data: {"type":"done","content":"ok"}\n\n', {
+          headers: { "Content-Type": "text/event-stream" },
+        });
+      },
+      async () => ({ owner, deviceId: device }),
+      () => "https://cloud.example",
+      () => {},
+    );
+    await gateway.open({
+      id: randomUUID(),
+      token: "fixture",
+      path: "/api/agents/threads/thread1/resume",
+      method: "POST",
+      body: { run_id: "old-run", expected_revision: 1, knowledge_base_ids: [999] },
+    });
+    assert.deepEqual(requests, [{ knowledge_base_ids: [1, 2] }]);
+    assert.deepEqual(
+      calls.map((call) => call.method),
+      ["sessions.resume.lookup", "sessions.resume"],
+    );
+    assert.equal(calls[1].params.retrieval_token, "fresh-scoped-token");
+    assert.equal(calls[1].params.owner_id, owner);
+  } finally {
+    globalThis.fetch = original;
+  }
 });

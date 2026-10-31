@@ -1,0 +1,61 @@
+[
+  {
+    "id": "minutes-actions",
+    "inputs": {
+      "suite": "meetings",
+      "scenario": "actions",
+      "title": "演示需求评审",
+      "segments": [
+        {
+          "id": "s1",
+          "seq": 0,
+          "speaker": "说话人1",
+          "text": "我们确认先上线搜索功能，导出功能暂缓。",
+          "start_ms": 0
+        },
+        {
+          "id": "s2",
+          "seq": 1,
+          "speaker": "说话人2",
+          "text": "我叫小林，由我在11月3日18点前提交搜索方案。",
+          "start_ms": 12000
+        }
+      ]
+    },
+    "reference": {
+      "terminal": "done",
+      "contains_all": ["搜索", "小林", "11月3日"],
+      "reference_answer": "确认先上线搜索，导出暂缓；小林在11月3日18点前提交搜索方案。不得把说话人1推断为负责人。"
+    }
+  },
+  {
+    "id": "minutes-uncertain",
+    "inputs": {
+      "suite": "meetings",
+      "scenario": "uncertain",
+      "title": "演示方案讨论",
+      "segments": [
+        {
+          "id": "s1",
+          "seq": 0,
+          "speaker": "说话人1",
+          "text": "也许可以下个月上线，不过还没决定。负责人和截止时间今天都没有确定。",
+          "start_ms": 0
+        },
+        {
+          "id": "s2",
+          "seq": 1,
+          "speaker": "说话人2",
+          "text": "我不同意下个月直接上线，要先补测试再讨论。",
+          "start_ms": 10000
+        }
+      ]
+    },
+    "reference": {
+      "terminal": "done",
+      "contains_all": ["未明确"],
+      "forbidden_regex": "(?:已决定|已确认|确定于)下个月上线",
+      "reference_answer": "上线时间未决定，存在不同意见；行动项负责人和截止时间未明确，不编造确定结论。"
+    }
+  }
+]

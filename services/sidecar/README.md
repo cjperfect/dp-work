@@ -150,3 +150,7 @@ Sidecar 读取 `minutes-v1` 系统提示词，按片段顺序整理标题、会�
 Electron 使用 `desktop_entry.py --stdio`（安装版 `dp-work-sidecar --stdio`）启动 Sidecar。普通业务通过 stdin/stdout JSON-RPC，日志写 stderr；ASR 音频仍使用本机 WebSocket。网络服务只保留健康检查与 ASR WebSocket，不注册 `/internal`；普通业务通过方法名直接分发到 `transport/handlers.py` 的处理函数，票据与 ASR 共用会话状态。
 
 跨语言声明集中在 [packages/protocols](../../packages/protocols/README.md)：TS 导入编译后的类型/常量，Python 读取同一份 `protocol.json`。业务请求只使用 JSON-RPC；单独运行 Uvicorn 仅能提供健康检查和 ASR WebSocket。
+
+## 开发评测
+
+LangSmith 离线评测入口：在仓库根目录执行 `pnpm eval:smoke` 检查链路，`pnpm eval:live` 使用真实模型。默认不上传，只有显式 `--upload` 才提交合成数据与实验。安装、评分与数据边界见 [evals/README.md](evals/README.md)。

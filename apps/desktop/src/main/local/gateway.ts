@@ -79,6 +79,13 @@ export class LocalGateway {
           knowledge_base_ids: detail.knowledge_base_ids,
         };
       }
+      if (call.method === "sessions.resume") {
+        const detail = await this.json("sessions.resume.lookup", call.params, controller.signal);
+        call.params.body = {
+          ...(call.params.body as object),
+          knowledge_base_ids: detail.knowledge_base_ids,
+        };
+      }
       if (call.needsRetrieval) {
         const bases = (call.params.body as Record<string, unknown>).knowledge_base_ids;
         if (Array.isArray(bases) && bases.length) {

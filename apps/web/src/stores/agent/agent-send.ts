@@ -1,3 +1,5 @@
+import { toast } from "sonner";
+import { isContinuationRequest } from "@/features/agent/lib/continuation";
 import type { SteeringEvent, ChatMessage, ThreadDetail } from "@/interfaces/agent";
 import type { AgentId } from "@/interfaces/app";
 import { streamAgentChat, stopAgentRun } from "@/apis/agents";
@@ -20,6 +22,7 @@ import {
   useAgentStore,
 } from "./state";
 import {
+  applyCompaction,
   applyFileChange,
   applyReasoning,
   applySteeringEvent,
@@ -102,10 +105,42 @@ export async function sendMessage(
     sending: { ...state.sending, [id]: true },
   }));
   let replyId = "";
+  let continuing = false;
   try {
     await mutations.get(`${owner}:${id}`);
-    const state = useAgentStore.getState();
+    let state = useAgentStore.getState();
     if (!owned(owner) || !state.details[id]) return;
+    if (
+      !options?.editedMessageId &&
+      !options?.regenerateParentId &&
+      !options?.images?.length &&
+      isContinuationRequest(text)
+    ) {
+      continuing = true;
+      // 先读取服务端的当前分支和检查点状态，不能只相信页面缓存。
+      const latest = await getConversation(id);
+      if (!owned(owner) || controller.signal.aborted) return;
+      remember(owner, code, latest);
+      const pending = latest.messages.at(-1);
+      if (
+        pending?.context.recovery &&
+        (pending.status === "cancelled" || pending.status === "failed")
+      ) {
+        return await resumeExistingRun(
+          {
+            conversation_id: id,
+            response_id: pending.id,
+            run_id: pending.context.recovery.run_id,
+            checkpoint: true,
+            instruction: text.trim(),
+          },
+          undefined,
+          controller,
+        );
+      }
+      continuing = false;
+    }
+    state = useAgentStore.getState();
     const messages = state.details[id].messages;
     const previousUser = messages.at(-2);
     const retryFailed =
@@ -259,6 +294,9 @@ export async function sendMessage(
       (usage) => {
         if (owned(owner)) applyUsage(id, replyId, usage);
       },
+      (event) => {
+        if (owned(owner)) applyCompaction(id, replyId, event);
+      },
     );
     if (content !== null) updateReply(content, "complete");
     if (content === null) void loadApprovals(id, true);
@@ -268,6 +306,13 @@ export async function sendMessage(
   } catch (error) {
     if (!owned(owner) || !useAgentStore.getState().details[id]) return;
     const cancelled = controller.signal.aborted;
+    if (continuing) {
+      if (!cancelled) {
+        toast.error(error instanceof Error ? error.message : "任务恢复失败，请重试。");
+        throw error;
+      }
+      return;
+    }
     if (cancelled) await stops.get(id)?.catch(() => {});
     useAgentStore.setState((state) => ({
       details: {
@@ -308,17 +353,19 @@ export async function sendMessage(
   }
 }
 
-/** 在原会话与原回复上恢复审批后的执行，不另建一条提问。 */
-export async function resumeApprovedRun(
-  approval: import("@/interfaces/agent").AgentApproval,
-  decision: "approve" | "reject",
+/** 在原会话与原回复上续接审批或中断，不另建消息。 */
+async function resumeExistingRun(
+  approval: import("@/interfaces/agent").AgentApproval | import("@/interfaces/agent").ResumableRun,
+  decision?: "approve" | "reject",
+  existingController?: AbortController,
 ) {
   const owner = currentOwner();
   const id = approval.conversation_id;
   const code = getThreadAgentCode(id);
-  if (!code || runs.has(id)) throw new Error("会话正在执行，请稍后重试。");
+  if (!code || (runs.has(id) && runs.get(id) !== existingController))
+    throw new Error("会话正在执行，请稍后重试。");
   if (!useAgentStore.getState().details[id]) await selectThreadById(id);
-  const controller = new AbortController();
+  const controller = existingController ?? new AbortController();
   runs.set(id, controller);
   useAgentStore.setState((state) => ({
     sending: { ...state.sending, [id]: true },
@@ -333,7 +380,15 @@ export async function resumeApprovedRun(
         agent_code: code,
         thread_id: id,
         messages: [],
-        approval_request: { id: approval.id, decision },
+        ...("checkpoint" in approval
+          ? {
+              resume_request: {
+                run_id: approval.run_id,
+                instruction: approval.instruction,
+                expected_revision: useAgentStore.getState().details[id].thread.draft_revision,
+              },
+            }
+          : { approval_request: { id: approval.id, decision: decision! } }),
       },
       (delta) => {
         if (!owned(owner)) return;
@@ -354,7 +409,7 @@ export async function resumeApprovedRun(
       (runId) => {
         if (!owned(owner)) return;
         runIds.set(id, runId);
-        markApprovalDecided(approval, decision);
+        if (!("checkpoint" in approval)) markApprovalDecided(approval, decision!);
         useAgentStore.setState((state) => ({
           details: {
             ...state.details,
@@ -385,23 +440,59 @@ export async function resumeApprovedRun(
       (usage) => {
         if (owned(owner)) applyUsage(id, responseId, usage);
       },
+      (event) => {
+        if (owned(owner)) applyCompaction(id, responseId, event);
+      },
+      (content) => {
+        if (!owned(owner)) return;
+        accumulated = content;
+        useAgentStore.setState((state) => ({
+          details: {
+            ...state.details,
+            [id]: {
+              ...state.details[id],
+              messages: state.details[id].messages.map((row) =>
+                row.id === responseId
+                  ? {
+                      ...row,
+                      content,
+                      status: "streaming",
+                      context: { ...row.context, recovery: undefined },
+                    }
+                  : row,
+              ),
+            },
+          },
+        }));
+      },
     );
   } finally {
     if (controller.signal.aborted) await stops.get(id)?.catch(() => {});
-    if (runs.get(id) === controller) runs.delete(id);
-    runIds.delete(id);
-    stops.delete(id);
+    if (!existingController) {
+      if (runs.get(id) === controller) runs.delete(id);
+      runIds.delete(id);
+      stops.delete(id);
+    }
     if (owned(owner)) {
       try {
         remember(owner, code, await getConversation(id));
       } finally {
         if (owned(owner)) {
-          useAgentStore.setState((state) => ({
-            sending: { ...state.sending, [id]: false },
-          }));
+          if (!existingController)
+            useAgentStore.setState((state) => ({
+              sending: { ...state.sending, [id]: false },
+            }));
           await loadApprovals(id, true);
         }
       }
     }
   }
+}
+
+/** 在原运行上提交审批决定并继续执行。 */
+export function resumeApprovedRun(
+  approval: import("@/interfaces/agent").AgentApproval,
+  decision: "approve" | "reject",
+) {
+  return resumeExistingRun(approval, decision);
 }

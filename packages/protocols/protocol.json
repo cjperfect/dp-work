@@ -2,6 +2,8 @@
   "jsonrpc": "2.0",
   "revision": 4,
   "methods": {
+    "usage.settings.read": "读取本机单价和任务预算",
+    "usage.settings.save": "保存本机单价和任务预算",
     "usage.summary": "查询本机账号能力用量",
     "memory.list": "查询本机长期记忆",
     "memory.create": "保存精选关键信息",
@@ -37,6 +39,8 @@
     "sessions.delete": "删除本机会话",
     "sessions.import": "迁入已有会话",
     "sessions.project": "选择本机会话项目",
+    "sessions.resume": "从原任务检查点恢复执行",
+    "sessions.resume.lookup": "读取恢复任务的知识库授权范围",
     "sessions.chat": "执行并保存本机会话",
     "sessions.steer": "引导本地运行",
     "sessions.approvals": "查询本地审批",

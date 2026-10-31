@@ -20,6 +20,7 @@ import { getSettings } from "@/apis/settings";
 
 import { Row, Group } from "./components/settings-fields";
 import { ServiceForm } from "./components/service-form";
+import { UsageSettingsPanel } from "./components/usage-settings";
 import { UsageSummary } from "./components/usage-summary";
 const errorMessage = (cause: unknown) =>
   cause instanceof Error ? cause.message : "操作失败，请重试。";
@@ -231,7 +232,10 @@ export function SettingsPage() {
             "usage",
             "用量统计",
             "按能力查看当前账号的本机累计用量与估算费用。",
-            <UsageSummary />,
+            <div className="space-y-8">
+              <UsageSettingsPanel />
+              <UsageSummary />
+            </div>,
           )}
         </div>
       </div>

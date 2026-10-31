@@ -24,6 +24,7 @@ import { ToolFallback } from "@/components/assistant-ui/elements/tool-fallback.a
 import { FileChanges } from "@/features/agent/components/file-changes";
 import { RunUsage } from "@/features/agent/components/run-usage";
 import { StoppedRunNotice } from "@/features/agent/components/stopped-run";
+import { CompactionNotice } from "@/features/agent/components/compaction-notice";
 import {
   ToolGroupContent,
   ToolGroupRoot,
@@ -454,6 +455,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   const { ComposerHeader, ComposerQueue, Approvals } = useContext(ThreadComponentsContext);
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
+      <CompactionNotice />
       {ComposerQueue && <ComposerQueue />}
       {ComposerHeader && <ComposerHeader />}
       <div className="group/composer-dock flex w-full flex-col">

@@ -1,6 +1,7 @@
 import type { LocalProject } from "@dp-work/protocols/desktop";
 import type {
   ReasoningEvent,
+  CompactionEvent,
   SteeringEvent,
   AgentModels,
   AgentChatInput,
@@ -37,16 +38,25 @@ export async function streamAgentChat(
   onFileChange?: (change: FileChange) => void,
   onReasoning?: (event: ReasoningEvent) => void,
   onUsage?: (usage: import("@/interfaces/agent").RunUsage) => void,
+  onCompaction?: (event: CompactionEvent) => void,
+  onRestore?: (content: string) => void,
 ): Promise<string | null> {
   const owner = useAuthStore.getState().user?.id;
   const token = getAccessToken();
   let url: string;
-  let data: AgentChatInput | { decision: "approve" | "reject" };
+  let data:
+    | AgentChatInput
+    | { decision: "approve" | "reject" }
+    | { run_id: string; expected_revision: number };
 
   if (input.approval_request) {
     // 提交审批决定，继续原任务。
     url = `/api/agents/approvals/${input.approval_request.id}/decide`;
     data = { decision: input.approval_request.decision };
+  } else if (input.resume_request) {
+    // 从原运行检查点继续，不追加新的用户消息。
+    url = `/api/agents/threads/${input.thread_id}/resume`;
+    data = input.resume_request;
   } else {
     // 普通聊天必须关联已保存的回复记录。
     if (!input.response_id) throw new Error("回复记录缺失，请重新发送消息。");
@@ -77,6 +87,8 @@ export async function streamAgentChat(
       .join("\n");
     if (!data) return;
     const event = JSON.parse(data);
+    if (event.type === "restore" && typeof event.content === "string") onRestore?.(event.content);
+    if (event.type === "compaction") onCompaction?.(event);
     if (event.type === "usage" && event.usage) onUsage?.(event.usage);
     if (event.type === "reasoning" || event.type === "reasoning_end") onReasoning?.(event);
     if (event.type === "file_change" && event.change) onFileChange?.(event.change);

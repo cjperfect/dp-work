@@ -106,11 +106,11 @@ export function conversationFixture() {
         return wrapped(clone(detail));
       }
       if (action === "steer") return wrapped(await upstream(request));
-      if (action === "chat") {
+      if (action === "chat" || action === "resume") {
         const reader = (await upstream(request)).getReader();
         let buffer = "",
           content = "",
-          responseId = body.response_id;
+          responseId = body.response_id ?? detail.messages.at(-1)?.id;
         const decoder = new TextDecoder();
         function save(status) {
           const reply = detail.messages.find((message) => message.id === responseId);
@@ -154,6 +154,10 @@ export function conversationFixture() {
                   responseId = event.response_id;
                   content = "";
                   combine(detail);
+                }
+                if (event.type === "restore") {
+                  content = event.content;
+                  save("streaming");
                 }
                 if (event.type === "delta") {
                   content += event.text;

@@ -17,7 +17,7 @@ export function routeLocal(
   const session = (action: string, thread_id?: string, data = body): LocalCall => ({
     method: `sessions.${action}`,
     params: { owner_id: owner, ...(thread_id ? { thread_id } : {}), body: data },
-    needsRetrieval: action === "chat" || action === "approval.decide",
+    needsRetrieval: action === "chat" || action === "approval.decide" || action === "resume",
   });
   if (path === "/api/memories/preferences" && ["GET", "PUT"].includes(verb))
     return {
@@ -53,7 +53,7 @@ export function routeLocal(
   if (fileUndo && verb === "POST")
     return session("files.undo", fileUndo[1], { change_id: fileUndo[2] });
   const thread = path.match(
-    /^\/api\/agents\/threads\/([a-zA-Z0-9_-]{1,128})(?:\/(draft|messages|project|chat|steer))?$/,
+    /^\/api\/agents\/threads\/([a-zA-Z0-9_-]{1,128})(?:\/(draft|messages|project|chat|steer|resume))?$/,
   );
   if (thread) {
     const action =
@@ -64,6 +64,7 @@ export function routeLocal(
       messages: "PUT",
       project: "PATCH",
       chat: "POST",
+      resume: "POST",
       steer: "POST",
     } as Record<string, string>;
     if (action && (!thread[2] || allowed[action] === verb)) return session(action, thread[1]);
@@ -126,6 +127,11 @@ export function routeLocal(
     return { method: "skills.list", params: { agent_code: query.agent_code } };
   if (path === "/api/skills/search" && verb === "GET")
     return { method: "skills.search", params: { query: query.q || "" } };
+  if (path === "/api/settings/usage" && ["GET", "PUT"].includes(verb))
+    return {
+      method: verb === "GET" ? "usage.settings.read" : "usage.settings.save",
+      params: { owner_id: owner, ...(verb === "PUT" ? { body } : {}) },
+    };
   if (path === "/api/usage" && verb === "GET")
     return { method: "usage.summary", params: { owner_id: owner } };
   const skill = path.match(/^\/api\/skills\/(install|uninstall|descriptions|upload)$/);

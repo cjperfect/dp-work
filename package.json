@@ -36,7 +36,9 @@
     "db:logs": "docker-compose logs -f postgres",
     "dev:workers": "cd services/api && .venv/bin/python -m src.infrastructure.tasks.workers",
     "mq:up": "docker-compose up -d rabbitmq",
-    "mq:logs": "docker-compose logs -f rabbitmq"
+    "mq:logs": "docker-compose logs -f rabbitmq",
+    "eval:smoke": "cd services/sidecar && .venv/bin/python -m evals.run --smoke",
+    "eval:live": "cd services/sidecar && .venv/bin/python -m evals.run --live"
   },
   "lint-staged": {
     "*.{js,mjs,cjs,ts,tsx}": [

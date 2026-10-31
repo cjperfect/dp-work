@@ -50,7 +50,14 @@ def detail(state):
     require(state)
     nodes = state['nodes']
     def message(row, seq=0):
-        return {**{k: v for k, v in row.items() if k != 'parentId'}, 'seq': seq}
+        result = {**{k: v for k, v in row.items() if k != 'parentId'}, 'seq': seq,
+                  'context': {k:v for k,v in row.get('context', {}).items() if k != 'recovery'}}
+        run = state.get('runs', {}).get(row.get('context', {}).get('execution_run_id'))
+        if run and run.get('recoverable') and row['id'] == (state.get('active_path') or [None])[-1] and not current(state):
+            from ..harness.recovery import has_checkpoint
+            if has_checkpoint(run['id']):
+                result['context'] = {**row.get('context', {}), 'recovery':{'run_id':run['id']}}
+        return result
     history = any(m['role'] == 'user' for m in nodes.values()) and any(
         m['role'] == 'assistant' and m['status'] == 'complete' and m['content'].strip() for m in nodes.values())
     return {'thread': {**state['thread'], 'has_history': bool(history)},
@@ -78,6 +85,7 @@ def graph(state, body, importing=False):
         raise SessionError('会话过大，请新建会话。', 400)
     for mid, row in entries.items():
         previous = state['nodes'].get(mid)
+        row.get('context', {}).pop('recovery', None)
         if previous and (previous.get('parentId') != row['parentId'] or previous['role'] != row['role']):
             raise SessionError('消息节点归属不可更改。')
         if importing and row['status'] in ('streaming', 'waiting_approval'):
@@ -101,7 +109,7 @@ def finish(state, status, code=None, error=None):
     run = current(state)
     if not run or run['status'] != 'running':
         return
-    run.update(status=status, error_code=code, error_message=error, finished_at=now())
+    run.update(status=status, error_code=code, error_message=error, finished_at=now(), recoverable=status != 'completed')
     reply = state['nodes'].get(run['response_id'])
     if reply:
         finish_tools(reply)
@@ -174,6 +182,14 @@ def reconcile_usage(state, run):
 async def operation(action, params, rpc_state=None):
     """分发有界的本地会话操作，owner_id 由已认证 API 注入。"""
     owner, key, body = params['owner_id'], params.get('thread_id'), params.get('body', {})
+    if action == 'resume.lookup':
+        await recover(owner, key)
+        state = await io(storage.get, owner, key)
+        require(state)
+        row = state['runs'].get(body.get('run_id'))
+        if not row or row['response_id'] != state['active_path'][-1] or not row.get('recoverable'):
+            raise SessionError('原任务不可恢复，请重新加载会话。')
+        return {'thread': state['thread'], 'knowledge_base_ids': row.get('knowledge_base_ids', [])}
     if action == 'files.undo':
         from ..tools.file_snapshots import undo, SnapshotError
         from ..tools.workspace import agent_workspace
@@ -302,6 +318,7 @@ async def operation(action, params, rpc_state=None):
             return detail(state)
         if action == 'delete':
             initial = await io(storage.get, owner, key)
+            checkpoints = list(initial.get('runs', {}))
             run = current(initial)
             task = ACTIVE.get((owner, run['id'])) if run else None
             if task and task is not asyncio.current_task():
@@ -310,8 +327,8 @@ async def operation(action, params, rpc_state=None):
         result = await io(storage.mutate, owner, key, 'session_' + action, update)
         if action == 'delete':
             await io(storage.purge_deleted, owner, key)
-            if run:
-                await cleanup_checkpoint(run['id'])
+            for checkpoint_id in checkpoints:
+                await cleanup_checkpoint(checkpoint_id)
         return result
     if action == 'steer':
         return await steer(owner, key, body)
@@ -363,7 +380,6 @@ async def runs(action, owner, body):
             if not task.cancelling():
                 task.cancel()
             await asyncio.gather(task, return_exceptions=True)
-        await cleanup_checkpoint(row['id'])
         saved = await io(storage.get, owner, row['conversation_id'])
         row = saved['runs'][row['id']]
     return row
@@ -430,6 +446,8 @@ def apply_steering(state, event, content):
     state['nodes'][reply['id']] = {**reply, 'parentId': mid}
     state['active_path'].extend([mid, reply['id']])
     run['response_id'] = reply['id']
+    from ..harness.recovery import digest
+    run['history_signature'] = digest([(key, state['nodes'][key]['content']) for key in state['active_path'][:-1]])
     pending['status'] = 'applied'
     touch(state)
     return {'type': 'steering', 'id': mid, 'response_id': reply['id'], 'previous_response_id': old_id,
@@ -458,7 +476,30 @@ async def open_chat(params, rpc_state, resume=False):
         prefix = ''
         progress = ''
         memories = {'context': '', 'sources': []}
-        if resume:
+        if resume == 'checkpoint':
+            if type(body.get('expected_revision')) is not int:
+                raise SessionError('恢复请求缺少会话版本，请重新加载。', 400)
+            unlocked(state, body.get('expected_revision'))
+            run = state['runs'].get(body.get('run_id'))
+            if not run or not run.get('recoverable') or run['response_id'] != state['active_path'][-1]:
+                raise SessionError('原任务不可恢复或会话分支已变化，请重新加载。')
+            from ..harness.recovery import digest, has_checkpoint
+            if not has_checkpoint(run['id']):
+                raise SessionError('执行检查点不存在，无法恢复原任务。')
+            if run.get('project_id') != state['thread'].get('project_id') or run.get('history_signature') != digest([(mid, state['nodes'][mid]['content']) for mid in state['active_path'][:-1]]):
+                raise SessionError('原任务的会话内容或工作目录已变化，请发送新消息继续。')
+            if run['model'] != settings.model:
+                raise SessionError('运行使用的模型配置已变化，请恢复原模型后重试。')
+            run_id = run['id']
+            run['last_resume_instruction'] = str(body.get('instruction', '接着执行'))[:128]
+            prefix = state['nodes'][run['response_id']]['content']
+            state['nodes'][run['response_id']]['status'] = 'streaming'
+            state['knowledge_base_ids'] = run.get('knowledge_base_ids', [])
+            run.update(status='running', recoverable=False, finished_at=None, error_code=None, error_message=None, deadline_at=(datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat())
+            state['run_id'] = run_id
+            touch(state)
+            history = [{'role':'user', 'content':'继续原任务。'}]
+        elif resume:
             approval = state['approvals'].get(body['approval_id'])
             run = current(state)
             if not approval or not run or approval['run_id'] != run['id'] or not approval['actionable'] or approval['status'] != 'pending':
@@ -483,7 +524,10 @@ async def open_chat(params, rpc_state, resume=False):
             reply = state['nodes'][path[-1]]
             if reply['role'] != 'assistant' or reply['status'] != 'streaming' or state['nodes'][path[-2]]['role'] != 'user':
                 raise SessionError('消息无法重新执行。')
-            run = {'id': run_id, 'conversation_id': key, 'agent_id': state['thread']['agent_id'], 'response_id': body['response_id'],
+            from ..harness.recovery import digest
+            run = {'history_signature': digest([(mid, state['nodes'][mid]['content']) for mid in path[:-1]]),
+                   'knowledge_base_ids':body.get('knowledge_base_ids', state['knowledge_base_ids']),
+                   'id': run_id, 'conversation_id': key, 'agent_id': state['thread']['agent_id'], 'response_id': body['response_id'],
                    'request_message_id': path[-2], 'project_id': state['thread'].get('project_id'),
                    'status': 'running', 'model': settings.model, 'error_code': None, 'error_message': None,
                    'started_at': now(), 'deadline_at': (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(), 'finished_at': None}
@@ -499,13 +543,15 @@ async def open_chat(params, rpc_state, resume=False):
             reply.setdefault('context', {})['execution_run_id'] = run_id
             state['runs'][run_id] = run
             state['run_id'] = run_id
-        state['knowledge_base_ids'] = body.get('knowledge_base_ids', state['knowledge_base_ids'])
+        if resume != 'checkpoint':
+            state['knowledge_base_ids'] = body.get('knowledge_base_ids', state['knowledge_base_ids'])
         payload = {'agent_code': {1: 'general', 2: 'product', 3: 'ui'}[state['thread']['agent_id']], 'thread_id': key,
                    'messages': history[-100:], 'model': settings.model, 'run_id': run_id,
                    'execution_context': progress,
                    'memory_context': memories['context'],
                    'workspace_owner_id': owner, 'project_id': state['thread']['project_id'],
-                   'knowledge_base_ids': body.get('knowledge_base_ids', state['knowledge_base_ids']),
+                   'knowledge_base_ids': state['knowledge_base_ids'],
+                   'checkpoint_resume': resume == 'checkpoint',
                    'runtime': runtime, 'retrieval_token': params.get('retrieval_token'), 'approval_resume': answers}
         # 校验模型输入大小等限制后再提交运行。
         AgentInput.model_validate(payload)
@@ -514,11 +560,10 @@ async def open_chat(params, rpc_state, resume=False):
     # 在 SQLite 提交前注册任务，读取方不会误判刚启动的运行已失联。
     original_begin = begin
     def begin_registered(state):
-        if not resume:
-            for previous_id in state.get('runs', {}):
-                previous = ACTIVE.get((owner, previous_id))
-                if previous is not None and previous is not task and not previous.done():
-                    raise SessionError('上一轮仍在停止和保存进度，请稍后再发送。')
+        for previous_id in state.get('runs', {}):
+            previous = ACTIVE.get((owner, previous_id))
+            if previous is not None and previous is not task and not previous.done():
+                raise SessionError('上一轮仍在停止和保存进度，请稍后再发送。')
         if state.get('thread', {}).get('project_id'):
             from .projects import get
             get(owner, state['thread']['project_id'])
@@ -526,7 +571,7 @@ async def open_chat(params, rpc_state, resume=False):
         ACTIVE[owner, run_id] = task
         return result
     try:
-        payload, prefix = await io(storage.mutate, owner, key, 'approval_decided' if resume else 'run_started', begin_registered)
+        payload, prefix = await io(storage.mutate, owner, key, 'run_resumed' if resume == 'checkpoint' else 'approval_decided' if resume else 'run_started', begin_registered)
     except BaseException:
         ACTIVE.pop((owner, run_id), None)
         raise
@@ -557,7 +602,6 @@ async def open_chat(params, rpc_state, resume=False):
                 await upstream.aclose()
                 await io(storage.mutate, owner, key, 'run_cancelled',
                          lambda state: finish(state, 'cancelled', 'CLIENT_DISCONNECTED', '客户端已停止或断开连接。'))
-                await cleanup_checkpoint(run_id)
             finally:
                 ACTIVE.pop((owner, run_id), None)
     return EventStream(persist_events(owner, key, run_id, upstream.events, prefix), on_close=close_unstarted)
@@ -602,6 +646,9 @@ async def _persist_events(owner, key, run_id, events, prefix=''):
                     event = {**event, 'started_at': thought['started_at'], **({'completed_at': thought['completed_at']} if 'completed_at' in thought else {})}
                 if kind == 'tool_call' and 'tool:' + event['id'] not in order:
                     order.append('tool:' + event['id'])
+                if kind == 'restore':
+                    content = event['content']
+                    prefix = ''
                 if kind == 'delta':
                     content += event.get('text', '')
                     if len(content) > 120000:
@@ -620,6 +667,8 @@ async def _persist_events(owner, key, run_id, events, prefix=''):
                         reply = state['nodes'][run['response_id']]
                         reply['content'] = content[:120000]
                         reply.setdefault('context', {}).update(reasoning=copy.deepcopy(thoughts), execution_order=list(order))
+                        if kind == 'compaction':
+                            reply['context']['compaction'] = {k: event[k] for k in ('id', 'status')}
                         if kind == 'usage':
                             run['usage'] = copy.deepcopy(event['usage'])
                             reply['context']['usage'] = copy.deepcopy(event['usage'])
@@ -691,12 +740,11 @@ async def _persist_events(owner, key, run_id, events, prefix=''):
                         if run['status'] == 'running':
                             finish(state, 'cancelled', 'CLIENT_DISCONNECTED', '客户端已停止或断开连接。')
                 await io(storage.mutate, owner, key, 'run_cancelled', stop)
-                await cleanup_checkpoint(run_id)
             def settle_usage(state):
                 run = state.get('runs', {}).get(run_id)
                 if run:
                     reconcile_usage(state, run)
-                    return run['status'] != 'running'
+                    return run['status'] == 'completed'
                 return False
             settled = await io(storage.mutate, owner, key, 'run_usage_saved', settle_usage)
             if settled:

@@ -36,4 +36,5 @@ include = ["src*"]
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
+eval = ["langsmith>=0.14.12,<0.15"]
 packaging = ["pyinstaller>=6.20,<7"]
