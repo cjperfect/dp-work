@@ -333,6 +333,25 @@ class AgentConfigInput(BaseModel):
     agent_code: Literal["general", "product", "ui"]
 
 
+class AgentKnowledgeInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    owner_id: int = Field(gt=0)
+    body: dict = Field(default_factory=dict)
+
+
+async def agent_knowledge(action, params, state):
+    """只在已验证账号的本机数据库读写知识库关联。"""
+    import sqlite3
+    from ..agents.knowledge import operation
+    body = AgentKnowledgeInput.model_validate(params)
+    try:
+        return await asyncio.to_thread(operation, action, body.owner_id, body.body)
+    except ValidationError as cause:
+        raise OperationError(400, '知识库关联参数无效。') from cause
+    except (sqlite3.DatabaseError, OSError) as cause:
+        raise OperationError(500, '知识库关联保存失败，请检查本地数据库。') from cause
+
+
 async def agent_config(params, state):
     """读取当前设备指定 Agent 的提示词配置。"""
     from ..agents.context import read_prompt
@@ -426,6 +445,9 @@ HANDLERS = {
     "agents.steer": agent_steer,
     "agents.config.update": agent_config_update,
     "agents.config": agent_config,
+    "agents.knowledge.read": partial(agent_knowledge, 'read'),
+    "agents.knowledge.save": partial(agent_knowledge, 'save'),
+    "agents.knowledge.import": partial(agent_knowledge, 'import'),
     "skills.search": skills_search,
     "skills.descriptions": skills_descriptions,
     "skills.list": skills_list,

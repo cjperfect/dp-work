@@ -98,6 +98,11 @@ export function routeLocal(
   }
   if (path === "/api/agents/models" && verb === "GET")
     return { method: "agents.models", params: { owner_id: owner } };
+  if (path === "/api/agents/knowledge" && ["GET", "PUT", "POST"].includes(verb))
+    return {
+      method: `agents.knowledge.${verb === "GET" ? "read" : verb === "PUT" ? "save" : "import"}`,
+      params: { owner_id: owner, body: verb === "GET" ? {} : body },
+    };
   if (path === "/api/agents/title" && verb === "POST")
     return { method: "agents.title", params: { ...body, owner_id: owner } };
   if (path === "/api/agents/config" && ["GET", "PUT"].includes(verb))

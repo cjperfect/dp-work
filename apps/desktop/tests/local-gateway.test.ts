@@ -13,6 +13,16 @@ import path from "node:path";
 const owner = 7,
   device = randomUUID();
 test("local routes inject owner/device and never route remote business or arbitrary RPC", () => {
+  for (const [verb, action] of [
+    ["GET", "read"],
+    ["PUT", "save"],
+    ["POST", "import"],
+  ]) {
+    const call = routeLocal("/api/agents/knowledge", verb, {}, { owner_id: 999 }, owner, device);
+    assert.equal(call.method, `agents.knowledge.${action}`);
+    assert.equal(call.params.owner_id, owner);
+    assert.equal(call.needsRetrieval, undefined);
+  }
   const pricing = routeLocal("/api/settings/usage", "PUT", {}, { enabled: true }, owner, device);
   assert.equal(pricing.method, "usage.settings.save");
   assert.equal(pricing.params.owner_id, owner);

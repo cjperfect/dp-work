@@ -174,7 +174,7 @@ useAgentStore.subscribe((state, previous) => {
   // 本地保存 Agent 配置、已添加伙伴和当前选择；正文由 Sidecar 本地保存。
   try {
     writeAccountCache(`agent-config:${state.owner}`, {
-      agents: state.agents,
+      agents: state.agents.map((row) => ({ ...row, knowledge_base_ids: undefined })),
       partner_codes: state.partnerCodes,
       skills: state.skills,
       selected: state.selected,

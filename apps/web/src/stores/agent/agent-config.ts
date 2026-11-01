@@ -1,6 +1,11 @@
 import type { AgentId } from "@/interfaces/app";
 import type { AgentConfig, Skill } from "@/interfaces/agent";
-import { getAgentConfig } from "@/apis/agents";
+import {
+  getAgentConfig,
+  getAgentKnowledgeLinks,
+  importAgentKnowledgeLinks,
+  saveAgentKnowledgeLinks,
+} from "@/apis/agents";
 import { listConversations, importConversation } from "@/apis/conversations";
 import { useAuthStore } from "@/stores/auth";
 import { readAccountCache, writeAccountCache } from "@/lib/account-storage";
@@ -16,6 +21,12 @@ import {
   useAgentStore,
   type State,
 } from "./state";
+
+function knowledgeIds(values: (string | number)[]): number[] {
+  return [...new Set(values.map((value) => Number(String(value).replace(/^server-/, ""))))].filter(
+    (id) => Number.isSafeInteger(id) && id > 0,
+  );
+}
 
 export function loadAgents(force = false) {
   const owner = useAuthStore.getState().user?.id;
@@ -37,6 +48,19 @@ export function loadAgents(force = false) {
         readAccountCache<
           Pick<State, "agents" | "skills" | "selected"> & { partner_codes?: AgentId[] }
         >(`agent-config:${owner}`) ?? legacy;
+      let links = await getAgentKnowledgeLinks();
+      if (!owned(owner) || version !== generationRef.current) return;
+      const migration = (saved?.agents ?? [])
+        .filter(
+          (agent) =>
+            AGENTS.some((meta) => meta.id === agent.code) &&
+            Array.isArray(agent.knowledge_base_ids),
+        )
+        .map((agent) => ({
+          agent_code: agent.code,
+          knowledge_base_ids: knowledgeIds(agent.knowledge_base_ids),
+        }));
+      if (migration.length) links = await importAgentKnowledgeLinks(migration);
       // 内置目录只提供模板；部门伙伴需要当前用户主动添加。
       const seen = new Set<string>();
       const skills: Skill[] = [];
@@ -62,7 +86,13 @@ export function loadAgents(force = false) {
       useAgentStore.setState({
         agents: agents.map((agent) => {
           const previous = saved?.agents?.find((row) => row.code === agent.code);
-          return previous ? { ...agent, ...previous, id: agent.id, owner_id: owner } : agent;
+          return {
+            ...agent,
+            ...previous,
+            id: agent.id,
+            owner_id: owner,
+            knowledge_base_ids: (links[agent.code] ?? []).map((id) => `server-${id}`),
+          };
         }),
         partnerCodes: (saved?.partner_codes ?? []).filter(
           (code) => code !== "general" && AGENTS.some((agent) => agent.id === code),
@@ -143,7 +173,7 @@ export async function addPartner(code: AgentId) {
   const state = useAgentStore.getState();
   const partnerCodes = [...new Set([...state.partnerCodes, code])];
   writeAccountCache(`agent-config:${owner}`, {
-    agents: state.agents,
+    agents: state.agents.map((row) => ({ ...row, knowledge_base_ids: undefined })),
     skills: state.skills,
     selected: state.selected,
     partner_codes: partnerCodes,
@@ -162,7 +192,7 @@ export async function removePartner(code: AgentId) {
   if (!state.partnerCodes.includes(code)) return;
   const partnerCodes = state.partnerCodes.filter((item) => item !== code);
   writeAccountCache(`agent-config:${owner}`, {
-    agents: state.agents,
+    agents: state.agents.map((row) => ({ ...row, knowledge_base_ids: undefined })),
     skills: state.skills,
     selected: state.selected,
     partner_codes: partnerCodes,
@@ -182,12 +212,16 @@ export async function saveAgent(
   if (state.configBusy) throw new Error("配置正在保存，请稍后重试。");
   const agent = state.agents.find((row) => row.code === code);
   if (!agent) throw new Error("Agent 尚未加载。");
+  const version = generationRef.current;
   useAgentStore.setState({ configBusy: true });
   try {
-    // 配置暂保存为本地快照，不写入数据库。
+    const ids = knowledgeIds(changes.knowledge_base_ids);
+    await saveAgentKnowledgeLinks(code, ids);
+    if (!owned(owner) || version !== generationRef.current) throw new Error("登录状态已改变。");
     const updated: AgentConfig = {
       ...agent,
       ...changes,
+      knowledge_base_ids: ids.map((id) => `server-${id}`),
       revision: agent.revision + 1,
     };
     if (owned(owner))

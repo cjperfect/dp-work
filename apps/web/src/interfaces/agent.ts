@@ -78,6 +78,7 @@ export type AgentConfig = {
   revision: number;
   active_thread_id: string | null;
 };
+export type AgentKnowledgeLinks = Partial<Record<AgentId, number[]>>;
 export type Skill = { id: string; name: string; department: string; description: string };
 export type ChatThread = {
   has_history?: boolean;

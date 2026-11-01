@@ -89,7 +89,7 @@ export function KnowledgeBaseDetailPage() {
   }
 
   return (
-    <div className="flex w-full flex-1 flex-col gap-6 px-6 py-8 md:px-10">
+    <div className="flex h-full min-h-0 w-full flex-col gap-6 overflow-y-auto px-6 py-8 md:px-10">
       <div className="flex items-center gap-2">
         <Link to="/knowledge" className={buttonVariants({ variant: "ghost", size: "sm" })}>
           <ArrowLeft className="size-4" />

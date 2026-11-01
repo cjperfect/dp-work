@@ -292,7 +292,7 @@ function AgentPanel({ agent }: { agent: AgentConfig }) {
         {configBusy && <p role="status">正在保存配置…</p>}
         {saved && (
           <p role="status" className="text-emerald-700">
-            配置已保存在当前浏览器。
+            知识库关联已更新。
           </p>
         )}
         {error && (
@@ -300,9 +300,7 @@ function AgentPanel({ agent }: { agent: AgentConfig }) {
             {error}
           </p>
         )}
-        <p>
-          会话历史保存在当前设备。关联知识库后可检索已向量化的文档；技能按需加载；危险操作需要审批。
-        </p>
+        <p>启用的知识库将用于后续消息的检索。</p>
       </div>
     </aside>
   );

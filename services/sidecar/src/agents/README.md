@@ -34,3 +34,11 @@ Agent 专属逻辑集中在 `agent.py`：
 思考展示：providers/llm/chat.py 保留模型公开返回的 reasoning_content 及标准 reasoning 文本/摘要。供应商加密字段仅在当前工具循环中原样回传，不解密、不展示。reasoning / reasoning_end 与正文 delta 分开发送，由 sessions 按秒保存为本机消息 context.reasoning，并用 execution_order 保留思考和工具调用的发生顺序。前端复用 assistant-ui Reasoning、ToolGroup、ToolFallback，可展开思考文本、工具参数和结果；没有返回思考的模型不生成虚构思考面板。默认不强制开启供应商 thinking 参数。
 
 对话压缩：沿用 Deep Agents 的自动摘要阈值与历史保存策略；CompactionMiddleware 在实际生成摘要时发送 compaction 状态事件。前端在当前会话输入框上方显示“正在优化对话，请稍候，可能需要几分钟”，完成、失败或停止后收起。摘要内容不混入聊天正文。
+
+## 本机知识库关联
+
+Agent 的知识库勾选通过 `agents.knowledge.read/save/import` RPC 保存到 `.dp-work/data/users/<用户ID>/state.sqlite3` 的 `agent_knowledge_config` 表，按账号和 Agent 隔离；空数组保留为明确取消全部关联。该表是正式配置，不依赖 JSONL 会话投影恢复。
+
+前端 Store 只维护当前显示状态，SQLite 写入成功后才更新开关。首次读取会迁移 localStorage 中的旧关联：仅插入数据库不存在的 Agent 记录，已有记录（包括空数组）优先。成功后浏览器配置快照不再包含知识库 ID；迁移失败保留旧数据供重试。名称、伙伴、选中会话等其他旧配置不在这次迁移范围。
+
+保存的是检索范围，不授予知识库访问权；实际检索仍由云端 API 校验归属和有效版本。

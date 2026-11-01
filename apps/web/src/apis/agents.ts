@@ -14,8 +14,21 @@ import type {
   ThreadDetail,
 } from "@/interfaces/agent";
 import type { AgentId } from "@/interfaces/app";
+import type { AgentKnowledgeLinks } from "@/interfaces/agent";
 import { http } from "@/lib/http";
 import { getAccessToken, useAuthStore } from "@/stores/auth";
+
+/** 读取当前账号在本机 SQLite 保存的知识库关联。 */
+export const getAgentKnowledgeLinks = () => http.get<AgentKnowledgeLinks>("/api/agents/knowledge");
+
+/** 保存单个 Agent 的知识库关联，空数组表示取消全部关联。 */
+export const saveAgentKnowledgeLinks = (agent_code: AgentId, knowledge_base_ids: number[]) =>
+  http.put<AgentKnowledgeLinks>("/api/agents/knowledge", { agent_code, knowledge_base_ids });
+
+/** 迁移浏览器旧配置，不覆盖本机数据库中已有的设置。 */
+export const importAgentKnowledgeLinks = (
+  agents: { agent_code: AgentId; knowledge_base_ids: number[] }[],
+) => http.post<AgentKnowledgeLinks>("/api/agents/knowledge", { agents });
 
 /** 向正在执行的 Agent 提交引导消息。 */
 export const steerAgentRun = (threadId: string, id: string, content: string) =>

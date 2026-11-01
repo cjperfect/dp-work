@@ -16,6 +16,7 @@ export async function ensureTestChat(code, force = false) {
 /** API 协议替身，保留服务端数据以测试刷新、分支和账号隔离。 */
 export function conversationFixture() {
   const details = new Map();
+  const knowledgeLinks = {};
   const clone = (value) => structuredClone(value);
   const wrapped = (data) => ({ code: 0, data });
   function combine(detail) {
@@ -29,6 +30,15 @@ export function conversationFixture() {
     details,
     async handle(request, upstream) {
       const path = request.url;
+      if (path === "/api/agents/knowledge") {
+        const body = typeof request.data === "string" ? JSON.parse(request.data) : request.data;
+        if (request.method === "put")
+          knowledgeLinks[body.agent_code] = [...body.knowledge_base_ids];
+        if (request.method === "post")
+          for (const agent of body.agents)
+            knowledgeLinks[agent.agent_code] ??= [...agent.knowledge_base_ids];
+        return wrapped(clone(knowledgeLinks));
+      }
       if (path === "/api/agents/config")
         return wrapped({
           agent_code: request.params.agent_code,
