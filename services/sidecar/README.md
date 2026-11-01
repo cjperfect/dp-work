@@ -10,10 +10,13 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e ../../packages/agent-templates -e .
 cp .env.example .env
-uvicorn src.main:app --reload --host 127.0.0.1 --port 8001
+
+# 返回仓库根目录，通过 Electron 管理 Sidecar
+cd ../..
+pnpm dev:desktop
 ```
 
-已有虚拟环境时，可以在仓库根目录运行 `pnpm dev:sidecar`。测试：`pnpm test:sidecar`。
+Sidecar 由 Electron Main 作为子进程启动、健康检查和清理，无需手动启动独立服务。API 和 Worker 的启动方式见仓库根目录 README。测试：`pnpm test:sidecar`。
 
 仅使用豆包真实识别。缺少凭证时明确提示配置错误，不生成示例转写。
 

@@ -8,14 +8,14 @@
 
 ```bash
 pnpm dev:api
-pnpm dev:web
+pnpm dev:desktop
 pnpm --filter @dp-work/web typecheck
 pnpm --filter @dp-work/web build
 ```
 
-默认开发地址为 `http://localhost:3000`，API 服务默认位于 `http://127.0.0.1:8000`。复制 `.env.example` 为 `.env.local` 可以修改代理目标。Vite 的 `/api` 代理用于开发、本地预览；正式 Web 部署需要配置反向代理。
+通过 Electron 启动应用，前端开发服务与 Sidecar 由桌面启动流程自动管理。API 服务默认位于 `http://127.0.0.1:8000`，复制 `.env.example` 为 `.env.local` 可以修改开发代理目标。完整启动顺序见根目录 README。
 
-`pnpm --filter @dp-work/web start` 仅预览 `dist` 构建产物，不作为生产服务。
+桌面预览与打包方式见 `apps/desktop/README.md`。
 
 ## 源码目录
 
@@ -43,16 +43,7 @@ src/
 
 认证、知识库接口通过 `src/lib/http.ts` 的 Axios 客户端统一处理响应、超时和 Authorization。Token 保存在 localStorage，有效期由后端控制。用户信息直接缓存登录接口的返回值，应用启动时从本地恢复一次，页面路由不拦截登录状态，不请求当前用户接口；业务接口收到 401 时清理登录状态并跳转登录页，旧请求不会清除新会话。
 
-前端只请求 `/api/...`。浏览器正式部署可配置：
-
-```nginx
-location /api/ {
-    proxy_pass http://127.0.0.1:8000;
-}
-location / {
-    try_files $uri $uri/ /index.html;
-}
-```
+前端统一请求 `/api/...`。
 
 Electron 复用同一份 `dist`，由桌面 Main 提供静态服务、SPA 路由回退及 API 转发，见 `apps/desktop/README.md`。会议、知识库和账号使用远程 API；Agent、会话、技能、连接器、项目和用量通过统一 Axios 本机适配器转为 Electron IPC，不回退到演示数据。
 

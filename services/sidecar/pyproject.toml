@@ -28,6 +28,10 @@ dependencies = [
     "python-docx>=1.2,<2",
 ]
 
+# uv 从仓库内安装模板包；pip 不读取此配置，仍需显式安装本地模板包。
+[tool.uv.sources]
+dp-work-agent-templates = { path = "../../packages/agent-templates", editable = true }
+
 [tool.setuptools.packages.find]
 include = ["src*"]
 

@@ -56,7 +56,7 @@ dp-work 从三个环节解决这个问题：
 | 检索       | pgvector · Elasticsearch BM25 · RRF 混合检索                                                            |
 | 实时服务   | WebSocket（ASR 实时转写与状态推送）· Sidecar 服务                                                       |
 | AI 能力    | 豆包 ASR（实时语音转写）· 火山方舟大模型（会议纪要生成 / Agent 对话）· 火山方舟向量模型（知识库向量化） |
-| 桌面端     | Electron（可选）                                                                                        |
+| 桌面端     | Electron                                                                                                |
 | 工程化     | pnpm monorepo（apps · packages · services）· ESLint · Prettier · Husky                                  |
 
 ---
@@ -65,7 +65,7 @@ dp-work 从三个环节解决这个问题：
 
 ### 前置依赖
 
-- Node.js ≥ 20、pnpm
+- Node.js ≥ 22、pnpm
 - Python 3.11+ 与 uv（后端 API 依赖管理）
 
 ### 1. 安装依赖
@@ -80,6 +80,9 @@ uv sync
 # AI 引擎端（一次性，sidecar 使用 uv）
 cd ../sidecar
 uv sync
+
+# 返回项目根目录
+cd ../..
 ```
 
 ### 2. 配置环境变量
@@ -108,29 +111,21 @@ pnpm migrate
 # API 服务（:8000）
 pnpm dev:api
 
-# Sidecar 服务（:8001，ASR 转写 / 模型代理）
-pnpm dev:sidecar
-
 # 独立消费进程（四类队列，另开终端）
 pnpm dev:workers
 ```
 
 队列并发、可靠投递及部署说明见 [异步任务说明](services/api/src/infrastructure/tasks/README.md)。
 
-### 5. 启动前端
+### 5. 启动 Electron 桌面端
 
 ```bash
-# Web 端（http://localhost:3000）
-pnpm dev:web
+pnpm dev:desktop
 ```
 
-### 6. 启动桌面端（可选）
+> `pnpm dev:desktop` 自动启动前端开发服务和本机 Sidecar，无需额外启动 Web 或 Sidecar。API 与 Worker 分别在独立终端运行。
 
-```bash
-pnpm dev:desktop   # Electron 客户端
-```
-
-> 当前架构为本地 Web / Electron / Sidecar，云端 API / PG / ES / RabbitMQ / Worker。业务边界：只有登录注册、会议、知识库访问远程 API；聊天、项目、个人设置、技能和飞书连接器通过 Electron IPC → stdio JSON-RPC 直接在本机执行与保存。本机已验证的登录支持离线恢复本地功能，知识库检索仍需要连接远程知识库。云端设备通道只用于会议和知识库任务，不承载聊天或个人密钥。开发时运行 `pnpm dev:desktop` 自动启动 Web 与 Sidecar；纯浏览器仅能使用远程模块，本地功能需要桌面桥接。
+> 当前架构为本地 Electron / Renderer / Sidecar，云端 API / PG / ES / RabbitMQ / Worker。业务边界：只有登录注册、会议、知识库访问远程 API；聊天、项目、个人设置、技能和飞书连接器通过 Electron IPC → stdio JSON-RPC 直接在本机执行与保存。本机已验证的登录支持离线恢复本地功能，知识库检索仍需要连接远程知识库。云端设备通道只用于会议和知识库任务，不承载聊天或个人密钥。前端页面由 Electron 加载，本地功能通过桌面桥接访问。
 
 ---
 
@@ -140,7 +135,7 @@ pnpm dev:desktop   # Electron 客户端
 dp-work/
 ├── apps/
 │   ├── web/          # Web 前端（Vite + React）
-│   └── desktop/      # Electron 桌面端（可选）
+│   └── desktop/      # Electron 桌面端
 ├── packages/         # 共享包（contracts / sidecar-rpc）
 ├── services/
 │   ├── api/          # 后端 API（FastAPI + PostgreSQL）

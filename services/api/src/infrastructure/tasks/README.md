@@ -9,9 +9,10 @@ RabbitMQ + Celery 执行会议纪要、解析、向量化、ES 同步。PG 继�
 pnpm mq:up
 pnpm migrate
 pnpm dev:api
-pnpm dev:sidecar
 # 另一个终端，启动四组独立 Celery Worker
 pnpm dev:workers
+# 另一个终端，启动 Electron（自动管理前端与 Sidecar）
+pnpm dev:desktop
 ```
 
 配置在 `services/api/.env`；属性注释见 `.env.example`。macOS 默认按并发数启动多组独立 solo Worker，Linux 默认 prefork；可通过 `MQ_WORKER_POOL` 指定。solo 关闭 AMQP 心跳，避免长任务阻塞主线程时被误判离线；任务仍有 asyncio 总超时和 PG 租约恢复。prefork 另外提供进程硬超时。

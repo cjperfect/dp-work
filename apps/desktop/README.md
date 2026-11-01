@@ -14,6 +14,8 @@ Electron 桌面壳，页面复用 `apps/web` 的 Vite + React 应用。
 
 ```bash
 pnpm dev:api
+# 另一个终端启动异步任务消费者
+pnpm dev:workers
 # 另开终端
 pnpm dev:desktop
 ```
