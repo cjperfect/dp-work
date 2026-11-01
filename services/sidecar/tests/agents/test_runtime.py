@@ -70,6 +70,8 @@ def test_user_cannot_inject_system_messages_or_unbounded_context():
 
 
 def test_settings_come_from_env_and_hide_secrets(monkeypatch):
+    for name in ("ARK_MODEL_LITE", "ARK_MODEL_DEFAULT", "ARK_MODEL_STRONG"):
+        monkeypatch.setattr(config, name, "")
     monkeypatch.setattr(config, "ARK_API_KEY", "test-private-key")
     monkeypatch.setattr(config, "ARK_MODEL", "test-model")
     monkeypatch.setattr(config, "ARK_BASE_URL", "https://model.test/v3")

@@ -42,3 +42,17 @@ Agent 的知识库勾选通过 `agents.knowledge.read/save/import` RPC 保存到
 前端 Store 只维护当前显示状态，SQLite 写入成功后才更新开关。首次读取会迁移 localStorage 中的旧关联：仅插入数据库不存在的 Agent 记录，已有记录（包括空数组）优先。成功后浏览器配置快照不再包含知识库 ID；迁移失败保留旧数据供重试。名称、伙伴、选中会话等其他旧配置不在这次迁移范围。
 
 保存的是检索范围，不授予知识库访问权；实际检索仍由云端 API 校验归属和有效版本。
+
+## 按任务路由模型
+
+在 Sidecar `.env` 设置 `ARK_MODEL_LITE`、`ARK_MODEL_DEFAULT`、`ARK_MODEL_STRONG`。
+标题与记忆提取使用 LITE，纪要与记忆整理使用 DEFAULT，Agent 主执行使用 STRONG；
+未知任务使用 DEFAULT。未填写的档位回退 `ARK_MODEL`，三档共用 ARK 地址和凭证。
+映射集中在 `providers/llm/routing.py`，按任务职责静态选择，不自动判断请求复杂度或失败升级。
+当前三档示例均为 `glm-5-3-flash-260828`，可自行替换为同一服务可访问的模型 ID。
+
+用户显式选择的已配置模型优先于档位；个人服务完整配置优先，不将平台模型 ID 套用到个人供应商。
+记忆模块原有 `MEMORY_EXTRACT_MODEL` / `MEMORY_CONSOLIDATION_MODEL` 显式覆盖继续生效。
+子 Agent 与上下文压缩继续沿用主执行模型，暂不单独切换，保留现有工具和压缩策略。
+路由日志只记录任务、档位和模型 ID，现有用量账本记录实际调用用量。
+修改 `.env` 后重启 Sidecar 生效。

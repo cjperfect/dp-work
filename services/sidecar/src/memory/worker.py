@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from .. import config
 from ..providers import local_settings
-from ..providers.llm.schemas import ModelSettings
+from ..providers.llm.routing import route_request
 from ..sessions.storage import storage, SessionError
 from . import jobs, pipeline, repository as repo
 
@@ -126,13 +126,16 @@ class MemoryWorker:
             extracted, decisions, known = [], [], []
             if meaningful and sum(len(row['text']) for row in messages) >= 80:
                 runtime = await asyncio.to_thread(local_settings.runtime, owner, 'model')
-                settings = runtime.llm() if runtime else ModelSettings.from_env()
-                settings = replace(settings, timeout=min(settings.timeout, 60), max_tokens=3000)
+                settings = runtime.llm() if runtime else None
+                extract_settings = route_request("memory_extract", settings=settings)
+                consolidation_settings = route_request("memory_consolidate", settings=settings)
+                extract_settings = replace(extract_settings, timeout=min(extract_settings.timeout, 60), max_tokens=3000)
+                consolidation_settings = replace(consolidation_settings, timeout=min(consolidation_settings.timeout, 60), max_tokens=3000)
                 async with asyncio.timeout(135):
-                    extracted = await pipeline.extract(snapshot, replace(settings, model=config.MEMORY_EXTRACT_MODEL or settings.model))
+                    extracted = await pipeline.extract(snapshot, replace(extract_settings, model=config.MEMORY_EXTRACT_MODEL or extract_settings.model))
                     if extracted:
                         known = await asyncio.to_thread(jobs.existing, owner, snapshot, extracted, root)
-                        decisions = await pipeline.consolidate(extracted, known, replace(settings, model=config.MEMORY_CONSOLIDATION_MODEL or settings.model))
+                        decisions = await pipeline.consolidate(extracted, known, replace(consolidation_settings, model=config.MEMORY_CONSOLIDATION_MODEL or consolidation_settings.model))
             committed = await asyncio.to_thread(self.apply, owner, job, extracted, decisions, known)
             if not committed:
                 await asyncio.to_thread(jobs.fail, owner, job, 'INPUT_CHANGED', root, True)

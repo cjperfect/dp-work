@@ -21,6 +21,7 @@ from .. import config
 from .context import system_prompt
 from ..harness.approvals import GATED_TOOLS
 from ..providers.llm.schemas import ModelSettings, ModelError
+from ..providers.llm.routing import route_request
 from ..providers.llm.chat import ReasoningChatOpenAI, reasoning_text
 
 log = logging.getLogger(__name__)
@@ -55,16 +56,14 @@ class AgentRequest(BaseModel):
         return self
 
 
-def settings_for(model_id: str | None = None) -> ModelSettings:
+def settings_for(model_id: str | None = None, task_type: str = "agent") -> ModelSettings:
     """只允许使用服务端环境配置的模型。"""
-    settings = ModelSettings.from_env()
+    settings = route_request(task_type, explicit_model=model_id)
     if not settings.api_key or not settings.model or not settings.base_url:
         raise ModelError("MODEL_NOT_CONFIGURED", "请配置 Sidecar 的 ARK_API_KEY、ARK_MODEL 和 ARK_BASE_URL。")
     url = urlsplit(settings.base_url)
     if url.scheme != "https" or url.username or url.password or url.query or url.fragment:
         raise ModelError("MODEL_CONFIG_INVALID", "模型 Base URL 必须使用不带凭证的 HTTPS 地址。")
-    if model_id and model_id != settings.model:
-        raise ModelError("MODEL_NOT_AVAILABLE", "所选模型未配置，请重新选择模型。")
     return settings
 
 
@@ -223,7 +222,7 @@ async def agent_events(body: AgentRequest, model, tools=None, checkpointer=None,
     if not content:
         yield {"type": "delta", "text": final_text}
         content = final_text
-    yield {"type": "done", "run_id": run_id, "model": body.model or config.ARK_MODEL, "content": content}
+    yield {"type": "done", "run_id": run_id, "model": body.model or getattr(model, "model_name", config.ARK_MODEL), "content": content}
 
 
 async def run_agent(body: AgentRequest, settings):

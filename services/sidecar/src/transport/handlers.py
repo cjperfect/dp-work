@@ -137,7 +137,7 @@ async def agent_title(params, state):
     body = TitleInput.model_validate(params)
     try:
         personal = body.runtime or await asyncio.to_thread(local_settings.runtime, getattr(body, "owner_id", None) or getattr(body, "workspace_owner_id", None), "model")
-        settings = personal.llm() if personal else settings_for(body.model)
+        settings = personal.llm() if personal else settings_for(body.model, task_type="title")
         if body.model and body.model != settings.model:
             raise ModelError("MODEL_NOT_AVAILABLE", "所选模型未配置。")
         return {"title": await generate_title(body, settings)}

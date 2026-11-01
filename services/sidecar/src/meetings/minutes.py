@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from datetime import timezone
 from .. import config
 from ..providers.llm.client import complete
+from ..providers.llm.routing import route_request
 from ..providers.llm.schemas import ModelError, ModelSettings
 from .schemas import MinutesInput, MinutesOutput
 
@@ -30,7 +31,7 @@ def messages(body: MinutesInput) -> list[dict]:
 
 async def generate(body: MinutesInput, settings: ModelSettings | None = None, transport=None) -> MinutesOutput:
     """生成并校验 Markdown 纪要。"""
-    settings = settings or ModelSettings.from_env()
+    settings = route_request("minutes", settings=settings)
     content, model = await complete(messages(body), settings, transport)
     lines = {line.strip() for line in content.splitlines()}
     if content.startswith("```") or not all(f"## {section}" in lines for section in SECTIONS):

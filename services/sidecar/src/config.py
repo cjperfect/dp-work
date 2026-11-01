@@ -33,6 +33,10 @@ PORT = int(os.environ.get("PORT", "8001"))
 # ---- 方舟大模型（Agent 与会议纪要共用） ----
 ARK_API_KEY = os.environ.get("ARK_API_KEY", "").strip()
 ARK_MODEL = os.environ.get("ARK_MODEL", "").strip()
+# 可选任务路由档位，留空回退 ARK_MODEL；共用 ARK 凭证与地址。
+ARK_MODEL_LITE = os.environ.get("ARK_MODEL_LITE", "").strip()
+ARK_MODEL_DEFAULT = os.environ.get("ARK_MODEL_DEFAULT", "").strip()
+ARK_MODEL_STRONG = os.environ.get("ARK_MODEL_STRONG", "").strip()
 ARK_BASE_URL = os.environ.get("ARK_BASE_URL", "").rstrip("/")
 ARK_TIMEOUT_SECONDS = float(os.environ.get("ARK_TIMEOUT_SECONDS", "180"))
 ARK_MAX_TOKENS = int(os.environ.get("ARK_MAX_TOKENS", "8192"))
