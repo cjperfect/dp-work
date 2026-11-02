@@ -28,7 +28,8 @@ def cipher():
 
 
 async def notify(db, channel, value):
-    await db.execute(text('SELECT pg_notify(:channel, :payload)'), {'channel': channel, 'payload': json.dumps(value)})
+    from src.infrastructure.database.notifications import notify as emit
+    await emit(db, channel, value)
 
 
 async def online_device(owner, target=None):

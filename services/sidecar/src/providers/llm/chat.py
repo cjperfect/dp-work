@@ -4,6 +4,20 @@ from langchain_core.messages import AIMessage, AIMessageChunk
 
 
 class ReasoningChatOpenAI(ChatOpenAI):
+    async def _permit(self):
+        from .redis_control import permit
+        await permit(self.model_name, str(self.openai_api_base or ""),
+                     self.openai_api_key.get_secret_value() if self.openai_api_key else "")
+
+    async def _agenerate(self, *args, **kwargs):
+        await self._permit()
+        return await super()._agenerate(*args, **kwargs)
+
+    async def _astream(self, *args, **kwargs):
+        await self._permit()
+        async for chunk in super()._astream(*args, **kwargs):
+            yield chunk
+
     def _convert_chunk_to_generation_chunk(self, chunk, default_chunk_class, base_generation_info):
         result = super()._convert_chunk_to_generation_chunk(chunk, default_chunk_class, base_generation_info)
         choices = chunk.get('choices') or chunk.get('chunk', {}).get('choices') or []

@@ -22,6 +22,7 @@ def isolated_transport_key(monkeypatch, transport_test_key):
 def isolate_search_backend(monkeypatch):
     """普通测试不连接开发机 ES；专项测试显式启用独立索引。"""
     from src.core import config
+    monkeypatch.setattr(config, "REDIS_URL", "")
     monkeypatch.setattr(config, "ELASTICSEARCH_ENABLED", False)
     monkeypatch.setattr(config, "MQ_DISPATCH_ENABLED", False)
     monkeypatch.setattr(config, "SIDECAR_TRANSPORT", "http")

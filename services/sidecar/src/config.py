@@ -90,3 +90,13 @@ MEMORY_RETRIEVAL_TIMEOUT_SECONDS = max(1, float(os.environ.get("MEMORY_RETRIEVAL
 
 # ASR 每小时音频估算单价（与 AGENT_COST_CURRENCY 同币种）；留空不估算费用。
 ASR_PRICE_PER_HOUR = os.environ.get("ASR_PRICE_PER_HOUR", "").strip()
+
+# ---- Redis：模型限流与查询 Embedding 短期缓存 ----
+# 本机开发使用回环地址；远程部署只通过可信私网连接，不向桌面包写入云端 Redis 凭证。
+REDIS_URL = os.environ.get('REDIS_URL', '').strip()
+REDIS_PREFIX = os.environ.get('REDIS_PREFIX', 'dp-work')
+REDIS_TIMEOUT_SECONDS = max(0.05, float(os.environ.get('REDIS_TIMEOUT_SECONDS', '0.3')))
+REDIS_MODEL_RPM = max(0, int(os.environ.get('REDIS_MODEL_RPM', '120')))
+REDIS_MODEL_USER_RPM = max(0, int(os.environ.get('REDIS_MODEL_USER_RPM', '60')))
+REDIS_LIMIT_FAIL_OPEN = os.environ.get('REDIS_LIMIT_FAIL_OPEN', '0') == '1'
+REDIS_CACHE_TTL_SECONDS = max(0, int(os.environ.get('REDIS_CACHE_TTL_SECONDS', '300')))

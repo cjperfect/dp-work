@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 import httpx
 from langchain_core.embeddings import Embeddings
 from ... import config
+from ...providers.llm.redis_control import permit, cached_vector, cache_vector
 
 CORPUS_INSTRUCTION = "Instruction:Compress the text into one word.\nQuery:"
 QUERY_INSTRUCTION = "Target_modality: text.\nInstruction:根据这个问题，检索可以回答问题的相关文档。\nQuery:"
@@ -53,9 +54,17 @@ class ArkEmbeddings(Embeddings):
             raise EmbeddingError("当前向量索引使用 1024 维，请保持配置一致。")
         async with httpx.AsyncClient(timeout=config.EMBEDDING_TIMEOUT_SECONDS, follow_redirects=False) as client:
             async def one(text):
+                if query:
+                    cached = await cached_vector(text, profile())
+                    if cached is not None:
+                        try:
+                            return validate_vector(cached)
+                        except EmbeddingError:
+                            pass  # 坏缓存按未命中处理，绝不跳过向量校验。
                 async with limiter():
                     for attempt in range(3):
                         try:
+                            await permit(config.EMBEDDING_MODEL, config.EMBEDDING_BASE_URL, config.EMBEDDING_API_KEY)
                             call_id = str(uuid4())
                             await asyncio.to_thread(write, call_id, config.EMBEDDING_MODEL, status='unreported', category='embedding')
                             response = await client.post(config.EMBEDDING_BASE_URL + "/embeddings/multimodal",
@@ -72,7 +81,10 @@ class ArkEmbeddings(Embeddings):
                             usage = raw_usage(data)
                             await asyncio.to_thread(write, call_id, config.EMBEDDING_MODEL, usage,
                                                     status='reported' if usage is not None else 'unreported', category='embedding')
-                            return validate_vector(data.get("data", {}).get("embedding"))
+                            vector = validate_vector(data.get("data", {}).get("embedding"))
+                            if query:
+                                await cache_vector(text, profile(), vector)
+                            return vector
                         except (httpx.TimeoutException, httpx.NetworkError) as cause:
                             if attempt == 2:
                                 raise EmbeddingError("向量服务连接超时或中断，请重试。") from cause

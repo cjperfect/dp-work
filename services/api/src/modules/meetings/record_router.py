@@ -111,7 +111,8 @@ async def events(websocket: WebSocket, meeting_id: str):
                             from sqlalchemy import text
                             async with session.transaction() as db:
                                 await records.access(db, meeting_id, user.id, share)
-                                await db.execute(text("SELECT pg_notify('meeting_record', :payload)"), {'payload': json.dumps({'id': meeting_id, 'awareness': message['update']})})
+                                from src.infrastructure.database.notifications import notify
+                                await notify(db, "meeting_record", {"id": meeting_id, "awareness": message["update"]})
                         reader = asyncio.create_task(websocket.receive_text())
                     elif message.get('type') == 'save':
                         try:

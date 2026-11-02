@@ -66,6 +66,11 @@ async def transaction() -> AsyncIterator[AsyncSession]:
     """管理数据库事务。"""
     async with _session_factory().begin() as db_session:
         yield db_session
+        messages = db_session.info.pop("redis_notifications", [])
+    # 只有事务正常提交后才能向 Redis 发布。
+    if messages:
+        from .notifications import publish_committed
+        await publish_committed(messages)
 
 
 async def is_healthy() -> bool:

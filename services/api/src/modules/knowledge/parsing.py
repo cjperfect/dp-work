@@ -139,9 +139,8 @@ async def notify_parse(db, base_id: int, document_id: str):
     """事务提交时发布解析状态，通知内容不包含文档正文。"""
     owner = await db.scalar(select(KnowledgeBase.owner_id).where(KnowledgeBase.id == base_id))
     if owner is not None:
-        await db.execute(text("SELECT pg_notify('document_parsing', :payload)"), {"payload": json.dumps({
-            "owner_id": owner, "base_id": base_id, "document_id": document_id,
-        })})
+        from src.infrastructure.database.notifications import notify
+        await notify(db, "document_parsing", {"owner_id": owner, "base_id": base_id, "document_id": document_id})
 
 
 async def parse_states(owner_id: int, document_id: str | None = None) -> list[dict]:

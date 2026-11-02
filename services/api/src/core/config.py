@@ -98,3 +98,12 @@ MQ_SEARCH_CONCURRENCY = int(os.environ.get("MQ_SEARCH_CONCURRENCY", "1"))
 
 # macOS 使用多组 solo 进程，避开 Celery 与 spawn 的兼容问题；Linux 使用 prefork。
 MQ_WORKER_POOL = os.environ.get("MQ_WORKER_POOL", "").strip() or ("solo" if sys.platform == "darwin" else "prefork")
+
+# ---- Redis：可丢弃的临时状态，留空关闭 ----
+REDIS_URL = os.environ.get('REDIS_URL', '').strip()
+REDIS_PREFIX = os.environ.get('REDIS_PREFIX', 'dp-work')
+REDIS_TIMEOUT_SECONDS = max(0.05, float(os.environ.get('REDIS_TIMEOUT_SECONDS', '0.3')))
+REDIS_IP_RPM = max(0, int(os.environ.get('REDIS_IP_RPM', '600')))
+REDIS_USER_RPM = max(0, int(os.environ.get('REDIS_USER_RPM', '300')))
+REDIS_LIMIT_FAIL_OPEN = os.environ.get('REDIS_LIMIT_FAIL_OPEN', '0') == '1'
+REDIS_PUBSUB_ENABLED = os.environ.get('REDIS_PUBSUB_ENABLED', '1') == '1'

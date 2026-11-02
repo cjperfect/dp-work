@@ -127,5 +127,5 @@ class MeetingsRepository:
     async def notify_generation(self, owner_id: int, meeting_id: str) -> None:
         """事务提交时通知所有 API 实例的生成状态订阅者。"""
         import json
-        await self.session.execute(text("SELECT pg_notify('meeting_generation', :payload)"),
-            {"payload": json.dumps({"owner_id": owner_id, "meeting_id": meeting_id})})
+        from src.infrastructure.database.notifications import notify
+        await notify(self.session, "meeting_generation", {"owner_id": owner_id, "meeting_id": meeting_id})

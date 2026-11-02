@@ -39,6 +39,17 @@ async def get_current_user(
     user = await users_service.find_by_subject(sub, payload.get("uidv"))
     if user is None or not user.is_active:
         raise ApiError(ApiCode.UNAUTHORIZED, "账号不存在或已停用", 401)
+    from src.core import config
+    from src.infrastructure.redis.client import check_limit, RedisError
+    from fastapi import HTTPException
+    try:
+        wait = await check_limit("user", user.id, config.REDIS_USER_RPM)
+    except (RedisError, OSError):
+        if not config.REDIS_LIMIT_FAIL_OPEN:
+            raise ApiError(ApiCode.INTERNAL_ERROR, "限流服务暂不可用，请稍后重试。", 503)
+        wait = 0
+    if wait:
+        raise HTTPException(429, "请求过于频繁，请稍后重试。", headers={"Retry-After": str(wait)})
     from src.infrastructure.sidecar.context import scope
     device_id = request.headers.get("X-Device-ID")
     if device_id:

@@ -69,6 +69,8 @@ def register_exception_handlers(app: FastAPI) -> None:
             code, message = ApiCode.UNAUTHORIZED, "未登录或凭证无效"
         elif status == 403:
             code, message = ApiCode.FORBIDDEN, "无权限"
+        elif status == 429:
+            code, message = 4290, str(exc.detail or "请求过于频繁")
         elif status == 404:
             code, message = ApiCode.NOT_FOUND, "资源不存在"
         else:
@@ -76,6 +78,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=status,
             content={"code": code, "message": message, "data": None},
+            headers=exc.headers,
         )
 
     @app.exception_handler(Exception)

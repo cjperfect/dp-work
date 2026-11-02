@@ -35,6 +35,8 @@
     "db:down": "docker-compose down",
     "db:logs": "docker-compose logs -f postgres",
     "dev:workers": "cd services/api && .venv/bin/python -m src.infrastructure.tasks.workers",
+    "redis:up": "docker-compose up -d redis",
+    "redis:logs": "docker-compose logs -f redis",
     "mq:up": "docker-compose up -d rabbitmq",
     "mq:logs": "docker-compose logs -f rabbitmq",
     "eval:smoke": "cd services/sidecar && .venv/bin/python -m evals.run --smoke",

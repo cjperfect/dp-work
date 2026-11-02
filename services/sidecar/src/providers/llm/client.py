@@ -17,6 +17,8 @@ async def complete(messages: list[dict], settings: ModelSettings, transport=None
     try:
         async with asyncio.timeout(settings.timeout):
             async with httpx.AsyncClient(transport=transport, timeout=httpx.Timeout(settings.timeout, connect=10), follow_redirects=False) as client:
+                from .redis_control import permit
+                await permit(settings.model, settings.base_url, settings.api_key)
                 response = await client.post(settings.base_url.rstrip("/") + "/chat/completions",
                     headers={"Authorization": f"Bearer {settings.api_key}"},
                     json={"model": settings.model, "messages": messages, "stream": False, "max_tokens": settings.max_tokens})

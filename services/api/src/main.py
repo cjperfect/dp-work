@@ -35,11 +35,14 @@ def create_app() -> FastAPI:
         ],
         lifespan=lifespan,
     )
+    from src.middleware.rate_limit import RateLimitMiddleware
+    application.add_middleware(RateLimitMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=config.CORS_ORIGINS,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["Retry-After", "X-Request-ID"],
     )
     application.add_middleware(RequestContextMiddleware)
     register_exception_handlers(application)

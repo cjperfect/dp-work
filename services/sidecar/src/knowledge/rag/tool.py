@@ -3,6 +3,7 @@ import asyncio
 import httpx
 from langchain_core.tools import tool
 from ... import config
+from ...providers.llm.schemas import ModelError
 from .embedding import ArkEmbeddings, EmbeddingError, profile
 
 
@@ -17,7 +18,7 @@ def knowledge_tool(capability: str, client: httpx.AsyncClient):
             try:
                 async with asyncio.timeout(10):
                     vector = await ArkEmbeddings().aembed_query(query)
-            except (EmbeddingError, TimeoutError, httpx.HTTPError):
+            except (EmbeddingError, ModelError, TimeoutError, httpx.HTTPError):
                 vector = None
             response = await client.post(config.API_INTERNAL_URL + "/api/internal/knowledge/search",
                 headers={"X-Internal-Token": config.SIDECAR_INTERNAL_TOKEN},

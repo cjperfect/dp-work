@@ -47,7 +47,8 @@ def snapshot(db, record, author_id, label):
 
 async def notify(db, meeting_id):
     """通过 PostgreSQL 通知所有 API 进程中的协作者。"""
-    await db.execute(text("SELECT pg_notify('meeting_record', :payload)"), {'payload': json.dumps({'id': meeting_id})})
+    from src.infrastructure.database.notifications import notify as emit
+    await emit(db, "meeting_record", {"id": meeting_id})
 
 
 def output(meeting, record, user_id):

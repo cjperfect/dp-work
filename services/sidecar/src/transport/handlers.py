@@ -252,6 +252,8 @@ async def embed_texts(params, state):
         async with asyncio.timeout(90):
             vectors = [await model.aembed_query(body.texts[0])] if body.query else await model.aembed_documents(body.texts)
         return {"vectors": vectors, "model": config.EMBEDDING_MODEL, "dimensions": 1024, "profile": profile()}
+    except ModelError as cause:
+        raise OperationError(429 if cause.code == "MODEL_RATE_LIMIT" else 503, str(cause), cause.code) from cause
     except (EmbeddingError, TimeoutError) as cause:
         raise OperationError(502, str(cause) if isinstance(cause, EmbeddingError) else "向量化超时，请重试。") from cause
 
