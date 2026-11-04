@@ -8,7 +8,7 @@ from uuid import uuid4
 from deepagents.backends import LocalShellBackend, CompositeBackend, FilesystemBackend
 
 from .. import config
-from .shell import execute_command
+from ..sandbox.shell import execute_command
 from .file_changes import emit_change
 from .file_snapshots import SnapshotBatch, SnapshotError, workspace_lock
 

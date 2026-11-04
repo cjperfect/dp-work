@@ -1,3 +1,4 @@
+import { hasPermission } from "@/features/access/hooks/use-permission";
 import type { KbFile } from "@/interfaces/knowledge";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -17,6 +18,7 @@ export function useDocumentParsing(baseId: string) {
   const lock = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   async function start(file: KbFile) {
+    if (!hasPermission("knowledge:write")) return;
     if (lock.current) return;
     if (!["pdf", "txt", "md", "docx"].includes(file.type)) {
       toast.info("当前支持 TXT、Markdown、PDF 和 DOCX 解析，旧版 DOC 请先另存为 DOCX。");
@@ -51,6 +53,7 @@ export function useDocumentVectorization(baseId: string) {
   const lock = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   async function start(file: KbFile) {
+    if (!hasPermission("knowledge:write")) return;
     if (lock.current) return;
     const accountId = localAccountId(useAuthStore.getState().user);
     if (!accountId) return;

@@ -22,7 +22,7 @@ from .context import system_prompt
 from ..harness.approvals import GATED_TOOLS
 from ..providers.llm.schemas import ModelSettings, ModelError
 from ..providers.llm.routing import route_request
-from ..providers.llm.chat import ReasoningChatOpenAI, reasoning_text
+from ..providers.llm.chat import build_chat_model, reasoning_text
 
 log = logging.getLogger(__name__)
 
@@ -69,10 +69,7 @@ def settings_for(model_id: str | None = None, task_type: str = "agent") -> Model
 
 def create_model(settings: ModelSettings, async_client, sync_client):
     """构建支持异步流式输出的 LangChain 聊天模型。"""
-    return ReasoningChatOpenAI(model=settings.model, api_key=settings.api_key, base_url=settings.base_url,
-                      timeout=settings.timeout, max_tokens=settings.max_tokens, max_retries=1,
-                      streaming=True, stream_usage=True, use_responses_api=False, http_socket_options=(),
-                      http_async_client=async_client, http_client=sync_client)
+    return build_chat_model(settings, async_client, sync_client, streaming=True, max_retries=1)
 
 
 def build_agent(model, agent_code: str, tools: list[BaseTool] | None = None, checkpointer=None, project_id=None, workspace_owner_id=None, run_id=None):

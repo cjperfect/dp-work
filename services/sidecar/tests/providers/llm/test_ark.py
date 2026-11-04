@@ -20,7 +20,7 @@ class ArkTests(unittest.IsolatedAsyncioTestCase):
         requests = []
         async def handler(request):
             requests.append(request)
-            return Response(200, json={"model": "actual-model", "choices": [{"finish_reason": "stop", "message": {"content": CONTENT}}]})
+            return Response(200, json={"model": "actual-model", "choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": CONTENT}}]})
         result = await generate(source(), ModelSettings(api_key="test-secret", model="test-model", base_url="https://model.test/v3"), MockTransport(handler))
         self.assertEqual(result.content, CONTENT)
         self.assertEqual(result.source_revision, 3)
@@ -49,9 +49,9 @@ class ArkTests(unittest.IsolatedAsyncioTestCase):
             (401, {"error": "secret upstream"}, "MODEL_AUTH_FAILED"),
             (429, {"error": "secret upstream"}, "MODEL_RATE_LIMIT"),
             (500, {"error": "secret upstream"}, "MODEL_REQUEST_FAILED"),
-            (200, {"choices": [{"finish_reason": "length", "message": {"content": "partial"}}]}, "MODEL_INCOMPLETE"),
-            (200, {"choices": [{"finish_reason": "stop", "message": {"content": ""}}]}, "MODEL_INVALID_RESPONSE"),
-            (200, {"choices": [{"finish_reason": "stop", "message": {"content": "not minutes"}}]}, "MINUTES_FORMAT_INVALID"),
+            (200, {"choices": [{"finish_reason": "length", "message": {"role": "assistant", "content": "partial"}}]}, "MODEL_INCOMPLETE"),
+            (200, {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": ""}}]}, "MODEL_INVALID_RESPONSE"),
+            (200, {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "not minutes"}}]}, "MINUTES_FORMAT_INVALID"),
         ]
         for status, body, code in responses:
             with self.subTest(code=code):

@@ -4,7 +4,7 @@ import { useAuthStore } from "@/stores/auth";
 import { localAccountId } from "@/features/auth/lib/auth";
 import { loadKnowledgeDocumentsRequest } from "@/apis/knowledge";
 
-import { subscribeDocumentParseEvents } from "../lib/parse-events";
+import { subscribeDocumentParseEvents } from "@/apis/knowledge/events";
 import { DOCUMENTS_CHANGED } from "../lib/document-events";
 
 export function useKnowledgeDocuments(baseId: string) {

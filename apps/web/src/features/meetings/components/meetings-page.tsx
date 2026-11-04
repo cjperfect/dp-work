@@ -1,3 +1,5 @@
+import { Can } from "@/features/access/components/can";
+import { hasPermission } from "@/features/access/hooks/use-permission";
 import type { Meeting } from "@/interfaces/meeting";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearch } from "@tanstack/react-router";
@@ -86,6 +88,7 @@ export function MeetingsPage() {
     archived: rows.filter((row) => inCategory(row, "archived")).length,
   };
   async function remove() {
+    if (!hasPermission("meeting:delete")) return;
     if (!deleting || !accountId || actionLock.current) return;
     actionLock.current = true;
     setBusy(true);
@@ -117,10 +120,12 @@ export function MeetingsPage() {
             记录讨论，整理共识，让每一次会议都有所沉淀。
           </p>
         </div>
-        <Button onClick={() => setCreate(true)}>
-          <Plus className="size-4" />
-          开始会议
-        </Button>
+        <Can permission="meeting:write">
+          <Button onClick={() => setCreate(true)}>
+            <Plus className="size-4" />
+            开始会议
+          </Button>
+        </Can>
       </header>
       <div className="mt-8 flex flex-wrap gap-3">
         <div className="relative min-w-56 flex-1">
@@ -233,66 +238,68 @@ export function MeetingsPage() {
                     <FileText className="size-4" />
                     查看
                   </Button>
-                  <Popover
-                    open={deleting?.id === row.id}
-                    onOpenChange={(open) => {
-                      if (busy) return;
-                      setDeleting(open ? row : null);
-                      setActionError(null);
-                    }}
-                  >
-                    <PopoverTrigger
-                      render={
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          disabled={busy}
-                          aria-label={`删除会议 ${row.title}`}
-                          className="ml-auto text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      }
-                    />
-                    <PopoverContent
-                      align="end"
-                      className="w-72 max-w-[calc(100vw-2rem)] p-3"
-                      aria-labelledby={`delete-meeting-${row.id}`}
+                  <Can permission="meeting:delete">
+                    <Popover
+                      open={deleting?.id === row.id}
+                      onOpenChange={(open) => {
+                        if (busy) return;
+                        setDeleting(open ? row : null);
+                        setActionError(null);
+                      }}
                     >
-                      <h2
-                        id={`delete-meeting-${row.id}`}
-                        className="break-words text-sm font-medium"
+                      <PopoverTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            disabled={busy}
+                            aria-label={`删除会议 ${row.title}`}
+                            className="ml-auto text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        }
+                      />
+                      <PopoverContent
+                        align="end"
+                        className="w-72 max-w-[calc(100vw-2rem)] p-3"
+                        aria-labelledby={`delete-meeting-${row.id}`}
                       >
-                        删除「{row.title}」？
-                      </h2>
-                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        将删除会议、转写记录和纪要草稿，已归档的知识库文档保留。
-                      </p>
-                      {actionError && (
-                        <p role="alert" className="mt-2 text-xs text-destructive">
-                          {actionError}
+                        <h2
+                          id={`delete-meeting-${row.id}`}
+                          className="break-words text-sm font-medium"
+                        >
+                          删除「{row.title}」？
+                        </h2>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                          将删除会议、转写记录和纪要草稿，已归档的知识库文档保留。
                         </p>
-                      )}
-                      <div className="mt-3 flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => setDeleting(null)}
-                        >
-                          取消
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => void remove()}
-                        >
-                          {busy ? "删除中…" : "确认删除"}
-                        </Button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                        {actionError && (
+                          <p role="alert" className="mt-2 text-xs text-destructive">
+                            {actionError}
+                          </p>
+                        )}
+                        <div className="mt-3 flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => setDeleting(null)}
+                          >
+                            取消
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => void remove()}
+                          >
+                            {busy ? "删除中…" : "确认删除"}
+                          </Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </Can>
                 </CardFooter>
               </Card>
             ))}
@@ -310,7 +317,9 @@ export function MeetingsPage() {
           )}
         </TabsContent>
       </Tabs>
-      <MeetingCreateDialog open={create} onOpenChange={setCreate} />
+      <Can permission="meeting:write">
+        <MeetingCreateDialog open={create} onOpenChange={setCreate} />
+      </Can>
       {actionError && !deleting && (
         <p role="alert" className="mt-4 text-sm text-destructive">
           {actionError}

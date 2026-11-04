@@ -5,8 +5,8 @@ import shlex
 import sys
 import socket
 import pytest
-from src.tools.shell import execute_command
-from src.tools import isolation
+from src.sandbox.shell import execute_command
+from src.sandbox import isolation
 
 
 @pytest.mark.skipif(sys.platform != 'darwin', reason='macOS 系统沙箱')

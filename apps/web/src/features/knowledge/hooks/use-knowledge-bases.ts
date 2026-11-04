@@ -1,3 +1,4 @@
+import { usePermission } from "@/features/access/hooks/use-permission";
 import type { StoredKnowledgeBase } from "@/interfaces/knowledge";
 import { localAccountId } from "@/features/auth/lib/auth";
 import { useEffect } from "react";
@@ -7,6 +8,8 @@ import { loadKnowledgeBases, resetKnowledgeBases, useKnowledgeStore } from "@/st
 const EMPTY: StoredKnowledgeBase[] = [];
 
 export function useKnowledgeBases(enabled = true) {
+  const canRead = usePermission("knowledge:read");
+  enabled = enabled && canRead;
   const accountId = useAuthStore((state) => localAccountId(state.user));
   const storeAccountId = useKnowledgeStore((s) => s.accountId);
   const bases = useKnowledgeStore((s) => s.bases);
@@ -20,13 +23,13 @@ export function useKnowledgeBases(enabled = true) {
     if (!enabled) return;
     void loadKnowledgeBases(accountId);
   }, [accountId, enabled]);
-  const current = storeAccountId === accountId;
+  const current = enabled && storeAccountId === accountId;
   return {
     bases: current ? bases : EMPTY,
-    loading: !current || status === "idle" || status === "loading",
+    loading: enabled && (!current || status === "idle" || status === "loading"),
     error: current ? storeError : null,
     reload: () => {
-      if (accountId) void loadKnowledgeBases(accountId, true);
+      if (accountId && enabled) void loadKnowledgeBases(accountId, true);
     },
   };
 }

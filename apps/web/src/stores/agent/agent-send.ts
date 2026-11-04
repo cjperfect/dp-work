@@ -1,3 +1,4 @@
+import { hasPermission } from "@/features/access/hooks/use-permission";
 import { toast } from "sonner";
 import { isContinuationRequest } from "@/features/agent/lib/continuation";
 import type { SteeringEvent, ChatMessage, ThreadDetail } from "@/interfaces/agent";
@@ -249,8 +250,9 @@ export async function sendMessage(
         thread_id: id,
         response_id: replyId,
         expected_revision: useAgentStore.getState().details[id].thread.draft_revision,
-        knowledge_base_ids: (
-          state.agents.find((row) => row.code === code)?.knowledge_base_ids ?? []
+        knowledge_base_ids: (hasPermission("knowledge:search")
+          ? (state.agents.find((row) => row.code === code)?.knowledge_base_ids ?? [])
+          : []
         )
           .map((value) => Number(String(value).replace(/^server-/, "")))
           .filter((value) => Number.isSafeInteger(value) && value > 0),

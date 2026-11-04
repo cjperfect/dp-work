@@ -1,3 +1,5 @@
+import { Can } from "@/features/access/components/can";
+import { usePermission } from "@/features/access/hooks/use-permission";
 import type { KbFile } from "@/interfaces/knowledge";
 import { localAccountId } from "@/features/auth/lib/auth";
 import { useParams } from "@tanstack/react-router";
@@ -48,6 +50,8 @@ const PARSE_STATUS_TONE: Record<string, string> = {
 
 /** 知识库详情页（/knowledge/$kbId）：文件列表，支持上传 md / pdf */
 export function KnowledgeBaseDetailPage() {
+  const canWrite = usePermission("knowledge:write");
+  const canDelete = usePermission("knowledge:delete");
   const { kbId } = useParams({ from: "/_app/knowledge/$kbId/" });
   const { bases, loading, error, reload } = useKnowledgeBases();
   const documents = useKnowledgeDocuments(kbId);
@@ -108,17 +112,21 @@ export function KnowledgeBaseDetailPage() {
           <p className="text-muted-foreground text-sm">{kb.description}</p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={() => setDialogOpen(true)}>
-            <Upload className="size-4" />
-            上传文件
-          </Button>
-          <Button
-            nativeButton={false}
-            render={<Link to="/knowledge/$kbId/new" params={{ kbId: kb.id }} />}
-          >
-            <FilePlus2 className="size-4" />
-            新建文档
-          </Button>
+          <Can permission="knowledge:write">
+            <Button variant="outline" onClick={() => setDialogOpen(true)}>
+              <Upload className="size-4" />
+              上传文件
+            </Button>
+          </Can>
+          <Can permission="knowledge:write">
+            <Button
+              nativeButton={false}
+              render={<Link to="/knowledge/$kbId/new" params={{ kbId: kb.id }} />}
+            >
+              <FilePlus2 className="size-4" />
+              新建文档
+            </Button>
+          </Can>
         </div>
       </header>
 
@@ -131,7 +139,7 @@ export function KnowledgeBaseDetailPage() {
         </p>
       )}
 
-      {accountId && (
+      {accountId && canWrite && (
         <KnowledgeUploadDialog
           open={dialogOpen}
           onOpenChange={setDialogOpen}
@@ -170,7 +178,9 @@ export function KnowledgeBaseDetailPage() {
           )}
         </ol>
         <p className="mt-3 text-xs leading-6 text-sky-800 dark:text-sky-200">
-          完成后即可在 Agent 中使用。点击文档可查看或编辑，右键可解析、向量化或删除。
+          {canWrite
+            ? "完成后即可在 Agent 中使用。点击文档可查看或编辑，右键可解析、向量化或删除。"
+            : "当前账号以只读方式查看资料；编辑、解析和向量化需要相应权限。"}
         </p>
         <p className="text-xs leading-6 text-sky-700/80 dark:text-sky-300/80">
           上传支持 TXT、Markdown、PDF、Word；目前支持 TXT、Markdown、PDF、DOCX 解析，旧版 DOC
@@ -252,57 +262,63 @@ export function KnowledgeBaseDetailPage() {
                   </Link>
                 </ContextMenuTrigger>
                 <ContextMenuContent aria-label={`${file.name}的操作`}>
-                  <ContextMenuItem
-                    disabled={
-                      parsing.submitting ||
-                      file.parseStatus === "queued" ||
-                      file.parseStatus === "parsing" ||
-                      file.parseStatus === "parsed"
-                    }
-                    onClick={() => void parsing.start(file)}
-                  >
-                    <ScanText />
-                    解析文档
-                  </ContextMenuItem>
-                  <ContextMenuItem
-                    disabled={
-                      vectorization.submitting ||
-                      file.parseStatus !== "parsed" ||
-                      !file.parsedContent?.trim() ||
-                      file.vectorStatus === "queued" ||
-                      file.vectorStatus === "indexing"
-                    }
-                    onClick={() => void vectorization.start(file)}
-                  >
-                    <Network />
-                    向量化
-                  </ContextMenuItem>
-                  <ContextMenuItem
-                    className="text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive [&_svg]:text-destructive"
-                    onClick={() => {
-                      const anchor = cards.current.get(file.id);
-                      if (anchor) {
-                        setDeleteTarget({ kbId, file, anchor });
-                        setDeleteOpen(true);
+                  <Can permission="knowledge:write">
+                    <ContextMenuItem
+                      disabled={
+                        parsing.submitting ||
+                        file.parseStatus === "queued" ||
+                        file.parseStatus === "parsing" ||
+                        file.parseStatus === "parsed"
                       }
-                    }}
-                  >
-                    <Trash2 />
-                    删除
-                  </ContextMenuItem>
+                      onClick={() => void parsing.start(file)}
+                    >
+                      <ScanText />
+                      解析文档
+                    </ContextMenuItem>
+                  </Can>
+                  <Can permission="knowledge:write">
+                    <ContextMenuItem
+                      disabled={
+                        vectorization.submitting ||
+                        file.parseStatus !== "parsed" ||
+                        !file.parsedContent?.trim() ||
+                        file.vectorStatus === "queued" ||
+                        file.vectorStatus === "indexing"
+                      }
+                      onClick={() => void vectorization.start(file)}
+                    >
+                      <Network />
+                      向量化
+                    </ContextMenuItem>
+                  </Can>
+                  <Can permission="knowledge:delete">
+                    <ContextMenuItem
+                      className="text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive [&_svg]:text-destructive"
+                      onClick={() => {
+                        const anchor = cards.current.get(file.id);
+                        if (anchor) {
+                          setDeleteTarget({ kbId, file, anchor });
+                          setDeleteOpen(true);
+                        }
+                      }}
+                    >
+                      <Trash2 />
+                      删除
+                    </ContextMenuItem>
+                  </Can>
                 </ContextMenuContent>
               </ContextMenu>
             );
           })}
           {files.length === 0 && (
             <li className="text-muted-foreground col-span-full rounded-xl border border-dashed p-6 text-center text-sm">
-              暂无文档，可以新建文档或上传文件
+              {canWrite ? "暂无文档，可以新建文档或上传文件" : "暂无可查看的文档"}
             </li>
           )}
         </ul>
       </section>
 
-      {accountId && (
+      {accountId && canDelete && (
         <KnowledgeDeletePopover
           open={deleteOpen && deleteTarget?.kbId === kbId}
           onOpenChange={setDeleteOpen}

@@ -1,3 +1,4 @@
+import { usePermission } from "@/features/access/hooks/use-permission";
 import type { AgentId } from "@/interfaces/app";
 import type { AgentConfig } from "@/interfaces/agent";
 import { useEffect, useState } from "react";
@@ -123,6 +124,9 @@ export function AgentPage({ agentId }: { agentId: AgentId }) {
   );
 }
 function AgentPanel({ agent }: { agent: AgentConfig }) {
+  const canReadKnowledge = usePermission("knowledge:read");
+  const canCreateKnowledge = usePermission("knowledge:read", "knowledge:write");
+  const canSearch = usePermission("knowledge:read", "knowledge:search");
   const configBusy = useAgentStore((state) => state.configBusy);
   const { bases, loading, error: kbError, reload } = useKnowledgeBases();
   const { connectors } = useConnectors();
@@ -251,7 +255,11 @@ function AgentPanel({ agent }: { agent: AgentConfig }) {
           默认关联知识库
         </h3>
         <p className="text-[11px] leading-5 text-muted-foreground">
-          在这里配置 Agent 关联的知识库。
+          {canReadKnowledge
+            ? canSearch
+              ? "在这里配置 Agent 关联的知识库。"
+              : "当前账号没有知识检索权限，暂不能关联知识库。"
+            : "当前账号没有知识库访问权限。"}
         </p>
         {loading && <p className="text-xs text-muted-foreground">正在读取知识库…</p>}
         {kbError && (
@@ -259,12 +267,12 @@ function AgentPanel({ agent }: { agent: AgentConfig }) {
             知识库读取失败，重试
           </Button>
         )}
-        {!loading && !kbError && !bases.length && (
+        {canReadKnowledge && !loading && !kbError && !bases.length && (
           <Link
             to="/knowledge"
             className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground"
           >
-            先创建一个知识库
+            {canCreateKnowledge ? "先创建一个知识库" : "查看已授权的知识库"}
           </Link>
         )}
         {bases.map((base) => (
@@ -275,8 +283,8 @@ function AgentPanel({ agent }: { agent: AgentConfig }) {
             <span className="min-w-0 truncate">{base.name}</span>
             <Switch
               checked={agent.knowledge_base_ids.some((id) => String(id) === base.id)}
-              disabled={configBusy}
               aria-label={`默认关联 ${base.name}`}
+              disabled={!canSearch || configBusy}
               onCheckedChange={(checked) =>
                 void save({
                   knowledge_base_ids: checked

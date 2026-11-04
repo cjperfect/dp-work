@@ -1,3 +1,4 @@
+import { useAccessStore } from "../../../stores/access.ts";
 import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import { beforeEach, afterEach, test } from "node:test";
@@ -20,6 +21,10 @@ let workspace, api;
 beforeEach(() => {
   owner++;
   useAuthStore.setState({ user: { id: owner, username: "tester" } });
+  useAccessStore.setState({
+    ownerId: owner,
+    data: { role: "member", permissions: ["meeting:write"] },
+  });
   useMeetingCache.setState({ records: {} });
   workspace = emptyWorkspace(crypto.randomUUID(), owner, "评审会议");
   api = meetingApiFixture([workspace]);

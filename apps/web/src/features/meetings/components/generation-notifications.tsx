@@ -1,3 +1,4 @@
+import { usePermission } from "@/features/access/hooks/use-permission";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth";
@@ -10,8 +11,9 @@ import { useGenerationEvents } from "../hooks/use-generation-events";
 
 /** 登录期间在全局显示生成结果，路由切换不中断订阅。 */
 export function GenerationNotifications() {
+  const allowed = usePermission("meeting:read");
   const owner = useAuthStore((state) => state.user?.id);
-  return owner ? <OwnerNotifications key={owner} owner={owner} /> : null;
+  return owner && allowed ? <OwnerNotifications key={owner} owner={owner} /> : null;
 }
 
 function OwnerNotifications({ owner }: { owner: number }) {

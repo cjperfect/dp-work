@@ -1,3 +1,4 @@
+import { usePermission, hasPermission } from "@/features/access/hooks/use-permission";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
@@ -22,8 +23,11 @@ import { applyAsrTranscript } from "../lib/asr-transcript";
 import { SaveStatus } from "./workspace-parts";
 
 export function MeetingSessionPage() {
+  const canGenerate = usePermission("meeting:generate");
+  const canWrite = usePermission("meeting:write");
   const { id } = useSearch({ from: "/_app/meetings/active" });
-  const { draft, loading, error, change, preview, retry, editable, accountId } = useWorkspace(id);
+  const { draft, loading, error, change, preview, retry, editable, exclusive, accountId } =
+    useWorkspace(id);
   const asr = useMeetingAsr(id ?? "", (message) => {
     if (message.segment.isFinal) return change((current) => applyAsrTranscript(current, message));
     preview((current) => applyAsrTranscript(current, message));
@@ -70,6 +74,7 @@ export function MeetingSessionPage() {
     }
   }, [following, draft?.segments.length, draft?.temporary.text]);
   async function startTranscription() {
+    if (!editable || !hasPermission("meeting:write")) return;
     setActionError(null);
     try {
       await retry();
@@ -120,9 +125,10 @@ export function MeetingSessionPage() {
     }
   }
   async function generate() {
+    if (!hasPermission("meeting:generate")) return;
     if (
       !draft ||
-      !editable ||
+      !exclusive ||
       !accountId ||
       !id ||
       actionLock.current ||
@@ -252,7 +258,7 @@ export function MeetingSessionPage() {
                 <Button
                   variant="destructive"
                   size="sm"
-                  disabled={busy}
+                  disabled={!editable || busy}
                   onClick={() => void finish()}
                 >
                   {busy && <Loader2 className="size-4 animate-spin" />}
@@ -263,7 +269,8 @@ export function MeetingSessionPage() {
           </Popover>
           <Button
             disabled={
-              !editable ||
+              !canGenerate ||
+              !exclusive ||
               draft.meeting.status !== "ended" ||
               busy ||
               generating ||
@@ -305,7 +312,9 @@ export function MeetingSessionPage() {
       )}
       {!editable && (
         <p role="status" className="text-sm text-amber-700">
-          当前为只读模式：另一标签页可能正在编辑。关闭该页面后刷新可继续记录。
+          {!canWrite
+            ? "当前账号没有会议编辑权限，原始记录仅可查看。"
+            : "当前为只读模式：另一标签页可能正在编辑。关闭该页面后刷新可继续记录。"}
         </p>
       )}
       {actionError && (

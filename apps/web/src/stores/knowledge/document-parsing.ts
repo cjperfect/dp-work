@@ -1,4 +1,4 @@
-import type { DocumentParseState } from "@/features/knowledge/lib/parse-events";
+import type { DocumentParseState } from "@/interfaces/knowledge";
 import { useAuthStore } from "@/stores/auth";
 
 const pending = new Map<string, string>();

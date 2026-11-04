@@ -36,3 +36,5 @@ TEST_REDIS_URL=redis://127.0.0.1:6380/0 .venv/bin/python -m pytest tests/redis t
 cd ../sidecar
 TEST_REDIS_URL=redis://127.0.0.1:6380/0 .venv/bin/python -m pytest tests/providers/test_redis_control.py tests/providers/llm/test_rate_limit.py -q
 ```
+
+固定窗口限流算法统一使用 `limits.aio` 的 `RedisStorage` 与 `FixedWindowRateLimiter`，不再维护两套自定义 Lua。每次操作使用所属事件循环内的 Redis 连接池，并在完成后关闭；保留 Celery 独立事件循环兼容性。规则维度、凭证指纹、缓存隔离及错误策略由业务适配层维护。升级后使用新的限流 key 格式，已有窗口计数不会迁移，旧 key 按 TTL 自行过期。

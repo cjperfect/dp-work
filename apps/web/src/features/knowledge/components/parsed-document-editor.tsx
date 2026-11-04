@@ -1,3 +1,4 @@
+import { usePermission, hasPermission } from "@/features/access/hooks/use-permission";
 import type { KbFile } from "@/interfaces/knowledge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ export function ParsedDocumentEditor({
   file: KbFile;
   onSaveStateChange: (blocked: boolean) => void;
 }) {
+  const canWrite = usePermission("knowledge:write");
   const accountId = useAuthStore((state) => localAccountId(state.user));
   const [initial] = useState(file);
   const latest = useRef({ content: file.parsedContent ?? "", blocks: file.parsedBlocks });
@@ -29,6 +31,7 @@ export function ParsedDocumentEditor({
   const [status, setStatus] = useState("已保存");
   const save = useCallback(
     async function persist(): Promise<void> {
+      if (!hasPermission("knowledge:write")) return;
       if (!accountId || !pending.current || saving.current || conflict.current) return;
       if (localAccountId(useAuthStore.getState().user) !== accountId) return;
       const snapshot = latest.current;
@@ -88,10 +91,10 @@ export function ParsedDocumentEditor({
     <>
       <div className="flex items-center justify-between gap-3 border-b px-5 py-3">
         <p role="status" className="text-xs text-muted-foreground">
-          {dirty && status === "已保存" ? "未保存" : status}
+          {!canWrite ? "只读" : dirty && status === "已保存" ? "未保存" : status}
         </p>
         <div className="flex gap-2">
-          {dirty && !["已保存", "保存中…"].includes(status) && (
+          {canWrite && dirty && !["已保存", "保存中…"].includes(status) && (
             <Button size="sm" variant="outline" onClick={() => void save()}>
               重试保存
             </Button>
@@ -99,6 +102,7 @@ export function ParsedDocumentEditor({
         </div>
       </div>
       <Editor
+        editable={canWrite}
         initialContent={initial.parsedBlocks}
         markdown={initial.parsedBlocks ? undefined : initial.parsedContent}
         className="px-4 py-4"

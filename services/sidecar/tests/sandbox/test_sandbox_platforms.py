@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from src.tools import isolation, sandbox_container, sandbox_linux
-from src.tools.shell import execute_command, run_process
+from src.sandbox import isolation, sandbox_container
+from src.sandbox.shell import execute_command, run_process
 
 
 @pytest.mark.parametrize('platform', ['linux', 'win32', 'unsupported'])
@@ -28,13 +28,27 @@ def test_broad_workspaces_are_rejected(path):
         isolation.validate_workspace(path)
 
 
-def test_linux_plan_has_only_allowlisted_mounts(monkeypatch, tmp_path):
-    monkeypatch.setattr(sandbox_linux.shutil, 'which', lambda _: '/usr/bin/bwrap')
-    args = sandbox_linux.linux_command(tmp_path / 'project', tmp_path / 'temp', '/bin/bash', 'pwd')
-    assert all(flag in args for flag in ('--unshare-user', '--unshare-net', '--unshare-pid', '--disable-userns', '--die-with-parent', '--new-session'))
-    mounts = [args[i + 1:i + 3] for i, arg in enumerate(args) if arg == '--bind']
-    assert mounts == [[str(tmp_path / 'temp')] * 2, [str(tmp_path / 'project')] * 2]
-    assert '/' not in [args[i + 1] for i, arg in enumerate(args) if arg in ('--bind', '--ro-bind')]
+def test_runtime_policy_denies_host_reads_and_network(tmp_path):
+    settings = isolation.runtime_settings(tmp_path / 'project', tmp_path / 'temp')
+    fs = settings['filesystem']
+    assert fs['denyRead'] == [{'path': '/', 'literal': True}]
+    assert fs['allowWrite'] == [
+        {'path': str(tmp_path / 'project'), 'literal': True},
+        {'path': str(tmp_path / 'temp'), 'literal': True},
+    ]
+    assert settings['network']['allowedDomains'] == []
+    assert settings['network']['deniedDomains'] == ['*']
+    assert not settings['network']['allowLocalBinding']
+    assert not settings['enableWeakerNestedSandbox']
+    assert not settings['enableWeakerNetworkIsolation']
+
+
+def test_missing_runtime_fails_closed(monkeypatch, tmp_path):
+    monkeypatch.setenv('DP_SANDBOX_CLI', str(tmp_path / 'missing.js'))
+    assert isolation.sandbox_backend() is None
+    result = asyncio.run(execute_command(tmp_path, 'touch escaped', 3, 32000, {}))
+    assert result.exit_code == 126
+    assert not (tmp_path / 'escaped').exists()
 
 
 def test_container_does_not_accept_mutable_or_option_image(tmp_path):

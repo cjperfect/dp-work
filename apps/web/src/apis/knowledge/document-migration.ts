@@ -1,3 +1,4 @@
+import { hasPermission } from "@/stores/access";
 import type { KbFile } from "@/interfaces/knowledge";
 import {
   listLocalEditorDocuments,
@@ -28,9 +29,11 @@ export async function loadKnowledgeDocumentsRequest(
 /** 将旧版本地文档迁移到服务端。 */
 async function migrateKnowledgeDocuments(accountId: string, baseId: string): Promise<KbFile[]> {
   const files = await listKnowledgeDocumentsRequest(accountId, baseId);
+  if (!hasPermission("knowledge:write")) return files;
   const local = listLocalEditorDocuments(accountId, baseId);
   const existing = new Set(files.map((file) => file.id));
   for (const file of local) {
+    if (!hasPermission("knowledge:write")) break;
     if (!existing.has(file.id)) {
       files.push(
         await saveKnowledgeDocumentRequest(accountId, baseId, {

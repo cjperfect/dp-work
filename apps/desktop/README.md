@@ -149,7 +149,9 @@ GitHub Actions 中显示为“桌面客户端打包与发布”，构建任务�
 - 每个平台实际安装旧版和新版，验证“检测 → 下载 → 确认重启 → 版本升级”，并验证网络失败、取消重启、签名错误和重复点击；`.dp-work` 的登录、会话、模型配置和工作目录应保留。
 - macOS：确认签名、公证和 Gatekeeper，通过系统安装后的 App 验证升级。
 - Windows：确认 NSIS 安装/升级、证书信任、Sidecar 启停；Windows 沙箱需要 Docker Desktop Linux 容器及本机构建的固定镜像，不能以 GitHub Windows Runner 构建成功代替该验证。
-- Linux：验证 AppImage 的 FUSE/桌面启动条件；安装 Bubblewrap 并启用所需 namespace 后运行 `services/sidecar/tests/tools/sandbox_linux_smoke.py`。策略不满足时应失败，不允许回退到无隔离 Bash。
+- Linux：验证 AppImage 的 FUSE/桌面启动条件；安装 Bubblewrap、socat、ripgrep 并启用所需 namespace 后运行 `services/sidecar/tests/sandbox/sandbox_linux_smoke.py`。策略不满足时应失败，不允许回退到无隔离 Bash。
 - 本机文件/网络越界、符号链接、停止命令、修改撤销的检查方式见 `services/sidecar/src/tools/README.md`。首次发布前保留各平台的实机验收记录。
 
 官方参考：[electron-builder v26 自动更新](https://www.electron.build/v26/docs/features/auto-update/)、[GitHub 发布配置](https://www.electron.build/v26/docs/publish/)、[Electron 标题栏](https://www.electronjs.org/docs/latest/tutorial/custom-title-bar)。
+
+沙箱执行使用固定版本的 `@anthropic-ai/sandbox-runtime`（macOS / Linux）。桌面端将 Electron 的 Node 路径及 Runtime CLI 路径传入 Sidecar；构建 Sidecar 时自动复制 Runtime 与运行依赖到 asar 外。用户无需全局安装 Node 或 npm 包。Windows 继续使用原有 Docker 沙箱，Linux 仍需要系统提供 Bubblewrap、socat 与 ripgrep。

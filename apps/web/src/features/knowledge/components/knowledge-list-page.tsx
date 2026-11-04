@@ -1,3 +1,5 @@
+import { Can } from "@/features/access/components/can";
+import { usePermission, hasPermission } from "@/features/access/hooks/use-permission";
 import type { StoredKnowledgeBase } from "@/interfaces/knowledge";
 import { localAccountId } from "@/features/auth/lib/auth";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
@@ -22,6 +24,7 @@ import { useKnowledgeBasePage } from "@/features/knowledge/hooks/use-knowledge-b
 import { createKnowledgeBase, deleteKnowledgeBase, updateKnowledgeBase } from "@/stores/knowledge";
 
 export function KnowledgePage() {
+  const canWrite = usePermission("knowledge:write");
   const user = useAuthStore((state) => state.user);
   const accountId = localAccountId(user);
   const [search, setSearch] = useState("");
@@ -56,6 +59,7 @@ export function KnowledgePage() {
   const deletingRef = useRef(false);
 
   async function confirmDelete() {
+    if (!hasPermission("knowledge:delete")) return;
     if (!user || !accountId || !deleteTarget || deletingRef.current) return;
     deletingRef.current = true;
     setDeleting(true);
@@ -82,10 +86,12 @@ export function KnowledgePage() {
             把文档和经验整理在一起，建立自己的知识空间。
           </p>
         </div>
-        <Button disabled={loading || !!error} onClick={() => setForm({})}>
-          <Plus className="size-4" />
-          新建知识库
-        </Button>
+        <Can permission="knowledge:write">
+          <Button disabled={loading || !!error} onClick={() => setForm({})}>
+            <Plus className="size-4" />
+            新建知识库
+          </Button>
+        </Can>
       </header>
 
       <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
@@ -150,79 +156,83 @@ export function KnowledgePage() {
                   <BookOpen className="size-5" />
                 </span>
                 <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`编辑知识库 ${base.name}`}
-                    onClick={() => setForm({ base })}
-                  >
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Popover
-                    open={deleteTarget?.id === base.id}
-                    onOpenChange={(open) => {
-                      if (open) {
-                        setDeleteError(null);
-                        setDeleteTarget(base);
-                      } else if (!deleting) {
-                        setDeleteTarget(null);
-                      }
-                    }}
-                  >
-                    <PopoverTrigger
-                      render={
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`删除知识库 ${base.name}`}
-                          className="text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
-                      }
-                    />
-                    <PopoverContent
-                      align="end"
-                      className="w-72 max-w-[calc(100vw-2rem)] p-3"
-                      aria-labelledby={`delete-kb-title-${base.id}`}
-                      aria-describedby={`delete-kb-description-${base.id}`}
-                      aria-busy={deleting}
+                  <Can permission="knowledge:write">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`编辑知识库 ${base.name}`}
+                      onClick={() => setForm({ base })}
                     >
-                      <h2 id={`delete-kb-title-${base.id}`} className="text-sm font-medium">
-                        删除知识库？
-                      </h2>
-                      <p
-                        id={`delete-kb-description-${base.id}`}
-                        className="text-muted-foreground mt-1 break-words text-xs"
+                      <Pencil className="size-3.5" />
+                    </Button>
+                  </Can>
+                  <Can permission="knowledge:delete">
+                    <Popover
+                      open={deleteTarget?.id === base.id}
+                      onOpenChange={(open) => {
+                        if (open) {
+                          setDeleteError(null);
+                          setDeleteTarget(base);
+                        } else if (!deleting) {
+                          setDeleteTarget(null);
+                        }
+                      }}
+                    >
+                      <PopoverTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`删除知识库 ${base.name}`}
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        }
+                      />
+                      <PopoverContent
+                        align="end"
+                        className="w-72 max-w-[calc(100vw-2rem)] p-3"
+                        aria-labelledby={`delete-kb-title-${base.id}`}
+                        aria-describedby={`delete-kb-description-${base.id}`}
+                        aria-busy={deleting}
                       >
-                        删除「{base.name}」后，将无法再访问其中的文档。此操作无法撤销。
-                      </p>
-                      {deleteError && (
-                        <p role="alert" className="mt-2 text-xs text-destructive">
-                          {deleteError}
+                        <h2 id={`delete-kb-title-${base.id}`} className="text-sm font-medium">
+                          删除知识库？
+                        </h2>
+                        <p
+                          id={`delete-kb-description-${base.id}`}
+                          className="text-muted-foreground mt-1 break-words text-xs"
+                        >
+                          删除「{base.name}」后，将无法再访问其中的文档。此操作无法撤销。
                         </p>
-                      )}
-                      <div className="mt-3 flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={deleting}
-                          onClick={() => setDeleteTarget(null)}
-                        >
-                          取消
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={deleting}
-                          onClick={() => void confirmDelete()}
-                        >
-                          {deleting && <Loader2 className="size-4 animate-spin" />}
-                          {deleting ? "正在删除…" : "确认删除"}
-                        </Button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                        {deleteError && (
+                          <p role="alert" className="mt-2 text-xs text-destructive">
+                            {deleteError}
+                          </p>
+                        )}
+                        <div className="mt-3 flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={deleting}
+                            onClick={() => setDeleteTarget(null)}
+                          >
+                            取消
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            disabled={deleting}
+                            onClick={() => void confirmDelete()}
+                          >
+                            {deleting && <Loader2 className="size-4 animate-spin" />}
+                            {deleting ? "正在删除…" : "确认删除"}
+                          </Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </Can>
                 </div>
               </div>
               <Link
@@ -264,14 +274,16 @@ export function KnowledgePage() {
               ? "试试其他名称，或用描述中的关键词搜索。"
               : "按项目、部门或主题归纳资料，让积累的知识有处可放。"}
           </p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-5"
-            onClick={() => (query ? changeSearch("") : setForm({}))}
-          >
-            {query ? "清空搜索" : "新建知识库"}
-          </Button>
+          {(query || canWrite) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-5"
+              onClick={() => (query ? changeSearch("") : setForm({}))}
+            >
+              {query ? "清空搜索" : "新建知识库"}
+            </Button>
+          )}
         </section>
       )}
       {result && !loading && !error && (
@@ -288,7 +300,7 @@ export function KnowledgePage() {
         支持在线写文档和上传 Markdown、PDF 文件。
       </p>
 
-      {form && (
+      {form && canWrite && (
         <KnowledgeBaseForm
           base={form.base}
           onClose={() => setForm(null)}
@@ -324,6 +336,7 @@ function KnowledgeBaseForm({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (!hasPermission("knowledge:write")) return;
     if (savingRef.current || !user || !accountId) return;
     if (!name.trim()) {
       setError("请输入知识库名称。");

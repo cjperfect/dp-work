@@ -1,3 +1,4 @@
+import { usePermission, hasPermission } from "@/features/access/hooks/use-permission";
 import type { KbFile } from "@/interfaces/knowledge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LazyBlockNoteEditor as Editor } from "@/components/editor/lazy-blocknote-editor";
@@ -18,6 +19,7 @@ export function EditableSourceEditor({
   baseId: string;
   file: KbFile;
 }) {
+  const canWrite = usePermission("knowledge:write");
   const [initialDocument] = useState(() => ({ blocks: file.blocks, content: file.content }));
   const documentRef = useRef<{ blocks: KbFile["blocks"]; content: string }>({
     blocks: file.blocks ?? [],
@@ -30,6 +32,7 @@ export function EditableSourceEditor({
   const [failed, setFailed] = useState(false);
 
   const save = useCallback(async () => {
+    if (!hasPermission("knowledge:write")) return;
     if (savingRef.current) {
       pendingRef.current = true;
       return;
@@ -79,7 +82,7 @@ export function EditableSourceEditor({
       <Editor
         initialContent={initialDocument.blocks}
         markdown={initialDocument.blocks ? undefined : initialDocument.content}
-        editable
+        editable={canWrite}
         onDocumentChange={({ blocks: nextBlocks, markdown }) => {
           documentRef.current = { blocks: nextBlocks, content: markdown };
           setDirty(true);
@@ -91,9 +94,9 @@ export function EditableSourceEditor({
       />
       <div role="status" className="absolute bottom-2 right-3 flex items-center gap-2 text-[11px]">
         <span className={failed ? "text-destructive" : "text-muted-foreground"}>
-          {failed ? "保存失败" : dirty ? "保存中…" : "已保存"}
+          {!canWrite ? "只读" : failed ? "保存失败" : dirty ? "保存中…" : "已保存"}
         </span>
-        {failed && (
+        {failed && canWrite && (
           <Button size="xs" variant="outline" onClick={() => void save()}>
             重试保存
           </Button>

@@ -27,6 +27,8 @@ dependencies = [
     "pymupdf>=1.26,<2",
     "pymupdf4llm>=0.0.17,<1",
     "python-docx>=1.2,<2",
+    "limits[redis]>=5.8,<6",
+    "pydantic-settings>=2.12,<3",
 ]
 
 # uv 从仓库内安装模板包；pip 不读取此配置，仍需显式安装本地模板包。

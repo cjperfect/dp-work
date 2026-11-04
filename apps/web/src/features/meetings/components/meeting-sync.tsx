@@ -1,11 +1,15 @@
+import { usePermission } from "@/features/access/hooks/use-permission";
 import { useEffect } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { syncNow, useMeetingCache } from "@/stores/meeting";
 export function MeetingSync() {
+  const canWrite = usePermission("meeting:write");
   const accountId = useAuthStore((state) => state.user?.id);
   useEffect(() => {
     useMeetingCache.setState({ records: {} });
-    if (!accountId) return;
+  }, [accountId]);
+  useEffect(() => {
+    if (!accountId || !canWrite) return;
     const run = () => {
       void syncNow(accountId).catch(() => {});
     };
@@ -16,6 +20,6 @@ export function MeetingSync() {
       clearInterval(timer);
       window.removeEventListener("online", run);
     };
-  }, [accountId]);
+  }, [accountId, canWrite]);
   return null;
 }

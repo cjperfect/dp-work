@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { beforeEach, afterEach, test } from "node:test";
 import { httpClient } from "../../../lib/http.ts";
 import { streamAgentChat } from "../../../apis/agents.ts";
+import { useAccessStore } from "../../../stores/access.ts";
 import { useAuthStore } from "../../../stores/auth.ts";
 import {
   cancelMessage,
@@ -48,6 +49,10 @@ beforeEach(() => {
     },
   });
   useAuthStore.setState({ user: { id: 1, username: "tester" } });
+  useAccessStore.setState({
+    ownerId: 1,
+    data: { role: "member", permissions: ["knowledge:search"] },
+  });
   resetAgents();
   handler = async () =>
     response(
@@ -702,4 +707,33 @@ test("unsafe resume failure never falls back to a new task", async () => {
   assert.deepEqual(requests, [`/api/agents/threads/${id}/resume`]);
   assert.equal(useAgentStore.getState().details[id].messages.length, 2);
   assert.equal(useAgentStore.getState().sending[id], false);
+});
+
+test("revoked knowledge search removes the tool scope without blocking ordinary chat", async () => {
+  await ensureAgentChat("general");
+  useAgentStore.setState((state) => ({
+    agents: state.agents.map((agent) => ({ ...agent, knowledge_base_ids: ["server-42"] })),
+  }));
+  useAccessStore.setState({ ownerId: 1, data: { role: "viewer", permissions: [] } });
+  let submitted;
+  handler = async (request) => {
+    submitted = JSON.parse(request.data);
+    return response(event({ type: "done", content: "普通聊天仍可用" }));
+  };
+  await sendMessage("general", useAgentStore.getState().selected.general, "不查询知识库");
+  assert.deepEqual(submitted.knowledge_base_ids, []);
+});
+
+test("SSE parser handles CRLF boundaries, comments and multiline event data", async () => {
+  handler = async () =>
+    response(
+      ': heartbeat\r\n\r\ndata: {"type":"delta",\r\ndata: "text":"中文"}\r\n\r\n' +
+        'data: {"type":"done","content":"中文"}\r\n\r\n',
+    );
+  const deltas = [];
+  assert.equal(
+    await streamAgentChat(input, (value) => deltas.push(value), new AbortController().signal),
+    "中文",
+  );
+  assert.deepEqual(deltas, ["中文"]);
 });

@@ -6,7 +6,7 @@ import {
   consumeDocumentVectorEvents,
   consumeDocumentSearchEvents,
 } from "../../../stores/knowledge/document-parsing.ts";
-import { subscribeDocumentParseEvents } from "../lib/parse-events.ts";
+import { subscribeDocumentParseEvents } from "../../../apis/knowledge/events.ts";
 
 const globals = ["window", "localStorage", "WebSocket"];
 let originals, sockets, unsubscribes;

@@ -32,5 +32,6 @@ def test_real_chinese_bm25_model_code_and_version_filters(monkeypatch):
             await client.replace_document('fixture', [])
             assert await client.search(1, [1], ['active'], '电池', 10) == []
         finally:
-            await client.request('DELETE', '/' + index, allowed=(404,))
+            async with client.connection() as es:
+                await es.options(ignore_status=404).indices.delete(index=index)
     asyncio.run(case())

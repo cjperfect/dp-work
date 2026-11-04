@@ -1,3 +1,4 @@
+import { usePermission, hasPermission } from "@/features/access/hooks/use-permission";
 import type { RecordDocument, RecordVersion } from "@/interfaces/meeting";
 import { lazy, Suspense, useEffect, useRef, useState, type MutableRefObject } from "react";
 import * as Y from "yjs";
@@ -119,9 +120,13 @@ function RecordSession({
   const [link, setLink] = useState("");
   const [shareError, setShareError] = useState("");
   const [shareBusy, setShareBusy] = useState(false);
+  const canEdit = usePermission("meeting:edit");
+  const canShare = usePermission("meeting:share");
   const username = useAuthStore((state) => state.user?.username ?? "同事");
   useEffect(() => {
-    const connection = new RecordProvider(initialDocument, shareToken, setStatus, reset);
+    const connection = new RecordProvider(initialDocument, shareToken, setStatus, reset, () =>
+      hasPermission("meeting:edit"),
+    );
     setProvider(connection);
     if (flushRef) flushRef.current = () => connection.flush();
     return () => {
@@ -134,6 +139,7 @@ function RecordSession({
     onContentChange?.(current.content);
   }, [current.content, onContentChange]);
   async function openShare() {
+    if (!hasPermission("meeting:share")) return;
     setShareBusy(true);
     setShareError("");
     try {
@@ -158,7 +164,7 @@ function RecordSession({
                 : status.pending || status.saving
                   ? "保存中…"
                   : `最近保存于 ${new Date(current.saved_at ?? current.updated_at).toLocaleString()}`}{" "}
-          · {current.editable ? "支持协同编辑" : "只读"}
+          · {current.editable && canEdit ? "支持协同编辑" : "只读"}
         </span>
         <div className="flex flex-wrap items-center gap-3">
           <RecordCollaborators provider={provider} connected={status.connected} />
@@ -166,7 +172,7 @@ function RecordSession({
             <History className="size-4" />
             版本历史
           </Button>
-          {current.owner && (
+          {current.owner && canShare && (
             <Popover
               onOpenChange={(open) => {
                 if (open) void openShare();
@@ -224,7 +230,7 @@ function RecordSession({
           )}
         </div>
       </div>
-      {status.saveError && (
+      {status.saveError && canEdit && (
         <div role="alert" className="flex items-center gap-2 px-5 py-2 text-sm text-destructive">
           <span>{status.saveError}</span>
           <Button
@@ -251,7 +257,7 @@ function RecordSession({
               doc={provider.doc}
               provider={provider}
               username={username}
-              editable={current.editable && !disabled && !status.error}
+              editable={canEdit && current.editable && !disabled && !status.error}
             />
           )}
         </Suspense>
@@ -285,6 +291,8 @@ function VersionHistory({
   shareToken?: string;
   reset: (document: RecordDocument) => void;
 }) {
+  const canCheckpoint = usePermission("meeting:edit");
+  const canRestore = usePermission("meeting:restore");
   const [versions, setVersions] = useState<RecordVersion[]>([]);
   const [selected, setSelected] = useState<RecordVersion | null>(null);
   const [preview, setPreview] = useState<Y.Doc | null>(null);
@@ -357,7 +365,7 @@ function VersionHistory({
             {error}
           </p>
         )}
-        {status.document.owner && status.document.editable && (
+        {canCheckpoint && status.document.owner && status.document.editable && (
           <div className="flex gap-2">
             <Input
               aria-label="版本名称"
@@ -371,6 +379,7 @@ function VersionHistory({
               disabled={busy}
               onClick={() =>
                 void run(async () => {
+                  if (!hasPermission("meeting:edit")) return;
                   await checkpointRecord(id, label || "手动版本");
                   setVersions(await listRecordVersions(id, shareToken));
                   setLabel("");
@@ -406,35 +415,39 @@ function VersionHistory({
           <div className="flex min-h-0 flex-col rounded-lg border">
             <div className="flex items-center justify-between border-b px-4 py-2 text-sm">
               <span>{selected?.label ?? "选择版本预览"}</span>
-              {selected && status.document.owner && status.document.editable && (
-                <Popover>
-                  <PopoverTrigger
-                    render={
-                      <Button variant="outline" size="sm" disabled={busy}>
-                        恢复此版本
-                      </Button>
-                    }
-                  />
-                  <PopoverContent>
-                    <p className="text-sm">恢复后将同步给所有协作者，当前内容会自动备份。</p>
-                    <Button
-                      className="mt-3"
-                      disabled={busy}
-                      onClick={() =>
-                        void run(async () => {
-                          const current = await getRecord(id);
-                          const value = await restoreRecord(id, selected.id, current.revision);
-                          reset(value);
-                          close();
-                          toast.success("已恢复历史版本");
-                        })
+              {selected &&
+                canRestore &&
+                status.document.owner &&
+                !(status.document.locked ?? !status.document.editable) && (
+                  <Popover>
+                    <PopoverTrigger
+                      render={
+                        <Button variant="outline" size="sm" disabled={busy}>
+                          恢复此版本
+                        </Button>
                       }
-                    >
-                      确认恢复
-                    </Button>
-                  </PopoverContent>
-                </Popover>
-              )}
+                    />
+                    <PopoverContent>
+                      <p className="text-sm">恢复后将同步给所有协作者，当前内容会自动备份。</p>
+                      <Button
+                        className="mt-3"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(async () => {
+                            const current = await getRecord(id);
+                            if (!hasPermission("meeting:restore")) return;
+                            const value = await restoreRecord(id, selected.id, current.revision);
+                            reset(value);
+                            close();
+                            toast.success("已恢复历史版本");
+                          })
+                        }
+                      >
+                        确认恢复
+                      </Button>
+                    </PopoverContent>
+                  </Popover>
+                )}
             </div>
             <div className="min-h-0 flex-1 overflow-auto">
               <Suspense fallback={<p className="p-5">正在读取版本…</p>}>

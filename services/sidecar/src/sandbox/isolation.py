@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import shlex
 import shutil
 from pathlib import Path
 import sys
@@ -13,12 +14,30 @@ class IsolationUnavailable(Exception):
     pass
 
 
+def runtime_paths():
+    """桌面版使用 Electron Node；独立开发使用 PATH 中的 Node。"""
+    root = Path(__file__).resolve().parents[4]
+    cli = Path(os.environ.get('DP_SANDBOX_CLI') or (
+        Path(sys.executable).parent / 'sandbox-runtime/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js'
+        if getattr(sys, 'frozen', False) else
+        root / 'apps/desktop/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js'))
+    node = os.environ.get('DP_SANDBOX_NODE') or shutil.which('node')
+    if not node or not Path(node).is_file() or not cli.is_file():
+        raise IsolationUnavailable('Anthropic Sandbox Runtime 未安装，请执行 pnpm install 并使用桌面端启动。')
+    return str(Path(node).resolve()), str(cli.resolve())
+
+
 def sandbox_backend():
-    """选择平台后端；这里只检测依赖，实际启动失败仍禁止降级。"""
-    if sys.platform == 'darwin' and Path('/usr/bin/sandbox-exec').is_file():
-        return 'macos'
-    if sys.platform == 'linux' and shutil.which('bwrap'):
-        return 'linux'
+    """只选择已安装的隔离后端，启动失败时不降级执行。"""
+    if sys.platform in ('darwin', 'linux'):
+        try:
+            runtime_paths()
+        except IsolationUnavailable:
+            return None
+        if sys.platform == 'darwin' and Path('/usr/bin/sandbox-exec').is_file():
+            return 'macos'
+        if sys.platform == 'linux' and all(shutil.which(name) for name in ('bwrap', 'socat', 'rg')):
+            return 'linux'
     if sys.platform == 'win32' and shutil.which('docker'):
         from .. import config
         if re.fullmatch(r'sha256:[0-9a-f]{64}', config.AGENT_SANDBOX_IMAGE):
@@ -44,13 +63,6 @@ def validate_workspace(workspace):
     return workspace
 
 
-def literal(path):
-    value = str(Path(path).resolve())
-    if any(ord(char) < 32 for char in value):
-        raise IsolationUnavailable('目录包含不支持的控制字符，命令未执行。')
-    return json.dumps(value, ensure_ascii=False)
-
-
 def bash_arguments(executable, command):
     """在启动用户命令前降低硬限制，子进程不能自行恢复上限。"""
     limits = 'ulimit -c 0 && ulimit -n 256 && ulimit -f 65536 && ulimit -t 30 && exec "$@"'
@@ -58,20 +70,26 @@ def bash_arguments(executable, command):
             executable, '--noprofile', '--norc', '-c', command]
 
 
-def mac_profile(workspace, temporary):
-    """仅授权工作目录和本次临时目录；其余业务文件与网络默认拒绝。"""
-    readable = ['/bin', '/sbin', '/usr', '/System', '/Library', '/opt/homebrew',
-                '/private/etc', '/private/var/db/dyld', '/private/var/db/timezone', sys.base_prefix, sys.prefix]
-    rules = ['(version 1)', '(deny default)', '(import "dyld-support.sb")',
-             '(allow syscall*)', '(allow process-exec)', '(allow process-fork)',
-             '(allow sysctl-read)', '(allow file-read-metadata file-test-existence)',
-             '(allow file-read* (literal "/dev/null") (literal "/dev/urandom") (literal "/dev/random"))',
-             '(allow file-write* (literal "/dev/null"))']
-    for path in readable:
-        if Path(path).exists(): rules.append(f'(allow file-read* file-map-executable (subpath {literal(path)}))')
-    for path in (workspace, temporary):
-        rules.append(f'(allow file-read* file-write* file-map-executable (subpath {literal(path)}))')
-    return '\n'.join(rules)
+def runtime_settings(workspace, temporary):
+    """拒绝宿主读取后，仅开放工作目录、临时目录及系统运行库。"""
+    readable = [workspace, temporary]
+    readable += [Path(value) for value in (
+        '/bin', '/sbin', '/usr', '/lib', '/lib64', '/System', '/Library',
+        '/opt/homebrew', '/private/etc', '/private/var/db/dyld',
+        '/private/var/db/timezone', '/etc/ld.so.cache', '/etc/localtime',
+        '/dev/null', '/dev/urandom', '/dev/random', sys.base_prefix, sys.prefix,
+    ) if Path(value).exists()]
+    literal = lambda path: {'path': str(Path(path).resolve()), 'literal': True}
+    return {
+        'network': {'allowedDomains': [], 'deniedDomains': ['*'],
+                    'allowUnixSockets': [], 'allowLocalBinding': False},
+        'filesystem': {'denyRead': [literal('/')],
+                       'allowRead': [literal(path) for path in readable],
+                       'allowWrite': [literal(workspace), literal(temporary)], 'denyWrite': []},
+        'enableWeakerNestedSandbox': False,
+        'enableWeakerNetworkIsolation': False,
+        'allowNestedUserNamespaces': False,
+    }
 
 
 @contextmanager
@@ -79,7 +97,7 @@ def isolated_command(workspace, executable, command, environment):
     """为每次命令分配临时 HOME，并返回受限启动参数。"""
     backend = sandbox_backend()
     if backend not in ('macos', 'linux'):
-        raise IsolationUnavailable('命令沙箱不可用。Linux 需要 Bubblewrap；Windows 需要 Docker Desktop（Linux 容器）及 AGENT_SANDBOX_IMAGE；不会降级执行宿主命令。')
+        raise IsolationUnavailable('命令沙箱不可用。需要 Anthropic Sandbox Runtime；Linux 还需要 Bubblewrap、socat 和 ripgrep。不会降级执行宿主命令。')
     workspace = validate_workspace(workspace)
     with TemporaryDirectory(prefix='dp-work-exec-') as directory:
         temporary = Path(directory).resolve()
@@ -92,10 +110,12 @@ def isolated_command(workspace, executable, command, environment):
         env.update(HOME=str(home), TMPDIR=str(temporary), TMP=str(temporary), TEMP=str(temporary),
                    XDG_CONFIG_HOME=str(home / '.config'), XDG_CACHE_HOME=str(home / '.cache'),
                    GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL='/dev/null')
-        if backend == 'linux':
-            from .sandbox_linux import linux_command
-            args = linux_command(workspace, temporary, executable, command)
-        else:
-            args = ['/usr/bin/sandbox-exec', '-p', mac_profile(workspace, temporary),
-                    *bash_arguments(executable, command)]
+        node, cli = runtime_paths()
+        settings = temporary / 'settings.json'
+        settings.write_text(json.dumps(runtime_settings(workspace, temporary)), encoding='utf-8')
+        settings.chmod(0o600)
+        # 只启动可信 Runtime 时启用 Electron Node 模式；不继承 NODE_OPTIONS 等宿主配置。
+        env['ELECTRON_RUN_AS_NODE'] = '1'
+        args = [node, cli, '--settings', str(settings), '-c',
+                shlex.join(bash_arguments(executable, command))]
         yield args, env

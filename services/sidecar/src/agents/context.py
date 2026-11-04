@@ -9,7 +9,7 @@ from templates import read_template
 
 from ..providers.llm.schemas import ModelError
 from ..tools.workspace import agent_workspace
-from ..tools.isolation import sandbox_backend
+from ..sandbox.isolation import sandbox_backend
 
 DEFAULT_TOOLS = {"ls", "read_file", "write_file", "edit_file", "glob", "grep", "execute"}
 MAX_PROMPT_BYTES = 64 * 1024

@@ -45,19 +45,25 @@ Bash 跟踪范围为当前工作目录内的普通文件；文件移动按删除
 
 限制：单文件可恢复备份最多 2 MB，单次基线最多 32 MB、3000 个文件、20000 个目录项。启动前超出扫描/总量预算会阻止命令；大文件、软链接、特殊文件会标记不支持撤销。后置扫描失败会明确标记“操作已执行、扫描失败”，不能为获取 Diff 自动重复执行操作。扫描和磁盘读写在线程执行；目前快照没有自动过期回收，需随本机数据一同备份，后续可增加按保留期清理。旧消息没有修改前快照时不显示撤销按钮。
 
+## 模块边界
+
+`agents/` 装配 Agent，`harness/` 判断审批与执行控制，`tools/workspace.py` 负责文件工具和文件变更记录。命令隔离独立在同级 `sandbox/`，所有 Agent 经 Backend 共用同一执行入口：`WorkspaceBackend → sandbox.shell.execute_command → Sandbox Runtime / Windows Docker`。沙箱不反向依赖 Agent、会话或工具实现。
+
 ## 命令隔离与依赖
 
-统一入口为 `isolation.py` / `shell.py`；依赖缺失时返回 126，启动失败不降级为普通 Bash。所有平台只授权所选工作目录和命令临时目录写入，不传模型密钥、SSH_AUTH_SOCK、BASH_ENV、宿主 Docker 配置或 socket。审批不解除隔离。磁盘根目录、用户主目录及其父目录、系统目录不能作为执行范围。
+统一入口为 `src/sandbox/isolation.py` / `src/sandbox/shell.py`；依赖缺失时返回 126，启动失败不降级为普通 Bash。所有平台只授权所选工作目录和命令临时目录写入，不传模型密钥、SSH_AUTH_SOCK、BASH_ENV、宿主 Docker 配置或 socket。审批不解除隔离。磁盘根目录、用户主目录及其父目录、系统目录不能作为执行范围。
 
-| 平台    | 实现与前提                                                                 | 资源范围                                                                              |
-| ------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| macOS   | 系统 sandbox-exec（已弃用，发布时须验证目标系统）                          | 系统与 Python 运行库只读，其他业务目录和网络默认拒绝                                  |
-| Linux   | Bubblewrap，支持用户/网络/PID namespace 和 `--disable-userns` 的内核及版本 | 仅白名单系统运行库只读；不挂载宿主 /run、主目录、根文件系统；独立网络和 PID namespace |
-| Windows | Docker Desktop，启用 Linux 容器；配置本机镜像 ID                           | 仅项目映射为 /workspace；系统只读、无外部网络、不共享宿主 PID；禁止能力提升           |
+| 平台    | 实现与前提                                                     | 资源范围                                                     |
+| ------- | -------------------------------------------------------------- | ------------------------------------------------------------ |
+| macOS   | Anthropic Sandbox Runtime 0.0.81，底层使用系统 sandbox-exec    | 显式拒绝宿主读取，仅开放项目、临时目录和运行库；网络默认关闭 |
+| Linux   | 同一 Runtime，另需 Bubblewrap、socat、ripgrep 及用户 namespace | 使用 Runtime 的文件、网络隔离；不启用弱化隔离选项            |
+| Windows | 保留 Docker Desktop 的 Linux 容器后端                          | Runtime 原生 Windows 后端仍为 Alpha，本项目尚未切换          |
 
-macOS / Linux 在用户命令开始前设置 Bash 硬限制：不生成 core、256 个文件描述符、单文件写入上限（`ulimit -f 65536`）、每进程 30 秒 CPU。保留 30 秒墙钟超时和 32 KB 输出截断；当前没有原生整组内存/进程数配额，不应描述为防 fork bomb 的完整资源沙箱。Linux 的系统库挂载按目录授权；若需更窄的只读范围，应使用独立运行镜像。网络 namespace 不等同于通用 syscall 过滤，项目目录中不要放宿主服务 socket。
+Runtime 依赖锁定在 `apps/desktop/package.json`，开发时执行根目录 `pnpm install`。桌面端通过 `DP_SANDBOX_NODE` / `DP_SANDBOX_CLI` 将可信运行时路径传入 Sidecar；安装版复用 Electron 的 Node 环境，`prepare-sidecar.mjs` 将 Runtime、运行依赖及 vendor 资源复制到 Sidecar 资源目录，不从 asar 内执行辅助二进制。独立启动 Python 时可使用 PATH 中的 Node 与仓库内已安装的 Runtime。
 
-macOS 子进程清理基于 POSIX 进程组，没有独立 PID namespace；恶意程序自行脱离进程组的情况不具备容器级生命周期保证。文件与网络限制仍由继承的 sandbox profile 生效。
+`isolation.py` 只负责项目目录验证、临时 HOME、环境变量过滤和策略生成，不再手写 macOS profile 或 Linux Bubblewrap 命令。每次调用传入独立 settings 文件，显式设置 `denyRead: /`，仅重新开放项目、临时目录和系统运行库；只允许项目与临时目录写入。网络域名与 Unix socket 默认不授权，禁止开启弱化隔离。Runtime 的内置敏感元数据写入保护也生效，包括 Git hooks 等；审批不覆盖这些限制。
+
+macOS / Linux 在用户命令开始前设置 Bash 硬限制：不生成 core、256 个文件描述符、单文件写入上限（`ulimit -f 65536`）、每进程 30 秒 CPU。保留 30 秒墙钟超时和 32 KB 输出截断；当前没有原生整组内存/进程数配额。macOS 的进程清理基于 POSIX 进程组，不具备容器级生命周期保证。命令不能访问网络安装依赖，需要预装运行库。
 
 容器限制为 512 MB 内存（禁额外 swap）、1 CPU、128 个进程、64 MB 单文件、临时文件系统共 160 MB。每条命令使用独立容器和 HOME；正常完成、失败、超时、取消均通过宿主 `docker rm --force` 清理；容器内还有独立超时，避免仅断开客户端后任务继续运行。引擎不可达时记录清理失败，不能保证立即清理；恢复引擎后可检查 `dp-work-exec-*` 容器。
 
@@ -80,12 +86,12 @@ docker image inspect dp-work-sandbox:local --format '{{.Id}}'
 
 ```sh
 # Sidecar 环境中执行普通回归
-.venv/bin/pytest tests/tools tests/agents/test_tool_policy.py
-# 真实 Linux（须先安装 Bubblewrap 并启用用户 namespace），无第三方 Python 依赖
-python tests/tools/sandbox_linux_smoke.py
+.venv/bin/pytest tests/tools tests/sandbox tests/agents/test_tool_policy.py
+# 真实 Linux（先 pnpm install，安装 Node、Bubblewrap、socat、ripgrep 并启用用户 namespace）
+python tests/sandbox/sandbox_linux_smoke.py
 # 容器实测，指定本机 endpoint 与已构建镜像 ID；--basetemp 须位于 Docker 可共享的目录
 DP_TEST_SANDBOX_IMAGE=sha256:... DP_TEST_DOCKER_HOST=unix:///var/run/docker.sock \
-  .venv/bin/pytest tests/tools/test_sandbox_platforms.py --basetemp=/path/to/shared/test-temp
+  .venv/bin/pytest tests/sandbox/test_sandbox_platforms.py --basetemp=/path/to/shared/test-temp
 ```
 
 容器实测可验证 Linux 容器策略，但不能替代 Windows 本机的 named pipe、路径映射和 Docker Desktop 共享权限验证。

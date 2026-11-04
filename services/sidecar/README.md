@@ -1,6 +1,6 @@
 # Sidecar
 
-已实现麦克风 PCM 采集、豆包双向流式识别和 Web ↔ Sidecar ASR 协议。未确认片段保存到 `.dp-work/temp/asr` 的 JSONL。确认片段推送到页面，前端立即请求 API 保存到 PostgreSQL；Sidecar 不创建或读写 SQLite，不维护待同步队列。
+已实现麦克风 PCM 采集、豆包双向流式识别和 Web ↔ Sidecar ASR 协议。未确认片段保存到 `.dp-work/temp/asr` 的 JSONL。确认片段推送到页面，前端立即请求 API 保存到 PostgreSQL；ASR 模块不创建或读写 SQLite，不维护待同步队列；Agent 会话、记忆与用量等本机功能使用各自的持久化模块。
 
 ## 启动
 
@@ -41,10 +41,17 @@ VOLC_SPEAKER_INFO=1
 
 ## 目录
 
-- `src/transport/`：控制消息校验、WebSocket 路由。
+- `src/transport/`：JSON-RPC 分发、stdio 与 ASR WebSocket 传输。
+- `src/transport/types.py`：共用业务错误、事件流及本机配置输入。
+- `src/transport/operations/`：按技能、项目、连接器、会话、记忆、用量拆分的业务适配器；`handlers.py` 集中注册方法，不承载这些模块的实现。
 - `src/meetings/`：识别会话；`repository.py` 仅管理未确认片段的 JSONL 临时文件。
 - `src/providers/asr/`：豆包二进制协议、流式连接。
-- 其他 Agent、工具、执行框架目录已预留。
+- `src/agents/`：Agent 构建和 Backend 绑定。
+- `src/harness/`：审批、任务引导、暂停、中止及恢复。
+- `src/tools/`：文件工具、工作区适配和文件变更记录。
+- `src/sandbox/`：独立的命令执行模块；`isolation.py` 配置 Runtime 策略，`shell.py` 管理超时、取消和输出，`sandbox_container.py` 保留 Windows Docker 适配。所有 Agent 复用，隔离实现不放入 Agent Loop。
+- `src/sessions/`、`src/memory/`、`src/usage/`：本机会话、长期记忆及用量持久化。
+- `src/skills/`、`src/connectors/`、`src/knowledge/`：技能管理、连接器与解析检索能力。
 
 ## WebSocket 协议
 
@@ -157,3 +164,11 @@ Electron 使用 `desktop_entry.py --stdio`（安装版 `dp-work-sidecar --stdio`
 ## 开发评测
 
 LangSmith 离线评测入口：在仓库根目录执行 `pnpm eval:smoke` 检查链路，`pnpm eval:live` 使用真实模型。默认不上传，只有显式 `--upload` 才提交合成数据与实验。安装、评分与数据边界见 [evals/README.md](evals/README.md)。
+
+## 配置与模型客户端
+
+配置使用 `pydantic-settings` 加载本服务 `.env`，支持通过 `DP_SIDECAR_ENV_FILE` 指定配置文件；进程环境优先，原变量名保留。无效类型或超出范围的值在启动时报告，不再静默截断。LangSmith 配置在校验后桥接到 SDK 环境；个人模型设置继续由本机加密存储管理。
+
+Agent、纪要、标题及记忆调用共用 `providers/llm/chat.py` 的模型工厂和供应商适配。一次性文本调用不自动重试，保留超时、安全错误、响应完整性检查、实际请求限流与用量记录。记忆提取和合并使用 JSON 模式生成，再统一由 LangChain 的 Pydantic 输出解析器校验；只有供应商明确拒绝 `response_format` / `json_object` 才降级为普通生成，两条路径共用同一解析流程，其余错误不降级重发。事实证据、作用范围和人工记忆保护仍在业务层验证。
+
+Python 依赖由本服务 `uv.lock` 固定；开发安装可执行 `uv sync --extra test --extra eval`。

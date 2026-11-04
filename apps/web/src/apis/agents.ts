@@ -1,3 +1,4 @@
+import { createParser } from "eventsource-parser";
 import type { LocalProject } from "@dp-work/protocols/desktop";
 import type {
   ReasoningEvent,
@@ -88,49 +89,41 @@ export async function streamAgentChat(
     throw new Error("Agent 返回了无效的事件流。");
   const reader = stream.getReader();
   const decoder = new TextDecoder();
-  let buffer = "";
   let completed: string | null = null;
   let paused = false;
-  /** 解析并分发一条 SSE 事件。 */
-  const consume = (frame: string) => {
-    const data = frame
-      .split("\n")
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice(5).trimStart())
-      .join("\n");
-    if (!data) return;
-    const event = JSON.parse(data);
-    if (event.type === "restore" && typeof event.content === "string") onRestore?.(event.content);
-    if (event.type === "compaction") onCompaction?.(event);
-    if (event.type === "usage" && event.usage) onUsage?.(event.usage);
-    if (event.type === "reasoning" || event.type === "reasoning_end") onReasoning?.(event);
-    if (event.type === "file_change" && event.change) onFileChange?.(event.change);
-    if ((event.type === "tool_call" || event.type === "tool_result") && event.trace)
-      onTool?.(event.trace);
-    if (event.type === "steering") onSteering?.(event);
-    if (event.type === "start" && typeof event.run_id === "string") onStart?.(event.run_id);
-    if (event.type === "approval") paused = true;
-    if (event.type === "error") throw new Error(event.message || "Agent 执行失败，请重试。");
-    if (event.type === "delta" && typeof event.text === "string") onDelta(event.text);
-    if (event.type === "done" && typeof event.content === "string") completed = event.content;
-  };
+  const parser = createParser({
+    maxBufferSize: 2_000_000,
+    onError(error) {
+      if (error.type === "max-buffer-size-exceeded") throw new Error("Agent 响应片段过大。");
+    },
+    onEvent({ data }) {
+      if (!data || paused || completed !== null) return;
+      const event = JSON.parse(data);
+      if (event.type === "restore" && typeof event.content === "string") onRestore?.(event.content);
+      if (event.type === "compaction") onCompaction?.(event);
+      if (event.type === "usage" && event.usage) onUsage?.(event.usage);
+      if (event.type === "reasoning" || event.type === "reasoning_end") onReasoning?.(event);
+      if (event.type === "file_change" && event.change) onFileChange?.(event.change);
+      if ((event.type === "tool_call" || event.type === "tool_result") && event.trace)
+        onTool?.(event.trace);
+      if (event.type === "steering") onSteering?.(event);
+      if (event.type === "start" && typeof event.run_id === "string") onStart?.(event.run_id);
+      if (event.type === "approval") paused = true;
+      if (event.type === "error") throw new Error(event.message || "Agent 执行失败，请重试。");
+      if (event.type === "delta" && typeof event.text === "string") onDelta(event.text);
+      if (event.type === "done" && typeof event.content === "string") completed = event.content;
+    },
+  });
   try {
     while (true) {
       if (signal.aborted) throw new Error("已停止生成。");
       const chunk = await reader.read();
       if (useAuthStore.getState().user?.id !== owner || getAccessToken() !== token)
         throw new Error("登录状态已改变，请重试。");
-      buffer += chunk.done ? decoder.decode() : decoder.decode(chunk.value, { stream: true });
-      buffer = buffer.replace(/\r\n/g, "\n");
-      let split: number;
-      while ((split = buffer.indexOf("\n\n")) !== -1) {
-        consume(buffer.slice(0, split));
-        buffer = buffer.slice(split + 2);
-      }
+      parser.feed(chunk.done ? decoder.decode() : decoder.decode(chunk.value, { stream: true }));
       if (paused) return null;
       if (completed !== null) return completed;
       if (chunk.done) break;
-      if (buffer.length > 2_000_000) throw new Error("Agent 响应片段过大。");
     }
     throw new Error("Agent 回答中断，请重试。");
   } finally {

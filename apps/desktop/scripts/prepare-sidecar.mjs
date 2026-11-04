@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { desktopRoot, workspaceRoot } from "./runtime.mjs";
+import { prepareSandbox } from "./prepare-sandbox.mjs";
 const root = path.join(workspaceRoot, "services/sidecar");
 const python =
   process.env.SIDECAR_BUILD_PYTHON ??
@@ -34,6 +35,10 @@ const args = [
   "langchain.agents",
   "--collect-all",
   "deepagents",
+  "--collect-all",
+  "limits",
+  "--collect-all",
+  "pydantic_settings",
   "--collect-submodules",
   "langgraph",
   "--collect-submodules",
@@ -77,6 +82,7 @@ await new Promise((resolve, reject) => {
 });
 const { rename } = await import("node:fs/promises");
 await rename(path.join(desktopRoot, "build/dp-work-sidecar"), output);
+await prepareSandbox(path.join(output, "sandbox-runtime"));
 await writeFile(
   path.join(output, "runtime.json"),
   JSON.stringify({ platform: process.platform, arch: process.arch }, null, 2),

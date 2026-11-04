@@ -49,6 +49,7 @@ export class RecordProvider {
     private share: string | undefined,
     private changed: (status: RecordStatus) => void,
     private reset: (document: RecordDocument) => void,
+    private canEdit: () => boolean = () => true,
   ) {
     this.status = {
       document,
@@ -74,8 +75,11 @@ export class RecordProvider {
   private emit() {
     this.changed({ ...this.status, pending: this.needsSave() });
   }
+  private writable() {
+    return this.canEdit() && getAccessToken() === this.token;
+  }
   private onUpdate = (update: Uint8Array, origin: unknown) => {
-    if (origin === this || this.stopped) return;
+    if (origin === this || this.stopped || !this.writable()) return;
     const seq = ++this.seq;
     this.pending.set(seq, update);
     this.send(seq, update);
@@ -116,6 +120,7 @@ export class RecordProvider {
   }
   private persistNow() {
     if (
+      !this.writable() ||
       this.stopped ||
       !this.status.connected ||
       this.status.saving ||
@@ -148,7 +153,7 @@ export class RecordProvider {
     );
   };
   private send(seq: number, update: Uint8Array) {
-    if (this.status.connected && this.socket?.readyState === WebSocket.OPEN)
+    if (this.writable() && this.status.connected && this.socket?.readyState === WebSocket.OPEN)
       this.socket.send(
         JSON.stringify({
           type: "update",
@@ -264,6 +269,10 @@ export class RecordProvider {
     };
   };
   async flush() {
+    if (!this.writable()) {
+      if (this.needsSave()) throw new Error("编辑权限已变更，请复制保留未同步内容。");
+      return;
+    }
     if (this.status.error) throw new Error(this.status.error);
     if (!this.status.connected) throw new Error("协作连接尚未就绪，请稍后重试。");
     if (!this.needsSave()) return;
@@ -286,7 +295,12 @@ export class RecordProvider {
     });
   }
   destroy() {
-    if (this.status.connected && this.needsSave() && this.socket?.readyState === WebSocket.OPEN)
+    if (
+      this.writable() &&
+      this.status.connected &&
+      this.needsSave() &&
+      this.socket?.readyState === WebSocket.OPEN
+    )
       this.socket.send(
         JSON.stringify({
           type: "save",

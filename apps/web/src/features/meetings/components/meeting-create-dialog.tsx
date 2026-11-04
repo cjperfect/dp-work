@@ -1,3 +1,4 @@
+import { hasPermission } from "@/features/access/hooks/use-permission";
 import { useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ export function MeetingCreateDialog({
   const accountId = useAuthStore((s) => s.user?.id);
   async function start(event: React.FormEvent) {
     event.preventDefault();
+    if (!hasPermission("meeting:write")) return;
     if (lock.current || !title.trim()) return;
     lock.current = true;
     setBusy(true);

@@ -10,6 +10,7 @@ from fastapi import WebSocket,WebSocketDisconnect
 from sqlalchemy import func,select,update
 from sqlalchemy.dialects.postgresql import insert
 from src.core.security import decode_token
+from src.core.exceptions import ApiError
 from src.infrastructure.database import session
 from src.infrastructure.database.notifications import listen
 from src.modules.users import service as users
@@ -34,6 +35,8 @@ async def connect(ws:WebSocket):
             if not payload:raise ValueError('invalid auth')
             user=await users.find_by_subject(payload.get('sub'),payload.get('uidv'))
             if not user or not user.is_active:raise ValueError('invalid user')
+            from src.modules.access.service import authorize_id
+            await authorize_id(user.id, "device:connect")
             installation=str(UUID(auth.get('installation_id')))
             device_id=str(UUID(hashlib.sha256(f'{user.id}:{installation}'.encode()).hexdigest()[:32]))
         async with listen('device_requests') as queue:
@@ -51,6 +54,7 @@ async def connect(ws:WebSocket):
                 if time.monotonic()-last_check>10:
                     fresh=await users.find_by_id(user.id)
                     if not fresh or not fresh.is_active:raise ValueError('inactive user')
+                    await authorize_id(user.id, 'device:connect')
                     async with session.transaction() as db:
                         current=await db.get(Device,device_id,with_for_update=True)
                         if not current or current.session_id!=sid:raise ValueError('replaced device session')
@@ -81,7 +85,7 @@ async def connect(ws:WebSocket):
                     pending.cancel()
                     with suppress(asyncio.CancelledError):await pending
                 pending=None
-    except (ValueError,TypeError,AttributeError,TimeoutError,WebSocketDisconnect):
+    except (ApiError,ValueError,TypeError,AttributeError,TimeoutError,WebSocketDisconnect):
         pass
     except Exception:
         pass

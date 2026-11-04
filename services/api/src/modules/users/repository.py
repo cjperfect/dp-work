@@ -1,6 +1,6 @@
 """用户 ORM 查询；不创建 Session、不提交事务。"""
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +9,7 @@ from .models import User
 
 class UserRepository:
     """用户数据访问。"""
+
     def __init__(self, db_session: AsyncSession):
         """接收数据库会话。"""
         self.session = db_session
@@ -57,3 +58,13 @@ class UserRepository:
             ).order_by(User.created_at)
         )
         return [dict(row) for row in result.mappings()]
+
+    async def upgrade_password_hash(
+        self, user_id: int, previous: str, updated: str
+    ) -> None:
+        """只更新仍持有原哈希的账号。"""
+        await self.session.execute(
+            update(User)
+            .where(User.id == user_id, User.password_hash == previous)
+            .values(password_hash=updated)
+        )

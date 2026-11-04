@@ -2,7 +2,17 @@ import type { AgentConfig } from "@/interfaces/agent";
 import type { AgentId } from "@/interfaces/app";
 import { Link, useLocation } from "@tanstack/react-router";
 import type * as React from "react";
-import { BookOpen, Bot, Boxes, Package, Plug, Video, UsersRound, Palette } from "lucide-react";
+import {
+  BookOpen,
+  Bot,
+  Boxes,
+  Package,
+  Plug,
+  Video,
+  UsersRound,
+  Palette,
+  ShieldCheck,
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -27,6 +37,8 @@ import { useAgentCode } from "@/features/agent/hooks/use-agent-code";
 import { useConnectors } from "@/stores/connectors";
 
 import { useAuthStore } from "@/stores/auth";
+import { usePermission } from "@/features/access/hooks/use-permission";
+import { useAccessStore } from "@/stores/access";
 import { UserMenu } from "@/features/auth/components/user-menu";
 
 const EMPTY_AGENTS: AgentConfig[] = [];
@@ -70,6 +82,12 @@ const AGENT_NAV: {
 export function ThreadListSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { pathname } = useLocation();
   const user = useAuthStore((state) => state.user);
+  const canManage = useAccessStore(
+    (state) => state.ownerId === user?.id && !!state.data?.permissions.includes("access:manage"),
+  );
+  const canWriteMeetings = usePermission("meeting:write");
+  const canReadMeetings = usePermission("meeting:read");
+  const canReadKnowledge = usePermission("knowledge:read");
   const agents = useAgentStore((state) => (state.owner === user?.id ? state.agents : EMPTY_AGENTS));
   const partnerCodes = useAgentStore((state) =>
     state.owner === user?.id ? state.partnerCodes : EMPTY_PARTNERS,
@@ -104,7 +122,24 @@ export function ThreadListSidebar({ ...props }: React.ComponentProps<typeof Side
           <SidebarGroupLabel>{"我的空间"}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {SPACE_NAV.map((item) => {
+              {canManage && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={pathname.startsWith("/admin/")}
+                    render={<Link to="/admin/users" />}
+                  >
+                    <ShieldCheck />
+                    <span>用户与权限</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              {SPACE_NAV.filter((item) =>
+                item.key === "meetings"
+                  ? canReadMeetings
+                  : item.key === "knowledge"
+                    ? canReadKnowledge
+                    : true,
+              ).map((item) => {
                 const Icon = item.icon;
                 const count =
                   item.key === "skills"
@@ -119,7 +154,9 @@ export function ThreadListSidebar({ ...props }: React.ComponentProps<typeof Side
                       render={<Link to={item.path} />}
                     >
                       <Icon />
-                      <span>{item.label}</span>
+                      <span>
+                        {item.key === "meetings" && !canWriteMeetings ? "会议记录" : item.label}
+                      </span>
                       {typeof count === "number" && count > 0 && (
                         <span className="bg-sidebar-primary text-sidebar-primary-foreground ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-medium">
                           {count}

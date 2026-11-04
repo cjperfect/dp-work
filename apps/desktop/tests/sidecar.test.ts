@@ -66,6 +66,11 @@ test("Sidecar config supports development, production runtime and remote-only mo
   const config = sidecarOptions(false, "/workspace", "/resources", "/logs", {});
   assert(config);
   assert.equal(config.port, 8001);
+  assert.equal(config.env?.DP_SANDBOX_NODE, process.execPath);
+  assert.equal(
+    config.env?.DP_SANDBOX_CLI,
+    "/workspace/apps/desktop/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js",
+  );
   assert.equal(config.cwd, "/workspace/services/sidecar");
   assert.deepEqual(config.args, ["desktop_entry.py", "--stdio"]);
   assert.equal(
@@ -82,6 +87,10 @@ test("Sidecar config supports development, production runtime and remote-only mo
     DESKTOP_SIDECAR_EXECUTABLE: "/runtime/sidecar",
   });
   assert.equal(bundled?.command, "/runtime/sidecar");
+  assert.equal(
+    bundled?.env?.DP_SANDBOX_CLI,
+    "/resources/sidecar/sandbox-runtime/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js",
+  );
   assert.deepEqual(bundled?.args, ["--stdio"]);
   assert.throws(() => sidecarOptions(false, "/w", "/r", "/l", { DESKTOP_SIDECAR_PORT: "80" }));
   assert.throws(() => sidecarOptions(false, "/w", "/r", "/l", { DESKTOP_SIDECAR_ENABLED: "yes" }));

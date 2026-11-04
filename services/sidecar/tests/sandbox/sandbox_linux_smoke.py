@@ -1,4 +1,4 @@
-"""独立 Linux 实测：python tests/tools/sandbox_linux_smoke.py，无第三方 Python 依赖。"""
+"""独立 Linux 实测：python tests/sandbox/sandbox_linux_smoke.py，需要 pnpm install、Node、Bubblewrap、socat、ripgrep。"""
 from pathlib import Path
 import shlex
 import socket
@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from src.tools.isolation import isolated_command, sandbox_backend
+from src.sandbox.isolation import isolated_command, sandbox_backend
 
 
 class LinuxBoundaryTest(unittest.TestCase):

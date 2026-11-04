@@ -64,6 +64,10 @@ Electron 复用同一份 `dist`，由桌面 Main 提供静态服务、SPA 路由
 
 Agent Store 的 `state.ts` 只维护共享状态和基础状态操作；`index.ts` 是对外入口。内部动作模块直接引用 `state.ts` 或其他具体动作模块，不从入口反向导入自身。输入草稿由 `agent-message-queue.ts` 本地保存，生成状态由 `state.sending` 管理，两者不再混在旧 drafts 对象中。
 
+## 实时状态订阅
+
+`apis/state-events.ts` 统一管理状态 WebSocket 的账号隔离、连接共享、快照回放、重连和退订清理。`apis/meeting-events.ts` 与 `apis/knowledge/events.ts` 只配置业务消息名称和版本规则；页面与 Hook 只订阅结果。文档状态类型统一放在 `interfaces/knowledge.ts`。
+
 ## HTTP 调用
 
 `lib/http.ts` 提供 `http.get/post/put/patch/delete`，返回已解包的业务数据。GET 查询参数放 `options.params`，POST/PUT/PATCH 正文作为第二个参数，超时、signal、headers 等放第三个参数。统一拦截器、本机 IPC 适配和登录失效处理继续复用。
@@ -74,3 +78,5 @@ http.post<Result>("/api/example", data, { timeout: 30000 });
 http.patch<Result>("/api/example/1", data);
 http.delete<void>("/api/example/1");
 ```
+
+Agent SSE 消息通过 `eventsource-parser` 解析，支持拆分的 UTF-8、CR/LF 边界、多行 data 和注释。业务层继续负责事件分发、2 MB 片段限制、账号及 Token 切换检查、审批暂停、完成标记和取消清理；不会自动重发有副作用的聊天请求。

@@ -19,6 +19,7 @@
     "smoke:sidecar": "node scripts/smoke-sidecar.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sandbox-runtime": "0.0.81",
     "@dp-work/protocols": "workspace:*",
     "electron-updater": "6.8.12"
   },

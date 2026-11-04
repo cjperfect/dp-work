@@ -1,8 +1,13 @@
 """认证业务；不依赖 FastAPI 或其他模块的 Router/Repository。"""
 
+import asyncio
 from src.core.exceptions import ApiError
 from src.core.responses import ApiCode
-from src.core.security import create_access_token, decode_token, verify_password
+from src.core.security import (
+    create_access_token,
+    decode_token,
+    verify_password_and_update,
+)
 from src.modules.users import service as users_service
 from src.modules.users.exceptions import UsernameExistsError
 from src.modules.users.models import User
@@ -16,7 +21,9 @@ def _session(user: User) -> dict:
     }
 
 
-async def register(username: str, password: str, department: str = "unassigned") -> dict:
+async def register(
+    username: str, password: str, department: str = "unassigned"
+) -> dict:
     """注册用户。"""
     try:
         user = await users_service.create_user(
@@ -36,10 +43,21 @@ async def register(username: str, password: str, department: str = "unassigned")
 async def login(username: str, password: str) -> dict:
     """验证账号并登录。"""
     user = await users_service.find_by_username(username)
-    if user is None or not verify_password(password, user.password_hash):
+    valid, updated_hash = (
+        await asyncio.to_thread(
+            verify_password_and_update, password, user.password_hash
+        )
+        if user
+        else (False, None)
+    )
+    if not valid:
         raise ApiError(ApiCode.BAD_CREDENTIALS, "用户名或密码错误", 401)
     if not user.is_active:
         raise ApiError(ApiCode.UNAUTHORIZED, "账号已停用", 403)
+    if updated_hash:
+        await users_service.upgrade_password_hash(
+            user.id, user.password_hash, updated_hash
+        )
     return _session(user)
 
 

@@ -52,6 +52,7 @@ export type RecordDocument = {
   title: string;
   owner: boolean;
   editable: boolean;
+  locked?: boolean;
   content: string;
   state: string;
   epoch: string;

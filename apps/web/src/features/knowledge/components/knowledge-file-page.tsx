@@ -1,3 +1,4 @@
+import { usePermission, hasPermission } from "@/features/access/hooks/use-permission";
 import { toast } from "sonner";
 import { useParams, Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -23,6 +24,7 @@ import { KnowledgeLoadState } from "./knowledge-page";
 import { formatDateTime } from "../lib/format-date-time";
 
 export function KnowledgeFilePage() {
+  const canWrite = usePermission("knowledge:write");
   const { kbId, fileId } = useParams({ from: "/_app/knowledge/$kbId/files/$fileId" });
 
   const { bases, loading, error, reload } = useKnowledgeBases();
@@ -49,6 +51,7 @@ export function KnowledgeFilePage() {
 
   async function finishTitle() {
     setEditingTitle(false);
+    if (!hasPermission("knowledge:write")) return;
     if (cancelTitle.current || !file) {
       cancelTitle.current = false;
       return;
@@ -112,7 +115,7 @@ export function KnowledgeFilePage() {
             <div className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
               <Icon className="size-4" />
             </div>
-            {file.source === "editor" ? (
+            {file.source === "editor" && canWrite ? (
               editingTitle ? (
                 <Input
                   ref={titleInput}
@@ -165,6 +168,7 @@ export function KnowledgeFilePage() {
           <ParseDocumentButton baseId={kbId} file={file} />
           <Button
             disabled={
+              !canWrite ||
               vectorization.submitting ||
               file.parseStatus !== "parsed" ||
               parsedSaveBlocked ||

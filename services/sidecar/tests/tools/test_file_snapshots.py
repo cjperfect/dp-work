@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from src import config
 from src.tools.file_snapshots import SnapshotBatch, SnapshotError, undo, store_root, workspace_lock
-from src.tools.isolation import sandbox_backend
+from src.sandbox.isolation import sandbox_backend
 from src.tools.workspace import WorkspaceBackend
 from src.tools.file_snapshots import run_changes
 

@@ -50,6 +50,11 @@ async def get_current_user(
         wait = 0
     if wait:
         raise HTTPException(429, "请求过于频繁，请稍后重试。", headers={"Retry-After": str(wait)})
+    from src.modules.access.policy import permissions_for_http
+    from src.modules.access.service import authorize
+    permissions = permissions_for_http(request.method, request.url.path)
+    if permissions:
+        await authorize(user, *permissions)
     from src.infrastructure.sidecar.context import scope
     device_id = request.headers.get("X-Device-ID")
     if device_id:
@@ -84,3 +89,17 @@ def require_dept(*depts: str) -> Callable[..., Any]:
         return user
 
     return _dep
+
+
+def require_permission(*permissions: str) -> Callable[..., Any]:
+    """为新增业务接口声明权限，复用鉴权后的用户，默认全部权限都需满足。"""
+    from src.modules.access.policy import PERMISSIONS
+    if not permissions or any(permission not in PERMISSIONS for permission in permissions):
+        raise ValueError('必须声明有效的服务端权限码')
+
+    async def dependency(user: Annotated[User, Depends(get_current_user)]) -> User:
+        from src.modules.access.service import authorize
+        await authorize(user, *permissions)
+        return user
+
+    return dependency

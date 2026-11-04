@@ -8,7 +8,7 @@ import {
   useMeetingGenerationStore,
 } from "../../../stores/meeting/meeting-generation.ts";
 import { emptyWorkspace } from "../../../apis/meetings.ts";
-import { subscribeGenerationEvents } from "../lib/generation-events.ts";
+import { subscribeGenerationEvents } from "../../../apis/meeting-events.ts";
 
 const globals = ["window", "localStorage", "WebSocket"];
 let originals, sockets, unsubscribes;

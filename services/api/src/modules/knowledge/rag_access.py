@@ -28,6 +28,8 @@ async def authorized_scope(capability: str):
     user = await users.find_by_id(owner_id)
     if user is None or not user.is_active:
         raise ApiError(ApiCode.UNAUTHORIZED, "账号不存在或已停用。", 401)
+    from src.modules.access.service import authorize
+    await authorize(user, "knowledge:search")
     return owner_id, bases
 
 

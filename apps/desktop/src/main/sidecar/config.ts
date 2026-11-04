@@ -62,7 +62,16 @@ export function sidecarOptions(
     cwd,
     port,
     logFile: path.join(logs, "sidecar.log"),
-    env,
+    env: {
+      ...env,
+      DP_SANDBOX_NODE: process.execPath,
+      DP_SANDBOX_CLI: path.join(
+        packaged
+          ? path.join(resources, "sidecar", "sandbox-runtime")
+          : path.join(workspace, "apps/desktop"),
+        "node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js",
+      ),
+    },
   };
 }
 

@@ -1,3 +1,4 @@
+import { usePermission, hasPermission } from "@/features/access/hooks/use-permission";
 import type { EditorDocumentInput, KbFile, KnowledgeBase } from "@/interfaces/knowledge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
@@ -91,6 +92,7 @@ function DocumentForm({
   base: KnowledgeBase;
   initialFile?: KbFile;
 }) {
+  const canWrite = usePermission("knowledge:write");
   const navigate = useNavigate();
   const [id] = useState(() => initialFile?.id ?? `editor-${crypto.randomUUID()}`);
   const [title, setTitle] = useState(() => initialFile?.name.replace(/\.md$/i, "") ?? "未命名文档");
@@ -127,6 +129,7 @@ function DocumentForm({
 
   const save = useCallback(
     async function persist() {
+      if (!hasPermission("knowledge:write")) return;
       const snapshot = pending.current;
       if (!snapshot || savingRef.current) return;
       if (localAccountId(useAuthStore.getState().user) !== accountId) return;
@@ -301,6 +304,7 @@ function DocumentForm({
                   ref={titleButton}
                   type="button"
                   aria-label={`修改文档标题：${displayTitle}`}
+                  disabled={!canWrite}
                   title="点击修改标题"
                   className="max-w-full truncate rounded-sm py-0.5 text-left outline-none hover:text-foreground/75 focus-visible:ring-2 focus-visible:ring-ring"
                   onClick={() => {
@@ -333,6 +337,7 @@ function DocumentForm({
             <Button
               variant="link"
               className="h-auto px-1 py-0 text-xs text-destructive"
+              disabled={!canWrite}
               onClick={() => void save()}
             >
               重试
@@ -345,7 +350,7 @@ function DocumentForm({
           <Editor
             initialContent={blocks}
             markdown={blocks ? undefined : content}
-            editable
+            editable={canWrite}
             className="px-2 py-5 md:px-5"
             onDocumentChange={({ blocks: nextBlocks, markdown }) => {
               updateDocument({ blocks: nextBlocks, content: markdown });

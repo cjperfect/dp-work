@@ -1,3 +1,4 @@
+import { usePermission } from "@/features/access/hooks/use-permission";
 import type { KbFile } from "@/interfaces/knowledge";
 import { Loader2, ScanText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,12 +13,13 @@ export function ParseDocumentButton({
   file: KbFile;
   disabled?: boolean;
 }) {
+  const canWrite = usePermission("knowledge:write");
   const parsing = useDocumentParsing(baseId);
   const busy =
     parsing.submitting || file.parseStatus === "queued" || file.parseStatus === "parsing";
   return (
     <Button
-      disabled={disabled || busy || file.parseStatus === "parsed"}
+      disabled={!canWrite || disabled || busy || file.parseStatus === "parsed"}
       onClick={() => void parsing.start(file)}
       title={disabled ? "请等待文档自动保存完成" : "解析文档正文，保留内容结构"}
     >

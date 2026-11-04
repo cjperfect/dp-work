@@ -24,6 +24,13 @@ def isolated_model_settings(monkeypatch):
     monkeypatch.setattr(local_settings, 'runtime', lambda *args: None)
 
 
+def mock_structured(monkeypatch, callback):
+    async def structured(messages, settings, schema):
+        text, _ = await callback(messages, settings)
+        return schema.model_validate_json(text)
+    monkeypatch.setattr(pipeline, 'complete_structured', structured)
+
+
 def fixture_state():
     stamp = (datetime.now(timezone.utc) - timedelta(hours=7)).isoformat()
     state = new_state({'id': 'memory-thread', 'agent_id': 1})
@@ -82,7 +89,7 @@ def test_two_stage_generation_and_no_duplicate_on_restart(monkeypatch,tmp_path):
         if len(calls)==1:
             return json.dumps({'memories':[candidate()]},ensure_ascii=False),'test'
         return json.dumps({'decisions':[{'candidate':0,'action':'add'}]}),'test'
-    monkeypatch.setattr(pipeline,'complete',fake_complete)
+    mock_structured(monkeypatch, fake_complete)
     async def case():
         assert await MemoryWorker(store).run_once()==1
         assert await MemoryWorker(SessionStorage(tmp_path)).run_once()==0
@@ -157,7 +164,7 @@ def test_invalid_model_evidence_secrets_and_low_confidence_rejected(monkeypatch,
     items=[candidate(evidence=[{'message_id':'u1','quote':'不存在的原文'}]),candidate(confidence=0.5),
            candidate(content='api_key=abcdefghijklmnopqrstuvwxy'),candidate(kind='experience'),candidate(scope='project')]
     async def fake(*args):return json.dumps({'memories':items}),'test'
-    monkeypatch.setattr(pipeline,'complete',fake)
+    mock_structured(monkeypatch, fake)
     assert asyncio.run(pipeline.extract(job['snapshot'],ModelSettings()))==[]
     assert 'abcdef' not in pipeline.redact('password=abcdef')
 
@@ -208,7 +215,7 @@ def test_worker_cancellation_releases_claim(monkeypatch,tmp_path):
 def test_failed_model_output_does_not_leak_or_modify_memories(monkeypatch,tmp_path):
     state=fixture_state();store=SessionStorage(tmp_path);save_state(store,state)
     async def invalid(*args):return 'secret upstream text not JSON','test'
-    monkeypatch.setattr(pipeline,'complete',invalid)
+    mock_structured(monkeypatch, invalid)
     asyncio.run(MemoryWorker(store).run_once())
     with repo.connection(1,tmp_path) as db:
         job=dict(db.execute('SELECT * FROM memory_jobs').fetchone())
@@ -221,7 +228,7 @@ def test_empty_extraction_avoids_second_model_call(monkeypatch,tmp_path):
     state=fixture_state();store=SessionStorage(tmp_path);save_state(store,state)
     calls=[]
     async def empty(*args):calls.append(1);return '{"memories":[]}','test'
-    monkeypatch.setattr(pipeline,'complete',empty)
+    mock_structured(monkeypatch, empty)
     asyncio.run(MemoryWorker(store).run_once())
     assert calls==[1]
     assert jobs.prepare(1,state,tmp_path) is None

@@ -4,14 +4,20 @@ import base64
 import binascii
 import secrets
 import time
-from dataclasses import dataclass
 from functools import partial
-from typing import AsyncIterator, Literal, Awaitable, Callable
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .. import config
 from .protocol import METHODS
+from .types import OperationError, EventStream, LocalSettingsInput
+from .operations.skills import skill_operation
+from .operations.projects import project_operation
+from .operations.connectors import connector_operation
+from .operations.sessions import session_operation
+from .operations.memory import memory_operation
+from .operations.usage import usage_summary, usage_settings
 from ..agents.agent import AgentRequest, TitleRequest, generate_title, run_agent, settings_for
 from ..harness.runtime import run_events
 from ..knowledge.parsers import dispatcher
@@ -95,29 +101,6 @@ class EmbedInput(BaseModel):
     query: bool = False
 
 
-class OperationError(Exception):
-    """可安全展示的业务错误，状态用于现有 API 兼容适配。"""
-    def __init__(self, status, message, code=None):
-        super().__init__(message)
-        self.status = status
-        self.detail = {"message": message, **({"code": code} if code else {})}
-
-
-@dataclass
-class EventStream:
-    events: AsyncIterator[dict]
-    on_close: Callable[[], Awaitable[None]] | None = None
-
-    async def aclose(self):
-        """即使还没读到第一条事件，也执行运行所属的清理。"""
-        try:
-            await self.events.aclose()
-        finally:
-            if self.on_close is not None:
-                callback, self.on_close = self.on_close, None
-                await callback()
-
-
 async def agent_chat(params, state):
     """运行 Agent，返回业务事件流。"""
     body = AgentInput.model_validate(params)
@@ -180,13 +163,6 @@ async def parse_document(params, state):
         return await dispatcher.parse_document(content, body.file_type)
     except dispatcher.ParseError as cause:
         raise OperationError(422, str(cause)) from cause
-
-
-class LocalSettingsInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    owner_id: int = Field(gt=0)
-    kind: Literal["model", "asr"] = "model"
-    body: dict = Field(default_factory=dict)
 
 
 async def local_service_settings(action, params, state):
@@ -258,79 +234,6 @@ async def embed_texts(params, state):
         raise OperationError(502, str(cause) if isinstance(cause, EmbeddingError) else "向量化超时，请重试。") from cause
 
 
-class SkillsAgent(BaseModel):
-    agent_code: Literal["general", "product", "ui"]
-
-
-class SkillsSearch(BaseModel):
-    query: str = Field(default="", max_length=200)
-
-
-class SkillsDescriptions(BaseModel):
-    skill_ids: list[str] = Field(max_length=24)
-
-
-class SkillInstall(SkillsAgent):
-    source: str = Field(min_length=1, max_length=512)
-
-
-class SkillUpload(SkillsAgent):
-    filename: str = Field(min_length=1, max_length=256)
-    content_base64: str = Field(min_length=1, max_length=12 * 1024 * 1024)
-
-
-class SkillUninstall(SkillsAgent):
-    skill_id: str = Field(min_length=1, max_length=256)
-
-
-async def skill_operation(operation, params):
-    """将技能管理错误转换为可展示的业务错误。"""
-    from ..skills import service
-    try:
-        if operation == "descriptions":
-            from ..skills.descriptions import descriptions
-            body = SkillsDescriptions.model_validate(params)
-            return {"items": await descriptions(body.skill_ids)}
-        if operation == "search":
-            body = SkillsSearch.model_validate(params)
-            return {"items": await service.search(body.query)}
-        if operation == "upload":
-            body = SkillUpload.model_validate(params)
-            try:
-                content = base64.b64decode(body.content_base64, validate=True)
-            except (ValueError, binascii.Error) as cause:
-                raise service.SkillError("技能文件编码无效。") from cause
-            return await service.upload(body.agent_code, body.filename, content)
-        body = (SkillInstall if operation == "install" else SkillUninstall if operation == "uninstall" else SkillsAgent).model_validate(params)
-        if operation == "list":
-            return {"items": await service.file_operation(service.installed, body.agent_code)}
-        if operation == "install":
-            return await service.install(body.agent_code, body.source)
-        return await service.uninstall(body.agent_code, body.skill_id)
-    except service.SkillError as cause:
-        raise OperationError(cause.status, str(cause)) from cause
-
-
-async def skills_descriptions(params, state):
-    return await skill_operation("descriptions", params)
-
-
-async def skills_search(params, state):
-    return await skill_operation("search", params)
-
-
-async def skills_list(params, state):
-    return await skill_operation("list", params)
-
-
-async def skills_install(params, state):
-    return await skill_operation("install", params)
-
-
-async def skills_uninstall(params, state):
-    return await skill_operation("uninstall", params)
-
-
 class AgentConfigInput(BaseModel):
     agent_code: Literal["general", "product", "ui"]
 
@@ -382,50 +285,6 @@ async def agent_config_update(params, state):
     return {"agent_code": body.agent_code, "prompt": prompt, "prompt_file": "AGENT.md"}
 
 
-class ProjectInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    owner_id: int = Field(gt=0)
-    device_id: str = Field(pattern=r"^[a-fA-F0-9-]{36}$")
-    body: dict = Field(default_factory=dict)
-
-
-async def project_operation(action, params, state):
-    """项目列表与元数据只在当前执行设备存储。"""
-    from ..sessions.projects import operation
-    from ..sessions.storage import SessionError
-    from ..providers.llm.schemas import ModelError
-    body = ProjectInput.model_validate(params)
-    try:
-        return await asyncio.to_thread(operation, action, body.owner_id, body.body, body.device_id)
-    except (SessionError, ModelError, ValueError) as cause:
-        raise OperationError(getattr(cause, "status", 409), str(cause)) from cause
-
-
-class ConnectorInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    owner_id: int = Field(gt=0)
-    action: Literal["configure", "login"] = "login"
-
-
-async def connector_operation(operation, params, state):
-    """CLI 授权与凭证只在当前用户设备执行。"""
-    from ..connectors import service
-    from ..connectors.errors import ConnectorError
-    body = ConnectorInput.model_validate(params)
-    try:
-        if operation in ("status", "verify"):
-            return await service.status(body.owner_id, verify=operation == "verify")
-        if operation == "start":
-            return await service.start(body.owner_id, body.action)
-        if operation == "cancel":
-            await service.cancel(body.owner_id)
-        else:
-            await service.logout(body.owner_id)
-        return None
-    except ConnectorError as cause:
-        raise OperationError(cause.status_code, cause.message) from cause
-
-
 HANDLERS = {
     "connectors.feishu.status": partial(connector_operation, "status"),
     "connectors.feishu.verify": partial(connector_operation, "verify"),
@@ -450,12 +309,12 @@ HANDLERS = {
     "agents.knowledge.read": partial(agent_knowledge, 'read'),
     "agents.knowledge.save": partial(agent_knowledge, 'save'),
     "agents.knowledge.import": partial(agent_knowledge, 'import'),
-    "skills.search": skills_search,
-    "skills.descriptions": skills_descriptions,
-    "skills.list": skills_list,
-    "skills.upload": lambda params, state: skill_operation("upload", params),
-    "skills.install": skills_install,
-    "skills.uninstall": skills_uninstall,
+    "skills.search": partial(skill_operation, "search"),
+    "skills.descriptions": partial(skill_operation, "descriptions"),
+    "skills.list": partial(skill_operation, "list"),
+    "skills.upload": partial(skill_operation, "upload"),
+    "skills.install": partial(skill_operation, "install"),
+    "skills.uninstall": partial(skill_operation, "uninstall"),
     "agents.chat": agent_chat,
     "agents.title": agent_title,
     "agents.models": agent_models,
@@ -466,33 +325,14 @@ HANDLERS = {
     "settings.defaults": service_defaults,
     "settings.test": service_test,
     "asr.sessions": asr_session,
+    "usage.summary": usage_summary,
+    "usage.settings.read": partial(usage_settings, "read"),
+    "usage.settings.save": partial(usage_settings, "save"),
+    **{method: partial(session_operation, method.removeprefix("sessions."))
+       for method in METHODS if method.startswith("sessions.")},
+    **{method: partial(memory_operation, method.removeprefix("memory."))
+       for method in METHODS if method.startswith("memory.")},
 }
-
-
-class SessionInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    owner_id: int = Field(gt=0)
-    thread_id: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]{1,128}$")
-    body: dict = Field(default_factory=dict)
-    runtime: RuntimeConfig | None = None
-    retrieval_token: str | None = Field(default=None, repr=False, max_length=4096)
-
-
-async def session_operation(action, params, state):
-    """执行本机会话方法并返回统一业务错误。"""
-    from ..sessions import service
-    from ..sessions.storage import SessionError
-    params = SessionInput.model_validate(params).model_dump(mode="json", exclude_none=True)
-    try:
-        if action in ("chat", "approval.decide", "resume"):
-            return await service.open_chat(params, state, resume="checkpoint" if action == "resume" else action.endswith("decide"))
-        return await service.operation(action, params, state)
-    except SessionError as cause:
-        raise OperationError(cause.status, str(cause)) from cause
-
-
-HANDLERS.update({method: partial(session_operation, method.removeprefix("sessions."))
-                 for method in METHODS if method.startswith("sessions.")})
 
 
 async def dispatch(method, params, state):
@@ -515,62 +355,3 @@ async def dispatch(method, params, state):
                     await events.aclose()
         result.events = metered()
     return result
-
-
-class MemoryInput(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    owner_id: int = Field(gt=0)
-    key: str | None = Field(default=None, pattern=r'^[a-fA-F0-9-]{36}$')
-    body: dict = Field(default_factory=dict)
-
-
-async def memory_operation(action, params, state):
-    """记忆只在本机按账号处理，不接受网页指定存储路径。"""
-    import sqlite3
-    from ..memory.service import operation
-    from ..memory.repository import MemoryError
-    from ..sessions.storage import SessionError
-    from ..providers.llm.schemas import ModelError
-    data = MemoryInput.model_validate(params)
-    try:
-        return await asyncio.to_thread(operation, action, data.owner_id, data.body, data.key)
-    except ValidationError as cause:
-        raise OperationError(400, cause.errors()[0]['msg']) from cause
-    except (MemoryError, SessionError, ModelError) as cause:
-        raise OperationError(getattr(cause, 'status', 409), str(cause)) from cause
-    except (ValueError, TypeError) as cause:
-        raise OperationError(400, '记忆参数无效。') from cause
-    except (sqlite3.DatabaseError, OSError) as cause:
-        raise OperationError(500, '记忆存储不可用，请检查本机数据文件。') from cause
-
-
-HANDLERS.update({method: partial(memory_operation, method.removeprefix('memory.')) for method in METHODS if method.startswith('memory.')})
-
-
-async def usage_summary(params, state):
-    from ..usage.ledger import summary
-    owner = params.get('owner_id')
-    if type(owner) is not int or owner <= 0:
-        raise OperationError(400, '用户身份无效。')
-    return await asyncio.to_thread(summary, owner)
-
-
-HANDLERS['usage.summary'] = usage_summary
-
-
-async def usage_settings(action, params, state):
-    """读写已验证账号的本机单价和任务预算。"""
-    from ..usage import settings
-    body = LocalSettingsInput.model_validate(params)
-    try:
-        if action == 'read':
-            return await asyncio.to_thread(settings.read, body.owner_id)
-        return await asyncio.to_thread(settings.save, body.owner_id, body.body)
-    except ValueError as cause:
-        raise OperationError(400, str(cause)) from cause
-
-
-HANDLERS.update({
-    'usage.settings.read': partial(usage_settings, 'read'),
-    'usage.settings.save': partial(usage_settings, 'save'),
-})

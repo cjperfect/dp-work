@@ -1,3 +1,4 @@
+import { hasPermission } from "@/stores/access";
 import { useRef, useState, type ChangeEvent } from "react";
 import { Loader2, UploadCloud } from "lucide-react";
 import {
@@ -29,6 +30,7 @@ export function KnowledgeUploadDialog({ open, onOpenChange, kbId, accountId, onU
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const handleFile = async (file: File) => {
+    if (!hasPermission("knowledge:write")) return;
     if (uploadLock.current) return;
     uploadLock.current = true;
     setUploading(true);

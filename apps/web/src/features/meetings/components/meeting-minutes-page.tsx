@@ -1,3 +1,4 @@
+import { usePermission, hasPermission } from "@/features/access/hooks/use-permission";
 import { useCallback, useRef, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { LazyMinutesMindMap as MindMap } from "./lazy-minutes-mind-map";
@@ -32,6 +33,9 @@ import { RecordWorkspace } from "./record-workspace";
 import { SaveStatus } from "./workspace-parts";
 
 export function MeetingMinutesPage() {
+  const canGenerate = usePermission("meeting:generate");
+  const canArchive = usePermission("meeting:archive", "knowledge:write", "knowledge:read");
+  const canEditRecord = usePermission("meeting:edit");
   const { id } = useSearch({ from: "/_app/meetings/minutes" });
   const navigate = useNavigate();
   const { draft, loading, error, change, retry, accountId, editable } = useWorkspace(id);
@@ -66,6 +70,7 @@ export function MeetingMinutesPage() {
     [id],
   );
   async function publishMinutes() {
+    if (!hasPermission("meeting:archive", "knowledge:write", "knowledge:read")) return;
     if (!id || !accountId || !baseId) return;
     setBusy(true);
     setFailure(null);
@@ -87,6 +92,7 @@ export function MeetingMinutesPage() {
     }
   }
   async function regenerate() {
+    if (!hasPermission("meeting:generate")) return;
     if (!draft || draft.meeting.owner_id !== accountId || !accountId || !id || actionLock.current)
       return;
     actionLock.current = true;
@@ -123,7 +129,7 @@ export function MeetingMinutesPage() {
       ? collaborative.content
       : minutesContent(draft);
   const status = generationStatus(draft.meeting);
-  const canEdit = !showOriginal && canEditMinutes(draft.meeting);
+  const canEdit = canEditRecord && !showOriginal && canEditMinutes(draft.meeting);
   const canEditOriginal =
     showOriginal && editable && draft.meeting.status === "ended" && status !== "generating";
   const ended = draft.meeting.status === "ended" || draft.meeting.status === "archived";
@@ -158,7 +164,7 @@ export function MeetingMinutesPage() {
         <div className="flex flex-wrap gap-2">
           {(status === "idle" || status === "failed") && draft.meeting.status === "ended" && (
             <Button
-              disabled={busy || draft.meeting.owner_id !== accountId}
+              disabled={!canGenerate || busy || draft.meeting.owner_id !== accountId}
               onClick={() => void regenerate()}
             >
               <Sparkles className="size-4" />
@@ -169,6 +175,7 @@ export function MeetingMinutesPage() {
             <Button
               disabled={
                 busy ||
+                !canArchive ||
                 draft.meeting.owner_id !== accountId ||
                 !ended ||
                 !content.trim() ||
@@ -317,7 +324,7 @@ export function MeetingMinutesPage() {
         )}
       </div>
       <Dialog
-        open={archive}
+        open={archive && canArchive}
         onOpenChange={(open) => {
           if (!busy) setArchive(open);
         }}

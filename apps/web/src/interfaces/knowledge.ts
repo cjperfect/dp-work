@@ -96,3 +96,22 @@ export type KnowledgeBasePage = {
   page: number;
   page_size: number;
 };
+
+export type DocumentParseState = {
+  id: string;
+  base_id: number;
+  owner_id: number;
+  name: string;
+  status: "unparsed" | "queued" | "parsing" | "parsed" | "failed";
+  task_id: string;
+  error: string | null;
+  parsed_at: string | null;
+  vector_status?: "unindexed" | "queued" | "indexing" | "indexed" | "failed";
+  vector_task_id?: string | null;
+  vector_error?: string | null;
+  vector_done?: number;
+  vector_total?: number;
+  vectorized_at?: string | null;
+  search_task_id?: string | null;
+  search_status?: "syncing" | "synced" | null;
+};

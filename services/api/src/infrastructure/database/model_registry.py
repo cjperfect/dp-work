@@ -14,6 +14,8 @@ from src.infrastructure.tasks.models import TaskOutbox
 
 from src.modules.devices.models import Device, DeviceCall, DeviceChunk
 
+from src.modules.access.models import RolePermission, AccessAudit
+
 from .base import Base
 
-__all__ = ["Device", "DeviceCall", "DeviceChunk", "TaskOutbox", "KnowledgeSearchSync", "KnowledgeParentChunk", "KnowledgeChildChunk", "Base", "User", "KnowledgeBase", "KnowledgeDocument", "Meeting", "MeetingSegment", "MeetingMinutes", "MeetingGenerationJob", "MeetingRecord", "MeetingRecordVersion"]
+__all__ = ["RolePermission", "AccessAudit", "Device", "DeviceCall", "DeviceChunk", "TaskOutbox", "KnowledgeSearchSync", "KnowledgeParentChunk", "KnowledgeChildChunk", "Base", "User", "KnowledgeBase", "KnowledgeDocument", "Meeting", "MeetingSegment", "MeetingMinutes", "MeetingGenerationJob", "MeetingRecord", "MeetingRecordVersion"]

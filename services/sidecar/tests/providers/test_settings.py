@@ -51,7 +51,11 @@ def test_connection_checks_real_response_and_hides_upstream_error(monkeypatch):
         requests.append(request)
         return httpx.Response(401, json={"error": "private-fixture"})
     client_type = httpx.AsyncClient
-    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(handler), **kwargs))
+    class IsolatedClient(client_type):
+        def __init__(self, **kwargs):
+            kwargs['transport'] = httpx.MockTransport(handler)
+            super().__init__(**kwargs)
+    monkeypatch.setattr(httpx, "AsyncClient", IsolatedClient)
     result = asyncio.run(settings.test_connection("model", runtime()))
     assert not result["ok"] and "401" in result["message"]
     assert "private-fixture" not in str(result)

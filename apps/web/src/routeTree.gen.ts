@@ -16,6 +16,7 @@ import { Route as AppIndexRouteImport } from "./routes/_app/index";
 import { Route as AppProductRouteImport } from "./routes/_app/product";
 import { Route as AppSettingsRouteImport } from "./routes/_app/settings";
 import { Route as AppUiRouteImport } from "./routes/_app/ui";
+import { Route as AppAdminUsersRouteImport } from "./routes/_app/admin/users";
 import { Route as AppConnectorsIndexRouteImport } from "./routes/_app/connectors/index";
 import { Route as AppKnowledgeIndexRouteImport } from "./routes/_app/knowledge/index";
 import { Route as AppMeetingsIndexRouteImport } from "./routes/_app/meetings/index";
@@ -61,6 +62,11 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
 const AppUiRoute = AppUiRouteImport.update({
   id: "/ui",
   path: "/ui",
+  getParentRoute: () => AppRouteRoute,
+} as any);
+const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
+  id: "/admin/users",
+  path: "/admin/users",
   getParentRoute: () => AppRouteRoute,
 } as any);
 const AppConnectorsIndexRoute = AppConnectorsIndexRouteImport.update({
@@ -134,6 +140,7 @@ export interface FileRoutesByFullPath {
   "/product": typeof AppProductRoute;
   "/settings": typeof AppSettingsRoute;
   "/ui": typeof AppUiRoute;
+  "/admin/users": typeof AppAdminUsersRoute;
   "/meetings/active": typeof AppMeetingsActiveRoute;
   "/meetings/minutes": typeof AppMeetingsMinutesRoute;
   "/shared/meeting-records/$token": typeof SharedMeetingRecordsTokenRoute;
@@ -154,6 +161,7 @@ export interface FileRoutesByTo {
   "/settings": typeof AppSettingsRoute;
   "/ui": typeof AppUiRoute;
   "/": typeof AppIndexRoute;
+  "/admin/users": typeof AppAdminUsersRoute;
   "/meetings/active": typeof AppMeetingsActiveRoute;
   "/meetings/minutes": typeof AppMeetingsMinutesRoute;
   "/shared/meeting-records/$token": typeof SharedMeetingRecordsTokenRoute;
@@ -176,6 +184,7 @@ export interface FileRoutesById {
   "/_app/settings": typeof AppSettingsRoute;
   "/_app/ui": typeof AppUiRoute;
   "/_app/": typeof AppIndexRoute;
+  "/_app/admin/users": typeof AppAdminUsersRoute;
   "/_app/meetings/active": typeof AppMeetingsActiveRoute;
   "/_app/meetings/minutes": typeof AppMeetingsMinutesRoute;
   "/shared/meeting-records/$token": typeof SharedMeetingRecordsTokenRoute;
@@ -198,6 +207,7 @@ export interface FileRouteTypes {
     | "/product"
     | "/settings"
     | "/ui"
+    | "/admin/users"
     | "/meetings/active"
     | "/meetings/minutes"
     | "/shared/meeting-records/$token"
@@ -218,6 +228,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/ui"
     | "/"
+    | "/admin/users"
     | "/meetings/active"
     | "/meetings/minutes"
     | "/shared/meeting-records/$token"
@@ -239,6 +250,7 @@ export interface FileRouteTypes {
     | "/_app/settings"
     | "/_app/ui"
     | "/_app/"
+    | "/_app/admin/users"
     | "/_app/meetings/active"
     | "/_app/meetings/minutes"
     | "/shared/meeting-records/$token"
@@ -309,6 +321,13 @@ declare module "@tanstack/react-router" {
       path: "/ui";
       fullPath: "/ui";
       preLoaderRoute: typeof AppUiRouteImport;
+      parentRoute: typeof AppRouteRoute;
+    };
+    "/_app/admin/users": {
+      id: "/_app/admin/users";
+      path: "/admin/users";
+      fullPath: "/admin/users";
+      preLoaderRoute: typeof AppAdminUsersRouteImport;
       parentRoute: typeof AppRouteRoute;
     };
     "/_app/connectors/": {
@@ -403,6 +422,7 @@ interface AppRouteRouteChildren {
   AppSettingsRoute: typeof AppSettingsRoute;
   AppUiRoute: typeof AppUiRoute;
   AppIndexRoute: typeof AppIndexRoute;
+  AppAdminUsersRoute: typeof AppAdminUsersRoute;
   AppMeetingsActiveRoute: typeof AppMeetingsActiveRoute;
   AppMeetingsMinutesRoute: typeof AppMeetingsMinutesRoute;
   AppConnectorsIndexRoute: typeof AppConnectorsIndexRoute;
@@ -421,6 +441,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppSettingsRoute: AppSettingsRoute,
   AppUiRoute: AppUiRoute,
   AppIndexRoute: AppIndexRoute,
+  AppAdminUsersRoute: AppAdminUsersRoute,
   AppMeetingsActiveRoute: AppMeetingsActiveRoute,
   AppMeetingsMinutesRoute: AppMeetingsMinutesRoute,
   AppConnectorsIndexRoute: AppConnectorsIndexRoute,

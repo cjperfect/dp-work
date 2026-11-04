@@ -10,7 +10,7 @@ from src import config
 from src.agents import agent
 from src.providers.llm.schemas import ModelSettings
 from src.transport.handlers import AgentInput
-from src.tools.isolation import sandbox_backend
+from src.sandbox.isolation import sandbox_backend
 
 
 class Model(FakeMessagesListChatModel):

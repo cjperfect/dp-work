@@ -1,5 +1,6 @@
 """用户业务入口；其他模块通过此文件使用用户能力。"""
 
+import asyncio
 from src.core.security import hash_password
 from src.infrastructure.database import session
 
@@ -49,7 +50,7 @@ async def create_user(
     allow_existing: bool = False,
 ) -> User:
     """创建用户。"""
-    password_hash = hash_password(password)
+    password_hash = await asyncio.to_thread(hash_password, password)
     async with session.transaction() as conn:
         repository = UserRepository(conn)
         user = await repository.insert(
@@ -65,3 +66,9 @@ async def create_user(
             if existing is not None:
                 return existing
         raise UsernameExistsError(username)
+
+
+async def upgrade_password_hash(user_id: int, previous: str, updated: str) -> None:
+    """比较原哈希后升级，避免覆盖并发密码修改。"""
+    async with session.transaction() as conn:
+        await UserRepository(conn).upgrade_password_hash(user_id, previous, updated)

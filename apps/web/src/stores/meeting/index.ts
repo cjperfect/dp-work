@@ -1,3 +1,4 @@
+import { usePermission, hasPermission } from "@/features/access/hooks/use-permission";
 import type { Workspace } from "@/interfaces/meeting";
 import { trackGenerations } from "@/stores/meeting/meeting-generation";
 import { create } from "zustand";
@@ -82,6 +83,7 @@ export async function flushMeeting(accountId: number, id: string) {
   return readDraft(accountId, id);
 }
 export function useWorkspace(id: string | undefined) {
+  const canWrite = usePermission("meeting:write");
   const accountId = useAuthStore((state) => state.user?.id);
   const draft = useMeetingCache((state) =>
     id && accountId ? state.records[key(accountId, id)] : undefined,
@@ -143,7 +145,7 @@ export function useWorkspace(id: string | undefined) {
   }, [id, accountId, editable]);
   const change = useCallback(
     (update: (current: Draft) => Draft) => {
-      if (!id || !accountId || !editable) return;
+      if (!id || !accountId || !editable || !hasPermission("meeting:write")) return;
       const current = useMeetingCache.getState().records[key(accountId, id)];
       if (!current) return;
       const next = update(current);
@@ -157,7 +159,7 @@ export function useWorkspace(id: string | undefined) {
   );
   const preview = useCallback(
     (update: (current: Draft) => Draft) => {
-      if (!id || !accountId || !editable) return;
+      if (!id || !accountId || !editable || !hasPermission("meeting:write")) return;
       useMeetingCache.setState((state) => {
         const cacheKey = key(accountId, id);
         const current = state.records[cacheKey];
@@ -175,10 +177,25 @@ export function useWorkspace(id: string | undefined) {
   const retry = useCallback(async () => {
     if (!id || !accountId) return;
     const current = useMeetingCache.getState().records[key(accountId, id)];
+    if (!hasPermission("meeting:write")) {
+      if (current && (!current.localSaved || isPending(current)))
+        throw new Error("会议编辑权限已变更，请保留未保存的原始记录。");
+      return;
+    }
     if (current && !current.localSaved) await persist(current);
     await flushMeeting(accountId, id);
   }, [id, accountId]);
-  return { draft, loading, error, change, preview, retry, accountId, editable };
+  return {
+    draft,
+    loading,
+    error,
+    change,
+    preview,
+    retry,
+    accountId,
+    exclusive: editable,
+    editable: editable && canWrite,
+  };
 }
 export function cacheCreated(workspace: Workspace) {
   const draft = localDraft(workspace);

@@ -23,6 +23,8 @@ def conflict(message):
 
 async def access(db, meeting_id, user_id, share=None, owner_only=False):
     """锁定会议并校验所有者或登录后的分享权限。"""
+    from src.modules.access.service import authorize_id
+    await authorize_id(user_id, "meeting:read", db=db)
     meeting = await db.scalar(select(Meeting).where(Meeting.id == meeting_id).with_for_update())
     record = await db.get(MeetingRecord, meeting_id)
     owner = meeting is not None and meeting.owner_id == user_id
@@ -51,9 +53,17 @@ async def notify(db, meeting_id):
     await emit(db, "meeting_record", {"id": meeting_id})
 
 
-def output(meeting, record, user_id):
+async def output(meeting, record, user_id, db):
+    from src.modules.access.service import authorize_id
+    can_edit = True
+    try:
+        await authorize_id(user_id, "meeting:edit", db=db)
+    except ApiError as cause:
+        if cause.status_code != 403:
+            raise
+        can_edit = False
     return {'meeting_id': meeting.id, 'title': meeting.title, 'owner': meeting.owner_id == user_id,
-        'editable': editable(meeting), 'state': base64.b64encode(record.state).decode(),
+        'editable': editable(meeting) and can_edit, 'locked': not editable(meeting), 'state': base64.b64encode(record.state).decode(),
         'content': minutes_from_state(record.state)[0],
         'epoch': record.epoch, 'revision': record.revision,
         'saved_revision': record.saved_revision, 'saved_at': record.saved_at.isoformat(), 'updated_at': record.updated_at.isoformat()}
@@ -82,7 +92,7 @@ async def get_document(meeting_id, user_id, share=None):
             snapshot(db, record, user_id, '生成纪要')
             await db.flush()
             await db.refresh(record)
-        return output(meeting, record, user_id)
+        return await output(meeting, record, user_id, db)
 
 
 async def update_document(meeting_id, user_id, epoch, update, share=None):
@@ -93,6 +103,8 @@ async def update_document(meeting_id, user_id, epoch, update, share=None):
         meeting, record = await access(db, meeting_id, user_id, share)
         if record is None or record.kind != "minutes" or record.epoch != epoch:
             raise conflict('文档已恢复历史版本，请重新加载；未同步内容请先复制保留。')
+        from src.modules.access.service import authorize_id
+        await authorize_id(user_id, "meeting:edit", db=db)
         if not editable(meeting):
             raise conflict('当前会议纪要已锁定，不能修改。')
         doc = Doc()
@@ -109,7 +121,7 @@ async def update_document(meeting_id, user_id, epoch, update, share=None):
             record.updated_at = datetime.now(timezone.utc)
             await db.flush()
             await notify(db, meeting_id)
-        return output(meeting, record, user_id)
+        return await output(meeting, record, user_id, db)
 
 
 async def share_document(meeting_id, user_id):
@@ -179,7 +191,7 @@ async def restore(meeting_id, user_id, version_id, expected_revision):
         await sync_minutes(db, meeting, record)
         await db.flush()
         await notify(db, meeting_id)
-        return output(meeting, record, user_id)
+        return await output(meeting, record, user_id, db)
 
 
 async def sync_minutes(db, meeting, record):
@@ -231,6 +243,8 @@ async def save_document(meeting_id, user_id, epoch=None, share=None):
         if record is None or record.kind != 'minutes' or (epoch is not None and record.epoch != epoch):
             raise conflict('文档版本已变化，请保留未同步内容并重新加载。')
         if record.saved_revision < record.revision:
+            from src.modules.access.service import authorize_id
+            await authorize_id(user_id, "meeting:edit", db=db)
             if not editable(meeting):
                 raise conflict('纪要已锁定，不能保存修改。')
             await sync_minutes(db, meeting, record)
@@ -239,4 +253,4 @@ async def save_document(meeting_id, user_id, epoch=None, share=None):
                 snapshot(db, record, user_id, '自动版本')
             await db.flush()
             await notify(db, meeting_id)
-        return output(meeting, record, user_id)
+        return await output(meeting, record, user_id, db)

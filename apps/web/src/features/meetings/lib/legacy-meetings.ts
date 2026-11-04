@@ -1,3 +1,4 @@
+import { hasPermission } from "@/stores/access";
 import type { Draft } from "./workspace-storage";
 import { useAuthStore } from "@/stores/auth";
 import { importMeeting } from "@/apis/meetings";
@@ -57,6 +58,7 @@ const migrated = new Set<number>();
 const running = new Map<number, Promise<void>>();
 /** 仅迁移旧 IndexedDB 数据，成功后移除旧副本。 */
 export function migrateLegacyMeetings(accountId: number): Promise<void> {
+  if (!hasPermission("meeting:write")) return Promise.resolve();
   if (useAuthStore.getState().user?.id !== accountId)
     return Promise.reject(new Error("登录状态已改变，请重新登录。"));
   if (typeof indexedDB === "undefined" || migrated.has(accountId)) return Promise.resolve();

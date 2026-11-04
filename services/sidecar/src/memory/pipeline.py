@@ -5,7 +5,7 @@ import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from ..providers.llm.client import complete
+from ..providers.llm.client import complete_structured
 
 SECRET = re.compile(r'(?i)(?:\b(?:sk-|hf_)[a-z0-9_-]{16,}|Bearer\s+[a-z0-9._/-]{12,}|(?:api[_ -]?key|access[_ -]?token|secret|password|密码)\s*[=:：]\s*["\']?[^\s"\',;]{3,}|-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----)')
 
@@ -72,14 +72,12 @@ update 必须提供 existing 中同范围记录的 target_id 和合并后的 con
 
 
 async def ask(schema, prompt, data, settings):
-    """解析有长度上限的 JSON，格式错误交给任务重试。"""
-    text, _ = await complete([{'role': 'system', 'content': prompt},
-                              {'role': 'user', 'content': json.dumps(data, ensure_ascii=False)}], settings)
-    if len(text) > 18000:
-        raise ValueError('memory output too large')
-    if text.startswith('```') and text.endswith('```'):
-        text = re.sub(r'^```(?:json)?\s*', '', text)[:-3].strip()
-    return schema.model_validate_json(text)
+    """复用 LangChain 结构化输出，候选事实的业务校验保留在后续流程。"""
+    return await complete_structured([
+        {'role': 'system', 'content': prompt},
+        {'role': 'user', 'content': json.dumps(data, ensure_ascii=False)},
+    ], settings, schema)
+
 
 
 async def extract(snapshot, settings):

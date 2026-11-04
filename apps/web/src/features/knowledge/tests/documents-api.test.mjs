@@ -1,3 +1,4 @@
+import { useAccessStore } from "../../../stores/access.ts";
 import { mockHttpRequest } from "../../../lib/testing/mock-http.mjs";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, mock, test } from "node:test";
@@ -72,6 +73,10 @@ beforeEach(() => {
     },
   });
   useAuthStore.setState({ user: { id: 12, username: "tester" } });
+  useAccessStore.setState({
+    ownerId: 12,
+    data: { role: "member", permissions: ["knowledge:write"] },
+  });
   useKnowledgeStore.setState({ accountId: "user:12", bases: [base], status: "ready" });
   cache([]);
 });

@@ -80,7 +80,7 @@ def test_raw_client_records_provider_usage_without_payload():
     from src.providers.llm.schemas import ModelSettings
     async def case():
         with ledger.scope(1,'memory'):
-            await complete([{'role':'user','content':'PRIVATE INPUT'}], ModelSettings(api_key='test',model='model',base_url='https://model.test'), httpx.MockTransport(lambda request: httpx.Response(200,json={'model':'model','choices':[{'finish_reason':'stop','message':{'content':'ok'}}],'usage':{'prompt_tokens':10,'completion_tokens':5,'total_tokens':15}})))
+            await complete([{'role':'user','content':'PRIVATE INPUT'}], ModelSettings(api_key='test',model='model',base_url='https://model.test'), httpx.MockTransport(lambda request: httpx.Response(200,json={'model':'model','choices':[{'finish_reason':'stop','message':{'role':'assistant','content':'ok'}}],'usage':{'prompt_tokens':10,'completion_tokens':5,'total_tokens':15}})))
     asyncio.run(case())
     row=ledger.summary(1)['items'][0]
     assert row['category']=='memory' and row['total_tokens']==15

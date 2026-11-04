@@ -1,3 +1,4 @@
+import { hasPermission } from "@/features/access/hooks/use-permission";
 import type { KbFile } from "@/interfaces/knowledge";
 import { useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
@@ -30,6 +31,7 @@ export function KnowledgeDeletePopover({
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
 
   const confirmDelete = async () => {
+    if (!hasPermission("knowledge:delete")) return;
     if (deleteLock.current || !target) return;
     deleteLock.current = true;
     setDeleting(true);

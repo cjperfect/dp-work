@@ -132,6 +132,8 @@ async def events(websocket: WebSocket, meeting_id: str):
                             await websocket.send_json({'type': 'error', 'message': cause.message})
                         reader = asyncio.create_task(websocket.receive_text())
                 if pending in done:
+                    from src.modules.access.service import authorize_id
+                    await authorize_id(user.id, "meeting:read")
                     event = json.loads(pending.result())
                     if event.get('id') == meeting_id:
                         if 'awareness' in event:

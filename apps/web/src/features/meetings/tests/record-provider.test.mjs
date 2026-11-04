@@ -253,3 +253,84 @@ test("autosave waits one second, saves during continuous typing, and retries fai
     }
   }
 });
+
+test("revoked editing permission stops queued updates, flush and close-time autosave", async () => {
+  const originals = Object.fromEntries(
+    ["window", "localStorage", "WebSocket"].map((key) => [
+      key,
+      Object.getOwnPropertyDescriptor(globalThis, key),
+    ]),
+  );
+  const sockets = [];
+  class Socket {
+    static OPEN = 1;
+    readyState = 1;
+    sent = [];
+    constructor() {
+      sockets.push(this);
+    }
+    send(value) {
+      this.sent.push(JSON.parse(value));
+    }
+    close() {}
+    message(value) {
+      this.onmessage({ data: JSON.stringify(value) });
+    }
+  }
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { location: { href: "http://localhost:3000/meetings" } },
+  });
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: { getItem: () => "fixture" },
+  });
+  Object.defineProperty(globalThis, "WebSocket", { configurable: true, value: Socket });
+  const server = new Y.Doc();
+  const initial = {
+    meeting_id: "revoked",
+    epoch: "one",
+    revision: 1,
+    saved_revision: 1,
+    state: encodeState(Y.encodeStateAsUpdate(server)),
+    editable: true,
+    owner: true,
+    updated_at: new Date().toISOString(),
+  };
+  let allowed = true;
+  const provider = new RecordProvider(
+    initial,
+    undefined,
+    () => {},
+    () => {},
+    () => allowed,
+  );
+  try {
+    const socket = sockets[0];
+    socket.onopen();
+    socket.message({ type: "state", ...initial });
+    provider.doc.getText("text").insert(0, "before revocation");
+    assert.equal(socket.sent.filter((message) => message.type === "update").length, 1);
+    allowed = false;
+    const mutations = () =>
+      socket.sent.filter((message) => ["update", "save"].includes(message.type)).length;
+    const count = mutations();
+    provider.doc.getText("text").insert(0, "after revocation");
+    await assert.rejects(provider.flush(), /编辑权限已变更/);
+    allowed = true;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: { getItem: () => "another-session" },
+    });
+    provider.doc.getText("text").insert(0, "new account cannot send old document");
+    await assert.rejects(provider.flush(), /编辑权限已变更/);
+    provider.destroy();
+    assert.equal(mutations(), count);
+  } finally {
+    server.destroy();
+    for (const [key, descriptor] of Object.entries(originals)) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else delete globalThis[key];
+    }
+  }
+});

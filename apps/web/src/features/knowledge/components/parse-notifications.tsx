@@ -1,3 +1,4 @@
+import { usePermission } from "@/features/access/hooks/use-permission";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth";
@@ -6,13 +7,14 @@ import {
   consumeDocumentVectorEvents,
   consumeDocumentSearchEvents,
 } from "@/stores/knowledge/document-parsing";
-import { subscribeDocumentParseEvents } from "../lib/parse-events";
+import { subscribeDocumentParseEvents } from "@/apis/knowledge/events";
 
 /** 页面切换后仍接收解析结果，自动关闭提示。 */
 export function ParseNotifications() {
+  const allowed = usePermission("knowledge:read");
   const owner = useAuthStore((state) => state.user?.id);
   useEffect(() => {
-    if (!owner) return;
+    if (!owner || !allowed) return;
     return subscribeDocumentParseEvents(owner, (rows, snapshot) => {
       for (const row of consumeDocumentSearchEvents(rows, snapshot)) {
         toast.success("知识库检索索引已就绪", {
@@ -51,6 +53,6 @@ export function ParseNotifications() {
           });
       }
     });
-  }, [owner]);
+  }, [owner, allowed]);
   return null;
 }

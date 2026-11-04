@@ -18,6 +18,6 @@ class Target(IsolatedTarget):
         transport = None
         if self.mode == 'smoke':
             transport = httpx.MockTransport(lambda _: httpx.Response(200,json={
-                'model':'eval-smoke','choices':[{'finish_reason':'stop','message':{'content':SMOKE_MINUTES[inputs['scenario']]}}]}))
+                'model':'eval-smoke','choices':[{'finish_reason':'stop','message':{'role':'assistant','content':SMOKE_MINUTES[inputs['scenario']]}}]}))
         result = await generate(body, self.settings, transport)
         return {'terminal':'done','answer':result.content,'tools':[],'files':{}}
