@@ -1,0 +1,107 @@
+json|json.loads|接口返回了一段 JSON 字符串，我要转成 Python 对象并处理非法内容，应该用什么方法？
+json|json.dumps|准备把字典作为网络请求正文发送，怎样得到字符串而不是直接写入文件？
+json|json.load|配置已经保存在打开的文本文件里，如何直接读取其中的 JSON 对象？
+json|json.dump|把含中文的字典保存成可读的 JSON 文件时，应该怎样控制缩进和字符转义？
+csv|csv.reader|导入分隔符不是逗号的表格文件，怎样逐行读取并指定分隔规则？
+csv|csv.DictReader|CSV 第一行是列名，希望后面的每行都能按字段名称访问，应使用哪种读取方式？
+csv|csv.writer|要把多个字段输出成 CSV 记录，怎样正确处理引号和字段中的分隔符？
+csv|csv.DictWriter|每条业务记录都是字典，导出表格时如何固定列顺序并处理多余字段？
+csv|csv.Sniffer|收到格式不统一的分隔文本，怎样根据样本推测它的分隔和引用规则？
+configparser|configparser.ConfigParser|程序要读取分节的 INI 配置，并让各节继承公共配置，应该选择什么配置对象？
+configparser|configparser.ConfigParser.read|配置文件有多个候选路径，有些不存在，我想依次加载已有文件，如何处理？
+configparser|configparser.ConfigParser.read_string|配置内容来自远程接口的字符串而非文件，怎样装入配置解析器？
+configparser|configparser.ConfigParser.getboolean|配置里的 yes、off 等文本开关，怎样转换成真正的布尔值而非判断字符串是否为空？
+argparse|argparse.ArgumentParser|命令行程序需要自动帮助信息和参数错误提示，入口解析器应该如何创建？
+argparse|argparse.ArgumentParser.add_argument|我想增加一个必须提供的命令行选项，并限制它只能取几个值，该怎样声明？
+argparse|argparse.ArgumentParser.parse_args|命令行参数规则已经声明完，如何获得用户实际输入的参数对象？
+argparse|argparse.ArgumentParser.parse_known_args|外层程序只处理自己认识的选项，其余原样交给子程序，怎样避免未知参数直接报错？
+logging|logging.basicConfig|程序启动时想统一设置日志级别和输出格式，已有处理器时还需要强制重新配置，应如何做？
+logging|logging.getLogger|不同模块需要各自的日志名称，同时继承统一配置，应该怎样获取日志对象？
+logging|logging.Logger.exception|异常处理代码里既要记录说明，又希望自动带上当前异常堆栈，应该调用哪个日志方法？
+logging.handlers|logging.handlers.RotatingFileHandler|日志文件达到指定大小就切换新文件，同时只保留有限份备份，如何配置？
+logging.handlers|logging.handlers.TimedRotatingFileHandler|希望日志按天切换并自动清理旧备份，而不是按文件大小轮转，该用什么处理器？
+logging.handlers|logging.handlers.QueueHandler|写日志的线程不应被慢速磁盘阻塞，怎样先把日志交到队列里？
+logging.handlers|logging.handlers.QueueListener|日志记录已经送进队列，如何在独立线程中取出并交给真正的处理器？
+pathlib|pathlib.Path.read_text|通过路径对象读取 UTF-8 文本后直接拿到字符串，并确保文件关闭，应如何操作？
+pathlib|pathlib.Path.write_text|要把一段文本保存到指定路径并明确编码，怎样使用路径对象完成写入？
+pathlib|pathlib.Path.glob|需要在目录中按照通配符查找文件，并以路径对象逐个处理，应该怎样遍历？
+pathlib|pathlib.Path.mkdir|创建多层输出目录时，父目录可能不存在，目标目录也可能已经存在，该怎样配置？
+shutil|shutil.copytree|复制项目目录时希望保留目录结构并跳过缓存文件，应该如何指定忽略规则？
+shutil|shutil.copy2|备份单个文件时，除了内容还想尽可能保留原文件元数据，应该使用什么复制接口？
+shutil|shutil.rmtree|清理临时构建产物时要删除整个目录树，应使用哪个接口并注意哪些错误处理方式？
+shutil|shutil.move|将文件或目录移动到另一个位置时，源和目标可能不在同一文件系统，应该怎样处理？
+tempfile|tempfile.TemporaryDirectory|一段处理需要独立临时目录，希望离开上下文后自动清理，应如何管理生命周期？
+tempfile|tempfile.NamedTemporaryFile|第三方程序必须通过文件名读取中间结果，怎样创建有路径的临时文件并控制删除时机？
+tempfile|tempfile.mkstemp|需要安全创建一个不会与其他进程重名的临时文件，并自行管理描述符和清理，应使用什么接口？
+subprocess|subprocess.run|运行外部命令后要拿到输出，并在退出码异常时抛出错误，应该如何设置调用参数？
+subprocess|subprocess.Popen|不想等外部程序结束才继续工作，还要管理它的输入输出管道，应使用哪个进程接口？
+subprocess|subprocess.CompletedProcess|外部命令执行完成后，返回值中应该从哪里读取退出码、标准输出和标准错误？
+subprocess|subprocess.check_output|只关心外部命令的标准输出，并要求非零退出码自动成为异常，应如何调用？
+threading|threading.Event|多个线程要等待同一个完成信号，怎样由一个线程一次唤醒所有等待者？
+threading|threading.Thread|需要把一个函数放到独立线程执行，如何启动并等待它结束？
+threading|threading.Lock|几个线程共享可变数据，怎样保证同一时刻只有一个线程进入修改区域？
+threading|threading.Condition|消费者要等待共享状态满足条件后再继续，而不是持续轮询，应使用什么同步机制？
+queue|queue.Queue|线程之间传递待处理工作，希望队列满时阻塞生产者，应如何构造有界队列？
+queue|queue.Queue.task_done|消费者完成一条队列工作后，应该如何告诉队列该工作已经处理结束？
+queue|queue.Queue.join|生产者已经提交了一批工作，主线程怎样等待这些工作全部处理完再退出？
+queue|queue.PriorityQueue|待办工作有不同优先级，希望消费者先取出优先级更高的项，应使用什么队列？
+asyncio-task|asyncio.create_task|协程已经定义好，怎样让它立即参与调度，并保留一个可以等待或取消的对象？
+asyncio-task|asyncio.TaskGroup|几项异步工作要作为整体执行，其中一个失败时取消其余任务，应如何组织？
+asyncio-task|asyncio.wait_for|异步操作可能无限等待，怎样为它设置超时并处理超时后的取消行为？
+asyncio-task|asyncio.gather|需要并发等待多个协程并按照输入顺序收集结果，应该用什么组合接口？
+asyncio-sync|asyncio.Lock|多个协程要修改共享状态，怎样在 await 场景下保护临界区而不是使用线程锁？
+asyncio-sync|asyncio.Semaphore|异步批量访问外部接口时，怎样限制同一时刻在途请求的数量？
+asyncio-sync|asyncio.Event|一个协程完成初始化后，需要通知其他等待协程同时继续，应该如何发送信号？
+asyncio-sync|asyncio.Condition|协程需要等待某个共享条件成立，并在唤醒后持有互斥锁检查状态，应该用什么原语？
+asyncio-queue|asyncio.Queue|异步生产者和消费者之间需要有容量限制的工作缓冲区，应使用哪种队列？
+asyncio-queue|asyncio.Queue.get|异步队列暂时为空时，消费者怎样等待并取得下一条工作而不阻塞事件循环？
+asyncio-queue|asyncio.Queue.put|异步队列已经达到容量限制，生产者怎样等到有空位后再提交工作？
+asyncio-queue|asyncio.Queue.join|异步消费者处理完已提交工作后，生产者怎样确认整批任务已经全部完成？
+concurrent.futures|concurrent.futures.ThreadPoolExecutor|要在线程池执行一批阻塞操作，并自动管理工作线程生命周期，该怎么组织？
+concurrent.futures|concurrent.futures.Executor.submit|把函数交给执行器之后，需要一个能查询状态和取得结果的句柄，应该调用什么方法？
+concurrent.futures|concurrent.futures.as_completed|多项并行任务耗时不同，怎样按完成先后逐个处理，而不等待输入顺序靠前的慢任务？
+concurrent.futures|concurrent.futures.Future.result|任务已提交到执行器，怎样等待结果，并让任务中的异常在调用方重新抛出？
+contextlib|contextlib.contextmanager|想用一个生成器定义资源申请和释放逻辑，应该怎样把它变成上下文管理器？
+contextlib|contextlib.ExitStack|需要根据条件动态打开数量不定的资源，怎样统一保证异常时按逆序清理？
+contextlib|contextlib.suppress|某段清理逻辑允许忽略明确的一类异常，怎样避免重复编写空的异常处理块？
+contextlib|contextlib.asynccontextmanager|资源获取和释放都需要 await，怎样用异步生成器定义上下文管理器？
+functools|functools.lru_cache|相同参数会反复触发昂贵计算，希望只保留最近一部分结果，该如何缓存？
+functools|functools.cached_property|对象中的派生值计算成本较高，希望第一次访问后作为实例属性保存，该如何实现？
+functools|functools.partial|调用回调时有几个参数始终固定，希望预先绑定它们并得到新函数，应该用什么工具？
+functools|functools.wraps|给函数加装饰器后，不希望函数名称和文档说明变成包装函数的信息，该怎么保留元数据？
+itertools|itertools.groupby|按键对记录分组时，为什么同一键可能出现多组，使用前应该怎样组织输入？
+itertools|itertools.islice|数据源是不能按下标访问的迭代器，怎样只读取其中一段而不转换成完整列表？
+itertools|itertools.chain|几个数据源都可以迭代，怎样把它们顺序拼接成一个惰性迭代器？
+itertools|itertools.product|需要遍历几组参数的所有组合，而不是仅把同位置元素配对，该使用什么迭代工具？
+collections|collections.deque|需要保存固定数量的最近记录，容量满后自动丢弃最旧项，应选择什么容器？
+collections|collections.Counter|统计一批元素的出现次数，并找出最常出现的几项，应该使用什么映射容器？
+collections|collections.defaultdict|按类别累积列表时，不想每次先判断键是否存在，应该如何设置默认值工厂？
+collections|collections.ChainMap|配置需要按命令行、环境、默认值的优先级查找，希望避免复制合并字典，应该怎样组合映射？
+dataclasses|dataclasses.dataclass|一个类主要用来保存字段，如何自动生成初始化、显示和比较等方法？
+dataclasses|dataclasses.field|数据类中的列表默认值不能在不同实例之间共享，应该怎样设置这个字段？
+dataclasses|dataclasses.asdict|需要把一个数据类及其中嵌套的数据类转换成字典结构，应该使用什么工具？
+dataclasses|dataclasses.replace|要保留数据对象的大多数字段，只更换个别字段得到新实例，应该如何处理？
+enum|enum.IntEnum|现有接口要求整数，但业务又希望使用有名称的状态成员，应该选择哪类枚举？
+enum|enum.Flag|多个能力需要组合启用，并支持位运算判断组合状态，应该使用哪种枚举类型？
+enum|enum.unique|希望枚举定义中不允许两个不同名称代表同一个值，应如何检查？
+datetime|datetime.datetime.astimezone|一个时间对象已经带有时区，需要显示为另一个时区下的同一时刻，应该调用什么方法？
+datetime|datetime.datetime.fromisoformat|收到 ISO 8601 风格的时间字符串，希望转换成日期时间对象，应如何解析？
+datetime|datetime.timedelta|需要表达时间间隔，并与日期时间进行加减运算，应该选择什么类型？
+zoneinfo|zoneinfo.ZoneInfo|需要按 IANA 名称处理时区，并自动跟随夏令时变化，应该用什么时区对象？
+zoneinfo|zoneinfo.reset_tzpath|应用提供了自己的时区数据库目录，怎样调整时区文件搜索路径？
+decimal|decimal.Decimal|金额计算希望从十进制文本精确构造数值，为什么不应先转换成二进制浮点数？
+decimal|decimal.Decimal.quantize|财务结果需要按指定舍入规则固定保留两位小数，应如何处理？
+decimal|decimal.localcontext|一小段计算需要临时提高精度，结束后恢复原来的十进制上下文，应如何组织？
+hashlib|hashlib.file_digest|需要计算整个文件的校验摘要，怎样直接使用已打开的二进制文件对象？
+hashlib|hashlib.pbkdf2_hmac|密码不能只做一次普通摘要，怎样用盐和迭代次数派生固定长度的密钥？
+secrets|secrets.token_urlsafe|找回密码链接需要不可预测并适合 URL 的随机令牌，应该用哪个安全随机接口？
+secrets|secrets.compare_digest|比较令牌时希望避免普通字符串比较产生的时序差异，应该使用什么比较方式？
+zipfile|zipfile.ZipFile|需要读取或创建 ZIP 压缩包，并以资源管理方式确保关闭，该如何打开归档对象？
+zipfile|zipfile.ZipFile.extractall|接收用户提供的 ZIP 后准备解压所有内容，需要注意哪些路径和安全问题？
+zipfile|zipfile.ZipFile.testzip|要检查压缩包内文件是否损坏，怎样执行 CRC 和文件头检查并定位首个坏文件？
+tomllib|tomllib.load|配置文件采用 TOML 格式，怎样从已打开的文件对象读成字典，应选择什么打开模式？
+tomllib|tomllib.loads|TOML 内容已经是字符串，怎样解析成 Python 数据结构？
+sqlite3|sqlite3.connect|需要打开 SQLite 数据库并控制连接超时和事务行为，应该如何建立连接？
+sqlite3|sqlite3.Connection.execute|执行包含用户输入的 SQL 时，怎样绑定参数而不是直接拼接字符串？
+sqlite3|sqlite3.Connection.executemany|需要把多组参数应用到同一条 SQL，如何减少重复调用并保持参数绑定？
+sqlite3|sqlite3.Connection.backup|数据库正在使用中，希望把它复制到另一个连接而不手动复制文件，该使用什么接口？
